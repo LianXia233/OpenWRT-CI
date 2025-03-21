@@ -54,7 +54,7 @@ env:
   WRT_BRANCH: ${{inputs.WRT_BRANCH}}
   WRT_PACKAGE: ${{inputs.WRT_PACKAGE}}
   WRT_TEST: ${{inputs.WRT_TEST}}
-  CFLAGS: "${{ env.CFLAGS }} -Wno-error"
+  CFLAGS: "-Wno-error"  # 直接定义 CFLAGS
 
 jobs:
   core:
