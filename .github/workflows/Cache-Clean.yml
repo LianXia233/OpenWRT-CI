@@ -18,4 +18,9 @@ jobs:
         uses: actions/checkout@main
 
       - name: Cache Clean
-        run: gh cache delete --all
+        run: |
+          if gh cache list | grep -q 'No caches found'; then
+            echo "No caches to delete, skipping."
+          else
+            gh cache delete --all
+          fi
