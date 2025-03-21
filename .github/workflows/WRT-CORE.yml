@@ -54,7 +54,7 @@ env:
   WRT_BRANCH: ${{inputs.WRT_BRANCH}}
   WRT_PACKAGE: ${{inputs.WRT_PACKAGE}}
   WRT_TEST: ${{inputs.WRT_TEST}}
-  CFLAGS: "${{ env.CFLAGS }} -Wno-error"  # 添加此行
+  CFLAGS: "${{ env.CFLAGS }} -Wno-error"
 
 jobs:
   core:
@@ -181,8 +181,14 @@ jobs:
         if: env.WRT_TEST != 'true'
         run: |
           cd ./wrt/
+          make -j$(nproc) || (make -j$(nproc) V=s; exit 1)
 
-          make -j$(nproc) || make -j$(nproc) V=s
+      - name: Display Error Logs
+        if: failure()
+        run: |
+          cat /mnt/build_wrt/staging_dir/host/logs/*.log || true
+          cat /mnt/build_wrt/tmp/log/*.log || true
+          dmesg | tail -n 50 || true
 
       - name: Machine Information
         run: |
