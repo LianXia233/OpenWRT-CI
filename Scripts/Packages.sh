@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#安装和更新软件包
+# 安装和更新软件包
 UPDATE_PACKAGE() {
     local PKG_NAME=$1
     local PKG_REPO=$2
@@ -40,6 +40,19 @@ UPDATE_PACKAGE() {
     fi
 }
 
+# 添加 modem_feeds 源
+ADD_MODEM_FEED() {
+    echo "Adding modem_feeds to feeds.conf.default..."
+    grep -q "src-git modem https://github.com/FUjr/modem_feeds.git;main" feeds.conf.default || \
+    echo 'src-git modem https://github.com/FUjr/modem_feeds.git;main' >> feeds.conf.default
+
+    # 更新 feed 并安装 modem 相关软件包
+    echo "Updating and installing modem feeds..."
+    ./scripts/feeds update modem
+    ./scripts/feeds install -a -p modem
+    ./scripts/feeds install -a -f -p modem  # 强制更新库驱动
+}
+
 # 调用示例
 # UPDATE_PACKAGE "OpenAppFilter" "destan19/OpenAppFilter" "master" "" "custom_name1 custom_name2"
 # UPDATE_PACKAGE "open-app-filter" "destan19/OpenAppFilter" "master" "" "luci-app-appfilter oaf" 这样会把原有的open-app-filter，luci-app-appfilter，oaf相关组件删除，不会出现cor[...]
@@ -65,7 +78,7 @@ if [[ $WRT_REPO != *"immortalwrt"* ]]; then
     UPDATE_PACKAGE "qmi-wwan" "immortalwrt/wwan-packages" "master" "pkg"
 fi
 
-#更新软件包版本
+# 更新软件包版本
 UPDATE_VERSION() {
     local PKG_NAME=$1
     local PKG_MARK=${2:-false}
@@ -106,6 +119,11 @@ UPDATE_VERSION() {
     done
 }
 
-#UPDATE_VERSION "软件包名" "测试版，true，可选，默认为否"
+# 更新版本
 UPDATE_VERSION "sing-box"
 UPDATE_VERSION "tailscale"
+
+# 添加 modem_feeds
+ADD_MODEM_FEED
+
+echo "Setup and package updates completed!"
