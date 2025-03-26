@@ -4,3 +4,4 @@ CONFIG_TARGET_mediatek_filogic=y
 #设备列表
 
 CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_ZX7981PM=y
+CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_zx7981pm=y
