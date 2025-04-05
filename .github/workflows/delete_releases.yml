@@ -1,34 +1,32 @@
-name: Delete All Release Assets
+name: Delete all releases
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # This allows you to manually trigger the workflow
 
 jobs:
-  delete-release-assets:
+  delete_releases:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Delete all release assets using GitHub API
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER: ${{ github.repository_owner }}
-          REPO: ${{ github.event.repository.name }}
-        run: |
-          echo "Fetching releases for ${OWNER}/${REPO}..."
-          releases=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" "https://api.github.com/repos/${OWNER}/${REPO}/releases")
-          echo "$releases" | jq -c '.[]' | while read -r release; do
-              release_id=$(echo "$release" | jq -r '.id')
-              echo "Processing release ID: ${release_id}"
-              assets=$(echo "$release" | jq -c '.assets[]?')
-              if [ -z "$assets" ]; then
-                  echo "No assets found in release ${release_id}"
-                  continue
-              fi
-              echo "$assets" | while read -r asset; do
-                  asset_id=$(echo "$asset" | jq -r '.id')
-                  asset_name=$(echo "$asset" | jq -r '.name')
-                  echo "Deleting asset '${asset_name}' (ID: ${asset_id}) from release ${release_id}..."
-                  curl -s -X DELETE -H "Authorization: token ${GITHUB_TOKEN}" "https://api.github.com/repos/${OWNER}/${REPO}/releases/assets/${asset_id}"
-              done
-          done
-          echo "All release assets have been deleted."
-        shell: bash
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: List all releases
+      id: list_releases
+      uses: octokit/request-action@v2.x
+      with:
+        route: GET /repos/${{ github.repository }}/releases
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Delete each release
+      if: steps.list_releases.outputs.data != '[]'
+      run: |
+        releases=$(echo '${{ steps.list_releases.outputs.data }}' | jq -r '.[].id')
+        for release_id in $releases; do
+          echo "Deleting release with ID: $release_id"
+          curl -X DELETE \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/releases/$release_id
+        done
