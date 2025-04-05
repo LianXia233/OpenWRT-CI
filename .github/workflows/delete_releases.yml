@@ -1,7 +1,7 @@
 name: Delete all releases
 
 on:
-  workflow_dispatch: # This allows you to manually trigger the workflow
+  workflow_dispatch:
 
 jobs:
   delete_releases:
@@ -9,7 +9,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4  # 更新至最新版本
 
     - name: List all releases
       id: list_releases
@@ -22,11 +22,16 @@ jobs:
     - name: Delete each release
       if: steps.list_releases.outputs.data != '[]'
       run: |
-        releases=$(echo '${{ steps.list_releases.outputs.data }}' | jq -r '.[].id')
+        set -e  # 启用错误退出
+        echo "${{ steps.list_releases.outputs.data }}" > releases.json
+        releases=$(jq -r '.[].id' releases.json)
+
         for release_id in $releases; do
           echo "Deleting release with ID: $release_id"
-          curl -X DELETE \
+          curl -s -X DELETE \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/releases/$release_id
+            "https://api.github.com/repos/${{ github.repository }}/releases/$release_id" \
+            || exit 1
+          sleep 1  # 避免触发速率限制
         done
