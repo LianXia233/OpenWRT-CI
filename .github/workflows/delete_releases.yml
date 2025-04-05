@@ -1,0 +1,27 @@
+name: Delete All Releases
+
+on:
+  workflow_dispatch:
+
+jobs:
+  delete-releases:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete all releases using GitHub API
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          echo "Fetching all releases for ${OWNER}/${REPO}..."
+          RELEASES=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" "https://api.github.com/repos/${OWNER}/${REPO}/releases")
+          if [ "$(echo "$RELEASES" | jq '. | length')" -eq "0" ]; then
+              echo "No releases found."
+              exit 0
+          fi
+          echo "$RELEASES" | jq -r '.[].id' | while read -r release_id; do
+              echo "Deleting release ID: ${release_id}..."
+              curl -s -X DELETE -H "Authorization: token ${GITHUB_TOKEN}" "https://api.github.com/repos/${OWNER}/${REPO}/releases/${release_id}"
+          done
+          echo "All releases have been deleted."
+        shell: bash
