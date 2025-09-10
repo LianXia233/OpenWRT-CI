@@ -33,7 +33,7 @@ jobs:
       #max-parallel: 3
       matrix:
         CONFIG: [MEDIATEK, ROCKCHIP, X86]
-        SOURCE: [LianXia233/immortalwrt]
+        SOURCE: [padavanonly/immortalwrt-mt798x-6.6]
         BRANCH: [main]
 
     #调用公用编译核心WRT-CORE.yml
