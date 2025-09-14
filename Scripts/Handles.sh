@@ -86,3 +86,12 @@ if [ -f "$DM_FILE" ]; then
 
 	cd $PKG_PATH && echo "diskman has been fixed!"
 fi
+
+# 修复 hostapd he_mu_edca 编译错误，防止编译失败
+HOSTAPD_C="./package/network/services/hostapd/hostapd.c"
+if [ -f "$HOSTAPD_C" ]; then
+    echo " "
+    # 自动注释掉所有 he_mu_edca.he_qos_info 的相关行
+    sed -i '/he_mu_edca.he_qos_info/s/^/\/\//' "$HOSTAPD_C"
+    cd $PKG_PATH && echo "hostapd he_mu_edca error has been fixed!"
+fi
