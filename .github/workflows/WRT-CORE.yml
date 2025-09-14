@@ -54,11 +54,22 @@ jobs:
           sudo apt -yqq autoremove --purge
           sudo apt -yqq autoclean
           sudo apt -yqq clean
-          sudo apt -yqq install dos2unix python3-netifaces libfuse-dev
+          sudo apt -yqq install dos2unix python3-netifaces libfuse-dev golang-go
           curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh | sudo bash
           sudo systemctl daemon-reload
           # 设置时区, 若无权限则跳过
           sudo timedatectl set-timezone "Asia/Shanghai" || true
+
+          # 修复 Go 版本问题
+          GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
+          echo "当前 Go 版本: $GO_VERSION"
+          if dpkg --compare-versions "$GO_VERSION" lt "1.22"; then
+            echo "Go 版本过旧，更新为 1.22.6"
+            sudo rm -rf /usr/local/go
+            curl -L https://golang.org/dl/go1.22.6.linux-amd64.tar.gz -o go.tar.gz
+            sudo tar -C /usr/local -xzf go.tar.gz
+            echo "/usr/local/go/bin" >> $GITHUB_PATH
+          fi
 
           sudo mkdir -p /mnt/build_wrt
           sudo chown $USER:$USER /mnt/build_wrt
