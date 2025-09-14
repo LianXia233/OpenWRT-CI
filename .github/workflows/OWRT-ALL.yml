@@ -3,7 +3,7 @@ name: OWRT-ALL
 
 #CI计划
 on:
-  #自动编译：当 Auto-Clean 运行完成后
+  #自动编译：当Auto-Clean运行完成后
   workflow_run:
     workflows: ["Auto-Clean"]
     types:
@@ -30,13 +30,12 @@ jobs:
     name: ${{ matrix.CONFIG }}
     strategy:
       fail-fast: false
-      #max-parallel: 3
       matrix:
         CONFIG: [MEDIATEK, ROCKCHIP, X86]
         SOURCE: [VIKINGYFY/immortalwrt]
         BRANCH: [owrt]
 
-    # 调用公用编译核心 WRT-CORE.yml
+    #调用公用编译核心 WRT-CORE.yml
     uses: ./.github/workflows/WRT-CORE.yml
     with:
       #编译配置
