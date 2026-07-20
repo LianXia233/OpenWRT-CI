@@ -1,34 +1,29 @@
 version: 2.1
 
-# ==================== 参数定义 ====================
 parameters:
   PACKAGE:
     type: string
     default: ""
-    description: "手动调整插件包，多个请用空格或换行隔开"
+    description: "手动调整插件包，多个请用空格隔开"
   TEST:
     type: boolean
     default: false
     description: "仅输出配置文件，不编译固件"
 
-# ==================== 工作流 ====================
 workflows:
   MTK-ALL:
     jobs:
-      - build-mtk:
-          name: "<< matrix.CONFIG >>"
+      - build-wrt:
           matrix:
             parameters:
               CONFIG:
                 - MEDIATEK-WIFI-YES
                 - MEDIATEK-WIFI-NO
-          # 以下参数可通过 workflow_dispatch 传入
           package: << pipeline.parameters.PACKAGE >>
           test: << pipeline.parameters.TEST >>
 
-# ==================== Job 定义 ====================
 jobs:
-  build-mtk:
+  build-wrt:
     parameters:
       CONFIG:
         type: string
@@ -40,43 +35,173 @@ jobs:
         default: false
 
     machine:
-      image: ubuntu-2204:current   # 或使用 docker executor
-    resource_class: medium         # 根据需要调整：small / medium / large / xlarge
+      image: ubuntu-2204:current
+    resource_class: large          # 推荐 large 或 xlarge，OpenWrt 编译很吃资源
+
+    environment:
+      WRT_CONFIG: << parameters.CONFIG >>
+      WRT_THEME: aurora
+      WRT_NAME: OWRT
+      WRT_SSID: OWRT
+      WRT_WORD: 12345678
+      WRT_IP: 192.168.10.1
+      WRT_PW: 无
+      WRT_REPO: https://github.com/immortalwrt/immortalwrt.git
+      WRT_BRANCH: master
+      WRT_SOURCE: immortalwrt/immortalwrt
+      WRT_PACKAGE: << parameters.package >>
+      WRT_TEST: << parameters.test >>
 
     steps:
       - checkout
 
       - run:
-          name: "准备环境"
+          name: Initialization Environment
           command: |
-            sudo apt-get update && sudo apt-get install -y git curl wget rsync
+            sudo apt-get update
+            sudo apt-get full-upgrade -y
+            sudo apt-get autoremove --purge -y
+            sudo apt-get install -y dos2unix libfuse-dev curl git
+            sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+            sudo systemctl daemon-reload
+            sudo timedatectl set-timezone "Asia/Shanghai"
+
+            sudo mkdir -p /mnt/build_wrt
+            sudo chown -R $USER:$USER /mnt/build_wrt
+            sudo ln -s /mnt/build_wrt $HOME/wrt
 
       - run:
-          name: "执行 WRT-CORE 逻辑"
+          name: Initialization Values
           command: |
-            echo "CONFIG = $CONFIG"
-            echo "PACKAGE = $package"
-            echo "TEST = $test"
+            echo "WRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $BASH_ENV
+            echo "WRT_MARK=VIKINGYFY" >> $BASH_ENV
+            echo "WRT_INFO=immortalwrt" >> $BASH_ENV
+            echo "WRT_TARGET=$(grep -m 1 -oP '^CONFIG_TARGET_\K[\w]+(?=\=y)' ./Config/$WRT_CONFIG.txt || echo 'generic')" >> $BASH_ENV
+            echo "WRT_WIFI=wifi-yes" >> $BASH_ENV
+            echo "WRT_KVER=none" >> $BASH_ENV
+            echo "WRT_LIST=none" >> $BASH_ENV
+            echo "WRT_HASH=unknown" >> $BASH_ENV
 
-            # 这里需要把原来 WRT-CORE.yml 的逻辑移植过来
-            # 或者调用脚本实现相同功能
+      - run:
+          name: Clone Code
+          command: |
+            git clone --depth=1 --single-branch --branch $WRT_BRANCH $WRT_REPO ./wrt/
+            cd ./wrt/ && echo "WRT_HASH=$(git log -1 --pretty=format:'%h')" >> $BASH_ENV
 
-            if [ "$test" = "true" ]; then
-              echo "仅输出配置文件模式"
-              # 执行输出配置的命令
-            else
-              echo "开始编译固件..."
-              # 执行编译命令
+            # 移除国内源
+            if [ -f "./scripts/projectsmirrors.json" ]; then
+              sed -i '/.cn\//d; /tencent/d; /aliyun/d' "./scripts/projectsmirrors.json"
             fi
 
-      - when:
-          condition: << parameters.test >>
-          steps:
-            - run:
-                name: "测试模式 - 只生成配置"
-                command: echo "配置生成完成"
+      - run:
+          name: Check Scripts
+          command: |
+            find ./ -maxdepth 3 -type f -iregex ".*\.(txt|sh)$" -exec dos2unix {} \; -exec chmod +x {} \;
 
-      - persist_to_workspace:
-          root: /tmp
-          paths:
-            - firmware   # 根据实际输出路径调整
+      - restore_cache:
+          keys:
+            - v1-build-cache-{{ .Environment.WRT_CONFIG }}-{{ .Environment.WRT_INFO }}-{{ .Environment.WRT_HASH }}
+            - v1-build-cache-{{ .Environment.WRT_CONFIG }}-{{ .Environment.WRT_INFO }}
+
+      - run:
+          name: Update Caches
+          command: |
+            cd ./wrt/
+            if [ -d "./staging_dir" ]; then
+              find "./staging_dir" -type d -name "stamp" -not -path "*target*" | while read -r DIR; do
+                find "$DIR" -type f -exec touch {} +
+              done
+              mkdir -p ./tmp && echo "1" > ./tmp/.build
+              echo "toolchain skiped done!"
+            fi
+
+      - run:
+          name: Update Feeds
+          command: |
+            cd ./wrt/
+            ./scripts/feeds update -a
+            ./scripts/feeds install -a
+
+      - run:
+          name: Custom Packages
+          command: |
+            cd ./wrt/package/
+            $HOME/Scripts/Packages.sh || echo "Packages.sh not found"
+            $HOME/Scripts/Handles.sh   || echo "Handles.sh not found"
+
+      - run:
+          name: Custom Settings
+          command: |
+            cd ./wrt/
+            if [[ "${WRT_CONFIG,,}" == *"test"* ]]; then
+              cat $HOME/Config/$WRT_CONFIG.txt >> .config
+            else
+              cat $HOME/Config/$WRT_CONFIG.txt $HOME/Config/GENERAL.txt >> .config
+            fi
+
+            $HOME/Scripts/Settings.sh || echo "Settings.sh not found"
+            make defconfig -j$(nproc)
+            make clean -j$(nproc)
+
+      - run:
+          name: Download Packages
+          command: |
+            if [ "$WRT_TEST" != "true" ]; then
+              cd ./wrt/
+              make download -j$(nproc)
+            fi
+
+      - run:
+          name: Compile Firmware
+          no_output_timeout: 2h
+          command: |
+            if [ "$WRT_TEST" != "true" ]; then
+              cd ./wrt/
+              make -j$(nproc) || make -j2 V=s
+            fi
+
+      - run:
+          name: Package Firmware
+          command: |
+            cd ./wrt/
+            mkdir -p ./upload/
+
+            cp -f ./.config ./upload/Config-"$WRT_CONFIG"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_DATE".txt
+
+            if [ "$WRT_TEST" != "true" ]; then
+              echo "WRT_KVER=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^kernel - \K[\d\.]+' {} \; || echo 'unknown')" >> $BASH_ENV
+              echo "WRT_LIST=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^luci-(app|theme)[^ ]*' {} \; | tr '\n' ' ' || echo 'none')" >> $BASH_ENV
+
+              find ./bin/targets/ -iregex ".*\.(buildinfo|json|sha256sums|packages)$" -exec rm -rf {} +
+
+              for FILE in $(find ./bin/targets/ -type f -iname "*$WRT_TARGET*"); do
+                EXT=$(basename $FILE | cut -d '.' -f 2-)
+                NAME=$(basename $FILE | cut -d '.' -f 1)
+                NEW_FILE="$NAME"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_WIFI"-"$WRT_DATE"."$EXT"
+                mv -f "$FILE" "./upload/$NEW_FILE"
+              done
+
+              find ./bin/targets/ -type f -exec mv -f {} ./upload/ \;
+            fi
+
+      - store_artifacts:
+          path: ./wrt/upload
+          destination: firmware
+
+      - run:
+          name: Machine Information
+          command: |
+            echo "======================="
+            lscpu | grep -E "name|Core|Thread"
+            df -h
+            du -sh ./wrt/* 2>/dev/null || true
+            echo "======================="
+
+      # CircleCI 暂无直接 GitHub Release，可改用 orb 或手动上传
+      - run:
+          name: Upload Artifacts Info
+          command: |
+            echo "编译完成！"
+            echo "配置: $WRT_CONFIG"
+            echo "日期: $WRT_DATE"
+            echo "请在 Artifacts 中下载固件"
