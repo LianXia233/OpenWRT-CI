@@ -36,7 +36,7 @@ jobs:
 
     machine:
       image: ubuntu-2204:current
-    resource_class: large          # 推荐 large 或 xlarge，OpenWrt 编译很吃资源
+    resource_class: xlarge          # 可改为 xlarge 如果需要更高性能
 
     environment:
       WRT_CONFIG: << parameters.CONFIG >>
@@ -58,11 +58,25 @@ jobs:
       - run:
           name: Initialization Environment
           command: |
-            sudo apt-get update
-            sudo apt-get full-upgrade -y
+            echo "🔧 设置非交互模式..."
+            export DEBIAN_FRONTEND=noninteractive
+            
+            sudo apt-get update -qq
+            
+            # 关键修复：避免配置提示卡住
+            sudo apt-get full-upgrade -y \
+              -o Dpkg::Options::="--force-confdef" \
+              -o Dpkg::Options::="--force-confold"
+            
             sudo apt-get autoremove --purge -y
-            sudo apt-get install -y dos2unix libfuse-dev curl git
+            sudo apt-get autoclean
+            sudo apt-get clean
+            
+            sudo apt-get install -y dos2unix libfuse-dev curl git build-essential
+
+            # ImmortalWrt 初始化环境
             sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+            
             sudo systemctl daemon-reload
             sudo timedatectl set-timezone "Asia/Shanghai"
 
@@ -126,8 +140,8 @@ jobs:
           name: Custom Packages
           command: |
             cd ./wrt/package/
-            $HOME/Scripts/Packages.sh || echo "Packages.sh not found"
-            $HOME/Scripts/Handles.sh   || echo "Handles.sh not found"
+            $HOME/Scripts/Packages.sh || echo "Packages.sh skipped"
+            $HOME/Scripts/Handles.sh   || echo "Handles.sh skipped"
 
       - run:
           name: Custom Settings
@@ -136,10 +150,10 @@ jobs:
             if [[ "${WRT_CONFIG,,}" == *"test"* ]]; then
               cat $HOME/Config/$WRT_CONFIG.txt >> .config
             else
-              cat $HOME/Config/$WRT_CONFIG.txt $HOME/Config/GENERAL.txt >> .config
+              cat $HOME/Config/$WRT_CONFIG.txt $HOME/Config/GENERAL.txt >> .config 2>/dev/null || true
             fi
 
-            $HOME/Scripts/Settings.sh || echo "Settings.sh not found"
+            $HOME/Scripts/Settings.sh || echo "Settings.sh skipped"
             make defconfig -j$(nproc)
             make clean -j$(nproc)
 
@@ -153,7 +167,7 @@ jobs:
 
       - run:
           name: Compile Firmware
-          no_output_timeout: 2h
+          no_output_timeout: 3h
           command: |
             if [ "$WRT_TEST" != "true" ]; then
               cd ./wrt/
@@ -175,8 +189,8 @@ jobs:
               find ./bin/targets/ -iregex ".*\.(buildinfo|json|sha256sums|packages)$" -exec rm -rf {} +
 
               for FILE in $(find ./bin/targets/ -type f -iname "*$WRT_TARGET*"); do
-                EXT=$(basename $FILE | cut -d '.' -f 2-)
-                NAME=$(basename $FILE | cut -d '.' -f 1)
+                EXT=$(basename "$FILE" | cut -d '.' -f 2-)
+                NAME=$(basename "$FILE" | cut -d '.' -f 1)
                 NEW_FILE="$NAME"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_WIFI"-"$WRT_DATE"."$EXT"
                 mv -f "$FILE" "./upload/$NEW_FILE"
               done
@@ -197,11 +211,8 @@ jobs:
             du -sh ./wrt/* 2>/dev/null || true
             echo "======================="
 
-      # CircleCI 暂无直接 GitHub Release，可改用 orb 或手动上传
-      - run:
-          name: Upload Artifacts Info
-          command: |
-            echo "编译完成！"
-            echo "配置: $WRT_CONFIG"
-            echo "日期: $WRT_DATE"
-            echo "请在 Artifacts 中下载固件"
+      - save_cache:
+          key: v1-build-cache-{{ .Environment.WRT_CONFIG }}-{{ .Environment.WRT_INFO }}-{{ .Environment.WRT_HASH }}
+          paths:
+            - ./wrt/.ccache
+            - ./wrt/staging_dir
