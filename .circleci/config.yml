@@ -36,7 +36,7 @@ jobs:
 
     machine:
       image: ubuntu-2204:current
-    resource_class: xlarge          # 可改为 xlarge 如果需要更高性能
+    resource_class: large          # 可改为 xlarge 如果需要更高性能
 
     environment:
       WRT_CONFIG: << parameters.CONFIG >>
