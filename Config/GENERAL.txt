@@ -5,7 +5,8 @@ CONFIG_PACKAGE_luci-app-homeproxy=y
 CONFIG_PACKAGE_luci-app-h5000m-fancontrol=y
 CONFIG_PACKAGE_luci-app-h5000m-netmode=y
 CONFIG_PACKAGE_luci-app-mt5700m=y
-
+# MT5700M 中文语言
+CONFIG_PACKAGE_luci-i18n-mt5700m-zh-cn=y
 # EasyTier
 CONFIG_PACKAGE_easytier=y
 CONFIG_PACKAGE_luci-app-easytier=y
