@@ -37,6 +37,8 @@ jobs:
         type: boolean
         default: false
 
+    working_directory: ~/
+
     machine:
       image: ubuntu-2204:current
 
