@@ -5,10 +5,11 @@ parameters:
     type: string
     default: ""
     description: "手动调整插件包，多个请用空格隔开"
+
   TEST:
     type: boolean
     default: false
-    description: "仅输出配置文件，不编译固件"
+    description: "仅生成配置文件，不编译固件"
 
 workflows:
   MTK-ALL:
@@ -18,7 +19,7 @@ workflows:
             parameters:
               CONFIG:
                 - MEDIATEK-WIFI-YES
-                - MEDIATEK-WIFI-NO
+              
           package: << pipeline.parameters.PACKAGE >>
           test: << pipeline.parameters.TEST >>
 
@@ -27,16 +28,19 @@ jobs:
     parameters:
       CONFIG:
         type: string
+
       package:
         type: string
         default: ""
+
       test:
         type: boolean
         default: false
 
     machine:
       image: ubuntu-2204:current
-    resource_class: large          # 可改为 xlarge 如果需要更高性能
+
+    resource_class: large
 
     environment:
       WRT_CONFIG: << parameters.CONFIG >>
@@ -46,43 +50,46 @@ jobs:
       WRT_WORD: 12345678
       WRT_IP: 192.168.10.1
       WRT_PW: 无
+
       WRT_REPO: https://github.com/immortalwrt/immortalwrt.git
       WRT_BRANCH: master
       WRT_SOURCE: immortalwrt/immortalwrt
+
       WRT_PACKAGE: << parameters.package >>
       WRT_TEST: << parameters.test >>
 
     steps:
       - checkout
 
+      ###########################################################
+
       - run:
           name: Initialization Environment
           command: |
-            echo "🔧 设置非交互模式..."
-            export DEBIAN_FRONTEND=noninteractive
-            
-            sudo apt-get update -qq
-            
-            # 关键修复：避免配置提示卡住
-            sudo apt-get full-upgrade -y \
-              -o Dpkg::Options::="--force-confdef" \
-              -o Dpkg::Options::="--force-confold"
-            
-            sudo apt-get autoremove --purge -y
-            sudo apt-get autoclean
-            sudo apt-get clean
-            
-            sudo apt-get install -y dos2unix libfuse-dev curl git build-essential
+            set -euo pipefail
 
-            # ImmortalWrt 初始化环境
-            sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
-            
-            sudo systemctl daemon-reload
-            sudo timedatectl set-timezone "Asia/Shanghai"
+            export DEBIAN_FRONTEND=noninteractive
+
+            sudo apt-get update -qq
+
+            sudo apt-get install -y \
+              build-essential \
+              curl \
+              dos2unix \
+              git \
+              jq \
+              libfuse-dev
+
+            sudo bash -c 'bash <(curl -fsSL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+
+            sudo timedatectl set-timezone Asia/Shanghai
 
             sudo mkdir -p /mnt/build_wrt
-            sudo chown -R $USER:$USER /mnt/build_wrt
-            sudo ln -s /mnt/build_wrt $HOME/wrt
+            sudo chown -R "$USER:$USER" /mnt/build_wrt
+
+            ln -snf /mnt/build_wrt "$HOME/wrt"
+
+      ###########################################################
 
       - run:
           name: Initialization Values
@@ -90,129 +97,203 @@ jobs:
             echo "WRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $BASH_ENV
             echo "WRT_MARK=VIKINGYFY" >> $BASH_ENV
             echo "WRT_INFO=immortalwrt" >> $BASH_ENV
-            echo "WRT_TARGET=$(grep -m 1 -oP '^CONFIG_TARGET_\K[\w]+(?=\=y)' ./Config/$WRT_CONFIG.txt || echo 'generic')" >> $BASH_ENV
+
+            echo "WRT_TARGET=$(grep -m1 -oP '^CONFIG_TARGET_\K[\w]+(?==y)' ./Config/$WRT_CONFIG.txt || echo generic)" >> $BASH_ENV
+
             echo "WRT_WIFI=wifi-yes" >> $BASH_ENV
             echo "WRT_KVER=none" >> $BASH_ENV
             echo "WRT_LIST=none" >> $BASH_ENV
             echo "WRT_HASH=unknown" >> $BASH_ENV
 
-      - run:
-          name: Clone Code
-          command: |
-            git clone --depth=1 --single-branch --branch $WRT_BRANCH $WRT_REPO ./wrt/
-            cd ./wrt/ && echo "WRT_HASH=$(git log -1 --pretty=format:'%h')" >> $BASH_ENV
+      ###########################################################
 
-            # 移除国内源
+      - run:
+          name: Clone Source
+          command: |
+            set -e
+
+            git clone \
+              --filter=blob:none \
+              --depth=1 \
+              --single-branch \
+              --branch "$WRT_BRANCH" \
+              "$WRT_REPO" \
+              ./wrt
+
+            cd ./wrt
+
+            echo "WRT_HASH=$(git rev-parse --short HEAD)" >> $BASH_ENV
+
             if [ -f "./scripts/projectsmirrors.json" ]; then
-              sed -i '/.cn\//d; /tencent/d; /aliyun/d' "./scripts/projectsmirrors.json"
+              sed -i '/.cn\//d;/aliyun/d;/tencent/d' ./scripts/projectsmirrors.json
             fi
 
+      ###########################################################
+
       - run:
-          name: Check Scripts
+          name: Normalize Scripts
           command: |
-            find ./ -maxdepth 3 -type f -iregex ".*\.(txt|sh)$" -exec dos2unix {} \; -exec chmod +x {} \;
+            find ./ -maxdepth 3 \
+              -type f \
+              -iregex ".*\.\(sh\|txt\)$" \
+              -exec dos2unix {} \; \
+              -exec chmod +x {} \;
+
+      ###########################################################
 
       - restore_cache:
           keys:
-            - v1-build-cache-{{ .Environment.WRT_CONFIG }}-{{ .Environment.WRT_INFO }}-{{ .Environment.WRT_HASH }}
-            - v1-build-cache-{{ .Environment.WRT_CONFIG }}-{{ .Environment.WRT_INFO }}
+            - v2-build-cache-{{ .Environment.WRT_CONFIG }}-{{ .Environment.WRT_INFO }}-{{ .Environment.WRT_HASH }}
+            - v2-build-cache-{{ .Environment.WRT_CONFIG }}-{{ .Environment.WRT_INFO }}
+
+      ###########################################################
 
       - run:
-          name: Update Caches
+          name: Restore Build Cache
           command: |
-            cd ./wrt/
-            if [ -d "./staging_dir" ]; then
-              find "./staging_dir" -type d -name "stamp" -not -path "*target*" | while read -r DIR; do
-                find "$DIR" -type f -exec touch {} +
+            cd ./wrt
+
+            if [ -d staging_dir ]; then
+              find staging_dir \
+                -type d \
+                -name stamp \
+                -not -path "*target*" |
+              while read d
+              do
+                find "$d" -type f -exec touch {} +
               done
-              mkdir -p ./tmp && echo "1" > ./tmp/.build
-              echo "toolchain skiped done!"
             fi
+
+      ###########################################################
 
       - run:
           name: Update Feeds
           command: |
-            cd ./wrt/
-            ./scripts/feeds update -a
+            cd ./wrt
+
+            ./scripts/feeds update -a -f
             ./scripts/feeds install -a
+
+      ###########################################################
 
       - run:
           name: Custom Packages
           command: |
-            cd ./wrt/package/
-            $HOME/Scripts/Packages.sh || echo "Packages.sh skipped"
-            $HOME/Scripts/Handles.sh   || echo "Handles.sh skipped"
+            cd ./wrt/package
+
+            "$HOME/Scripts/Packages.sh"
+
+            "$HOME/Scripts/Handles.sh"
+
+      ###########################################################
 
       - run:
           name: Custom Settings
           command: |
-            cd ./wrt/
-            if [[ "${WRT_CONFIG,,}" == *"test"* ]]; then
-              cat $HOME/Config/$WRT_CONFIG.txt >> .config
+            cd ./wrt
+
+            if [[ "${WRT_CONFIG,,}" == *test* ]]; then
+              cat "$HOME/Config/$WRT_CONFIG.txt" >> .config
             else
-              cat $HOME/Config/$WRT_CONFIG.txt $HOME/Config/GENERAL.txt >> .config 2>/dev/null || true
+              cat \
+                "$HOME/Config/$WRT_CONFIG.txt" \
+                "$HOME/Config/GENERAL.txt" >> .config
             fi
 
-            $HOME/Scripts/Settings.sh || echo "Settings.sh skipped"
-            make defconfig -j$(nproc)
-            make clean -j$(nproc)
+            "$HOME/Scripts/Settings.sh"
+
+            make defconfig
+
+            echo "========== TARGET =========="
+            grep '^CONFIG_TARGET' .config || true
+
+            echo "========== H5000M =========="
+            grep 'h5000m' .config || true
+
+            echo "========== MT5700M =========="
+            grep 'mt5700m' .config || true
+
+      ###########################################################
 
       - run:
-          name: Download Packages
+          name: Download Sources
           command: |
             if [ "$WRT_TEST" != "true" ]; then
-              cd ./wrt/
-              make download -j$(nproc)
+              cd ./wrt
+
+              make download -j"$(nproc)" || \
+              make download -j1 V=s
             fi
+
+      ###########################################################
 
       - run:
           name: Compile Firmware
           no_output_timeout: 3h
           command: |
             if [ "$WRT_TEST" != "true" ]; then
-              cd ./wrt/
-              make -j$(nproc) || make -j2 V=s
+              cd ./wrt
+
+              make -j"$(nproc)" || \
+              make -j4 V=s || \
+              make -j1 V=s
             fi
+
+      ###########################################################
 
       - run:
           name: Package Firmware
+          when: always
           command: |
-            cd ./wrt/
-            mkdir -p ./upload/
+            cd ./wrt
 
-            cp -f ./.config ./upload/Config-"$WRT_CONFIG"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_DATE".txt
+            mkdir -p upload/logs
+
+            cp .config upload/logs/
+
+            if [ -d logs ]; then
+              find logs -type f -exec cp {} upload/logs/ \;
+            fi
+
+            cp .config \
+              upload/Config-"$WRT_CONFIG"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_DATE".txt || true
 
             if [ "$WRT_TEST" != "true" ]; then
-              echo "WRT_KVER=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^kernel - \K[\d\.]+' {} \; || echo 'unknown')" >> $BASH_ENV
-              echo "WRT_LIST=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^luci-(app|theme)[^ ]*' {} \; | tr '\n' ' ' || echo 'none')" >> $BASH_ENV
 
-              find ./bin/targets/ -iregex ".*\.(buildinfo|json|sha256sums|packages)$" -exec rm -rf {} +
+              find bin/targets \
+                -iregex ".*\.\(buildinfo\|json\|sha256sums\|packages\)$" \
+                -delete
 
-              for FILE in $(find ./bin/targets/ -type f -iname "*$WRT_TARGET*"); do
-                EXT=$(basename "$FILE" | cut -d '.' -f 2-)
-                NAME=$(basename "$FILE" | cut -d '.' -f 1)
-                NEW_FILE="$NAME"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_WIFI"-"$WRT_DATE"."$EXT"
-                mv -f "$FILE" "./upload/$NEW_FILE"
-              done
-
-              find ./bin/targets/ -type f -exec mv -f {} ./upload/ \;
+              find bin/targets -type f -exec mv -f {} upload/ \;
             fi
+
+      ###########################################################
 
       - store_artifacts:
           path: ./wrt/upload
           destination: firmware
 
+      ###########################################################
+
       - run:
           name: Machine Information
+          when: always
           command: |
-            echo "======================="
-            lscpu | grep -E "name|Core|Thread"
+            echo "=========================="
+            lscpu
+            echo "--------------------------"
+            free -h
+            echo "--------------------------"
             df -h
+            echo "--------------------------"
             du -sh ./wrt/* 2>/dev/null || true
-            echo "======================="
+            echo "=========================="
+
+      ###########################################################
 
       - save_cache:
-          key: v1-build-cache-{{ .Environment.WRT_CONFIG }}-{{ .Environment.WRT_INFO }}-{{ .Environment.WRT_HASH }}
+          key: v2-build-cache-{{ .Environment.WRT_CONFIG }}-{{ .Environment.WRT_INFO }}-{{ .Environment.WRT_HASH }}
           paths:
             - ./wrt/.ccache
             - ./wrt/staging_dir
+            - ./wrt/dl
