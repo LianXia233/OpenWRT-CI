@@ -23,16 +23,15 @@ CONFIG_PACKAGE_kmod-usb2=y
 CONFIG_PACKAGE_kmod-usb-serial=y
 CONFIG_PACKAGE_kmod-usb-serial-option=y
 
-# ==================== QModem 插件（已加入） ====================
-# 主程序
+# QModem 插件
 CONFIG_PACKAGE_luci-app-qmodem=y
-# 推荐：纯 JS Luci 前端（luci-app-qmodem-next）
 CONFIG_PACKAGE_luci-app-qmodem-next=y
 
-# 可选功能（默认关闭，按需开启）
-# CONFIG_PACKAGE_luci-app-qmodem-sms=y
-# CONFIG_PACKAGE_luci-app-qmodem-mwan=y
-# CONFIG_PACKAGE_luci-app-qmodem-ttl=y
+# 可选功能（先关闭，减少冲突）
+# CONFIG_PACKAGE_luci-app-qmodem-sms=n
+
+# QModem 核心依赖
+CONFIG_PACKAGE_quectel-cm=y
 
 # ==================== 增加插件 ====================
 CONFIG_PACKAGE_luci-app-autoreboot=y
