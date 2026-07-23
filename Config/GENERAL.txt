@@ -23,8 +23,18 @@ CONFIG_PACKAGE_kmod-usb2=y
 CONFIG_PACKAGE_kmod-usb-serial=y
 CONFIG_PACKAGE_kmod-usb-serial-option=y
 
+# ==================== QModem 插件（已加入） ====================
+# 主程序
+CONFIG_PACKAGE_luci-app-qmodem=y
+# 推荐：纯 JS Luci 前端（luci-app-qmodem-next）
+CONFIG_PACKAGE_luci-app-qmodem-next=y
 
-#增加插件
+# 可选功能（默认关闭，按需开启）
+# CONFIG_PACKAGE_luci-app-qmodem-sms=y
+# CONFIG_PACKAGE_luci-app-qmodem-mwan=y
+# CONFIG_PACKAGE_luci-app-qmodem-ttl=y
+
+# ==================== 增加插件 ====================
 CONFIG_PACKAGE_luci-app-autoreboot=y
 CONFIG_PACKAGE_luci-app-gecoosac=y
 CONFIG_PACKAGE_luci-app-mini-diskmanager=y
@@ -32,17 +42,20 @@ CONFIG_PACKAGE_luci-app-partexp=y
 CONFIG_PACKAGE_luci-app-samba4=y
 CONFIG_PACKAGE_luci-app-upnp=y
 CONFIG_PACKAGE_luci-app-wolultra=y
-#删除插件
+
+# ==================== 删除插件 ====================
 CONFIG_PACKAGE_luci-app-attendedsysupgrade=n
 CONFIG_PACKAGE_luci-app-wol=n
-#参数调整
+
+# ==================== 参数调整 ====================
 CONFIG_CCACHE=y
 CONFIG_DEVEL=y
 CONFIG_FEED_video=n
 CONFIG_TARGET_MULTI_PROFILE=y
 CONFIG_TARGET_PER_DEVICE_ROOTFS=y
 CONFIG_TARGET_ROOTFS_INITRAMFS=n
-#内核调整
+
+# ==================== 内核调整 ====================
 CONFIG_PACKAGE_kmod-ata-ahci=y
 CONFIG_PACKAGE_kmod-ata-core=y
 CONFIG_PACKAGE_kmod-bonding=y
@@ -103,7 +116,8 @@ CONFIG_PACKAGE_kmod-usb-uhci=y
 CONFIG_PACKAGE_kmod-usb-xhci=y
 CONFIG_PACKAGE_kmod-veth=y
 CONFIG_PACKAGE_kmod-wireguard=y
-#组件调整
+
+# ==================== 组件调整 ====================
 CONFIG_PACKAGE_autocore=y
 CONFIG_PACKAGE_automount=y
 CONFIG_PACKAGE_blkid=y
