@@ -15,7 +15,7 @@
 | 工作流 | 触发方式 | 作用 |
 | :--- | :--- | :--- |
 | **WRT-BUILD** | 手动 `workflow_dispatch` | 手动编译 / 预览配置。可选配置、源码、分支，默认仅生成配置不编译（`TEST=true`） |
-| **MTK-AUTO** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动编译全部联发科配置（`MEDIATEK-WIFI-YES` + `MEDIATEK-WIFI-NO`）并发布 Release |
+| **MTK-AUTO** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动编译 `MEDIATEK-WIFI-YES` 并发布 Release |
 | **Auto-Clean** | 每天定时 + 手动 | 清理旧 Release 与 Workflow 运行记录（保留最近 1 个 Release、30 天运行记录） |
 | **Cache-Clean** | 每周定时 + 手动 | 清理 GitHub Actions 编译缓存 |
 
@@ -32,13 +32,12 @@ OpenWRT-CI/
 ├── .github/workflows/        # 云编译工作流
 │   ├── WRT-CORE.yml          # 公用编译核心（被调用）
 │   ├── WRT-BUILD.yml         # 手动编译入口
-│   ├── MTK-AUTO.yml          # 定时自动编译全部联发科配置
+│   ├── MTK-AUTO.yml          # 定时自动编译 MEDIATEK-WIFI-YES
 │   ├── Auto-Clean.yml        # 清理旧 Release / 运行记录
 │   └── Cache-Clean.yml       # 清理编译缓存
 ├── Config/                   # 编译配置（仅联发科 MediaTek）
 │   ├── GENERAL.txt           # 通用插件与内核配置（H5000M 相关）
-│   ├── MEDIATEK-WIFI-YES.txt # Hiveton H5000M（带 Wi-Fi）
-│   └── MEDIATEK-WIFI-NO.txt  # Supergateway / Zyxel 等（不带 Wi-Fi）
+│   └── MEDIATEK-WIFI-YES.txt # Hiveton H5000M（带 Wi-Fi）
 ├── Scripts/                  # 编译前自定义脚本
 │   ├── Packages.sh           # 拉取第三方插件与主题
 │   ├── Handles.sh            # HomeProxy 资源预置与主题 / 组件修复
@@ -54,7 +53,6 @@ OpenWRT-CI/
 | 配置 | 目标平台 | 设备 | Wi-Fi |
 | :--- | :--- | :--- | :--- |
 | `MEDIATEK-WIFI-YES` | MediaTek Filogic | Hiveton H5000M | ✅ 开启 |
-| `MEDIATEK-WIFI-NO` | MediaTek Filogic | Supergateway S20L/S20M/S20P、Zyxel EX5700-Telenor | ❌ 关闭 |
 
 > 本项目已精简为**仅联发科 MediaTek** 平台，移除了原仓库中的 Qualcomm（IPQ）、Rockchip、X86 等无关配置。
 

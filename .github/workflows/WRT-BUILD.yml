@@ -14,7 +14,6 @@ on:
         type: choice
         options:
           - MEDIATEK-WIFI-YES
-          - MEDIATEK-WIFI-NO
       SOURCE:
         description: '源码仓库'
         default: 'VIKINGYFY/immortalwrt'
