@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-# 定时自动编译：Auto-Clean 清理完成后自动构建全部联发科 MediaTek 配置
+# 定时自动编译：Auto-Clean 清理完成后自动构建 MEDIATEK-WIFI-YES
 name: MTK-AUTO
 
 on:
@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        CONFIG: [MEDIATEK-WIFI-YES, MEDIATEK-WIFI-NO]
+        CONFIG: [MEDIATEK-WIFI-YES]
         SOURCE: [immortalwrt/immortalwrt]
         BRANCH: [master]
 
