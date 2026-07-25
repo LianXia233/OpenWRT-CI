@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: MIT
+# Copyright (C) 2026 VIKINGYFY
+
+# 手动编译入口（仅联发科 MediaTek 平台）
+name: WRT-BUILD
+
+on:
+  workflow_dispatch:
+    inputs:
+      CONFIG:
+        description: '编译配置'
+        default: 'MEDIATEK-WIFI-YES'
+        required: true
+        type: choice
+        options:
+          - MEDIATEK-WIFI-YES
+          - MEDIATEK-WIFI-NO
+      SOURCE:
+        description: '源码仓库'
+        default: 'VIKINGYFY/immortalwrt'
+        required: true
+        type: choice
+        options:
+          - VIKINGYFY/immortalwrt
+          - immortalwrt/immortalwrt
+          - LiBwrt/openwrt-6.x
+      BRANCH:
+        description: '源码分支'
+        default: 'main'
+        required: true
+        type: string
+      PACKAGE:
+        description: '手动追加插件包（多行请用换行隔开）'
+        required: false
+        type: string
+      TEST:
+        description: '仅生成配置文件，不编译固件。'
+        default: 'true'
+        required: true
+        type: boolean
+
+permissions: write-all
+
+jobs:
+  build:
+    name: ${{inputs.CONFIG}}
+    uses: ./.github/workflows/WRT-CORE.yml
+    with:
+      WRT_CONFIG: ${{inputs.CONFIG}}
+      WRT_THEME: aurora
+      WRT_NAME: OWRT
+      WRT_SSID: OWRT
+      WRT_WORD: 12345678
+      WRT_IP: 192.168.10.1
+      WRT_PW: 无
+      WRT_REPO: https://github.com/${{inputs.SOURCE}}.git
+      WRT_BRANCH: ${{inputs.BRANCH}}
+      WRT_SOURCE: ${{inputs.SOURCE}}
+      WRT_PACKAGE: ${{inputs.PACKAGE}}
+      WRT_TEST: ${{inputs.TEST}}
