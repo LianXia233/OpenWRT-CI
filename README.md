@@ -76,7 +76,7 @@ OpenWRT-CI/
 >
 > 感谢作者为 Hiveton H5000M 及 MT5700M 模组开发的系列核心控制插件，赋予了该设备真正的 5G CPE 灵魂。
 > * 🔗 **主页链接**：[https://github.com/FAN789](https://github.com/FAN789)
-> * 📦 **5G 模组控制**：[luci-app-mt5700m](https://github.com/FAN789/luci-app-mt5700m)
+> * 📦 **5G 模组控制**：[luci-app-mt5700m](https://github.com/LianXia233/luci-app-mt5700m)
 > * ❄️ **智能风扇温控**：[luci-app-h5000m-fancontrol](https://github.com/FAN789/luci-app-h5000m-fancontrol)
 > * 🔀 **网络模式切换**：[luci-app-h5000m-netmode](https://github.com/FAN789/luci-app-h5000m-netmode)
 
