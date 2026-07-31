@@ -1,48 +1,43 @@
-# ========================
-# 1. 引导与镜像格式 (确保 BIOS/UEFI 双兼容)
-# ========================
+# 设备平台
 CONFIG_TARGET_x86=y
 CONFIG_TARGET_x86_64=y
 CONFIG_TARGET_ALL_PROFILES=y
-CONFIG_ISO_IMAGES=y            # 开启 ISO 镜像
-CONFIG_EFI_IMAGES=y            # 开启 UEFI 引导
-CONFIG_GRUB_IMAGES=y           # 开启 GRUB 引导 (BIOS)
-CONFIG_GRUB_EFI_IMAGES=y       # 开启 GRUB 引导 (UEFI 刚需)
+
+# 镜像格式与引导 (ISO及UEFI支持)
+CONFIG_ISO_IMAGES=y
+CONFIG_EFI_IMAGES=y
+CONFIG_GRUB_IMAGES=y
+CONFIG_GRUB_EFI_IMAGES=y
+CONFIG_VMDK_IMAGES=y
+
+# 分区容量与文件系统格式
 CONFIG_TARGET_KERNEL_PARTSIZE=128
 CONFIG_TARGET_ROOTFS_PARTSIZE=1024
 CONFIG_TARGET_ROOTFS_EXT4FS=n
-CONFIG_TARGET_ROOTFS_SQUASHFS=y 
+CONFIG_TARGET_ROOTFS_SQUASHFS=y
 
-# ========================
-# 2. 核心存储驱动 (防止启动卡 "waiting for root device")
-# ========================
+# 存储设备驱动 (SATA/NVMe/USB)
 CONFIG_PACKAGE_kmod-ata-core=y
-CONFIG_PACKAGE_kmod-ata-ahci=y      # SATA 硬盘/固态支持
-CONFIG_PACKAGE_kmod-nvme=y          # NVMe M.2 固态硬盘支持 (现代小主机刚需)
-CONFIG_PACKAGE_kmod-usb-storage=y   # U盘/USB硬盘引导支持
+CONFIG_PACKAGE_kmod-ata-ahci=y
+CONFIG_PACKAGE_kmod-nvme=y
+CONFIG_PACKAGE_kmod-scsi-core=y
+CONFIG_PACKAGE_kmod-usb-storage=y
 CONFIG_PACKAGE_kmod-usb-storage-uas=y
 CONFIG_PACKAGE_kmod-usb-storage-extras=y
-CONFIG_PACKAGE_kmod-scsi-core=y
 
-# ========================
-# 3. 核心文件系统与字符集 (EFI 引导分区必须依赖 vfat)
-# ========================
-CONFIG_PACKAGE_kmod-fs-vfat=y       # UEFI 的 boot 分区必须是 FAT 格式
-CONFIG_PACKAGE_kmod-nls-cp437=y     # VFAT 必须的字符集（缺少会报错挂载失败）
-CONFIG_PACKAGE_kmod-nls-iso8859-1=y # VFAT 必须的字符集
-CONFIG_PACKAGE_kmod-fs-ext4=y       # 提供 EXT4 兼容模块
+# 基础文件系统与字符集 (EFI引导与FAT32支持)
+CONFIG_PACKAGE_kmod-fs-vfat=y
+CONFIG_PACKAGE_kmod-fs-ext4=y
+CONFIG_PACKAGE_kmod-nls-cp437=y
+CONFIG_PACKAGE_kmod-nls-iso8859-1=y
 
-# ========================
-# 4. 基础输入设备 (确保黑屏时能插键盘排错)
-# ========================
+# 基础输入设备 (USB键盘支持)
 CONFIG_PACKAGE_kmod-usb-hid=y
 CONFIG_PACKAGE_kmod-hid-generic=y
 CONFIG_PACKAGE_kmod-input-core=y
 CONFIG_PACKAGE_kmod-input-evdev=y
 
-# ========================
-# 5. 原有的 WIFI / 组件 / 插件 配置
-# ========================
+# WIFI驱动
 CONFIG_PACKAGE_kmod-mt7915e=y
 CONFIG_PACKAGE_kmod-mt7921e=y
 CONFIG_PACKAGE_kmod-mt7925e=y
@@ -54,8 +49,11 @@ CONFIG_PACKAGE_kmod-mt7921-firmware=y
 CONFIG_PACKAGE_kmod-mt7922-firmware=y
 CONFIG_PACKAGE_kmod-mt7925-firmware=y
 CONFIG_PACKAGE_wpad-openssl=y
-CONFIG_VMDK_IMAGES=y
+
+# 内核传感器与看门狗模块
 CONFIG_PACKAGE_kmod-hwmon-w83627ehf=y
 CONFIG_PACKAGE_kmod-hwmon-w83627hf=y
 CONFIG_PACKAGE_kmod-w83627hf-wdt=y
+
+# 插件
 CONFIG_PACKAGE_luci-app-dockerman=y
