@@ -9,11 +9,12 @@ on:
     inputs:
       CONFIG:
         description: '编译配置'
-        default: 'MEDIATEK-WIFI-YES'
+        default: 'H5000M-WIFI-YES'
         required: true
         type: choice
         options:
-          - MEDIATEK-WIFI-YES
+          - H5000M-WIFI-YES
+          - X86
       SOURCE:
         description: '源码仓库'
         default: 'VIKINGYFY/immortalwrt'

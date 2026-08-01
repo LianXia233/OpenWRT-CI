@@ -10,3 +10,6 @@ CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_hiveton_h5000m=y
 # 内核调整
 CONFIG_PACKAGE_kmod-cryptodev=y
 CONFIG_PACKAGE_kmod-tls=y
+
+# H5000M 专用硬件
+CONFIG_PACKAGE_luci-app-h5000m-fancontrol=y
