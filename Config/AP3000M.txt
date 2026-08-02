@@ -12,5 +12,8 @@ CONFIG_PACKAGE_kmod-cryptodev=y
 CONFIG_PACKAGE_kmod-tls=y
 
 # AP3000M 专用硬件 (风扇控制)
-CONFIG_PACKAGE_luci-app-airpi3000m-fancontrol=y
+CONFIG_PACKAGE_luci-app-airpi-fancontrol=y
 CONFIG_PACKAGE_kmod-airpi-gpio-fan=y
+CONFIG_PACKAGE_luci-compat=y
+CONFIG_PACKAGE_luci-lua-runtime=y
+CONFIG_PACKAGE_kmod-hwmon-pwmfan=y
