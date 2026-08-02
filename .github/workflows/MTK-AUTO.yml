@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-# 定时自动编译：Auto-Clean 清理完成后自动构建 H5000M-WIFI-YES
+# 定时自动编译：Auto-Clean 清理完成后自动构建 H5000M-WIFI-YES 和 AP3000M
 name: MTK-AUTO
 
 on:
@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        CONFIG: [H5000M-WIFI-YES]
+        CONFIG: [H5000M-WIFI-YES, AP3000M]
         SOURCE: [immortalwrt/immortalwrt]
         BRANCH: [master]
 
