@@ -1,0 +1,65 @@
+#!/bin/sh
+# AP3000M EEPROM auto-initialization on first boot
+# Checks if factory partition (mmcblk0p2) is all-zeros and patches EEPROM
+
+FACTORY="/dev/mmcblk0p2"
+TEMPLATE="/lib/firmware/mediatek/mt7981_eeprom_mt7976_dbdc.bin"
+
+# Only run once
+[ -e /etc/ap3000m-eeprom-done ] && exit 0
+
+# Read MAC from eth0
+MAC=$(cat /sys/class/net/eth0/address 2>/dev/null)
+if [ -z "$MAC" ]; then
+    echo "ap3000m-eeprom: ERROR: cannot read eth0 MAC" >&2
+    touch /etc/ap3000m-eeprom-done
+    exit 0
+fi
+
+# Check if factory partition is all zeros
+FACTORY_ZERO=$(dd if="$FACTORY" bs=4096 count=1 2>/dev/null | hexdump -v -e '/1 "%02x"')
+FACTORY_ALLZERO=1
+for byte_hex in $FACTORY_ZERO; do
+    [ "$byte_hex" != "00" ] && FACTORY_ALLZERO=0 && break
+done
+
+if [ "$FACTORY_ALLZERO" -ne 0 ]; then
+    echo "ap3000m-eeprom: factory partition is blank, patching EEPROM..."
+
+    # Write template to factory partition
+    dd if="$TEMPLATE" of="$FACTORY" bs=4096 count=1 conv=notrunc 2>/dev/null
+
+    # Parse MAC bytes: XX:XX:XX:XX:XX:XX
+    MAC_B1=$(echo "$MAC" | cut -d: -f1)
+    MAC_B2=$(echo "$MAC" | cut -d: -f2)
+    MAC_B3=$(echo "$MAC" | cut -d: -f3)
+    MAC_B4=$(echo "$MAC" | cut -d: -f4)
+    MAC_B5=$(echo "$MAC" | cut -d: -f5)
+    MAC_B6=$(echo "$MAC" | cut -d: -f6)
+
+    # MAC a1 = eth0 MAC (offset 4, 6 bytes)
+    printf "\x$MAC_B1\x$MAC_B2\x$MAC_B3\x$MAC_B4\x$MAC_B5\x$MAC_B6" | \
+        dd of="$FACTORY" bs=1 seek=4 count=6 conv=notrunc 2>/dev/null
+
+    # MAC a2 = MAC a1 with last byte +1 (offset 10, 6 bytes)
+    MAC2_B6=$((0x$MAC_B6 + 1))
+    MAC2_B6_HEX=$(printf "%02x" "$MAC2_B6")
+    printf "\x$MAC_B1\x$MAC_B2\x$MAC_B3\x$MAC_B4\x$MAC_B5\x$MAC2_B6_HEX" | \
+        dd of="$FACTORY" bs=1 seek=10 count=6 conv=notrunc 2>/dev/null
+
+    echo "ap3000m-eeprom: factory partition written with MAC $MAC"
+else
+    echo "ap3000m-eeprom: factory partition already populated, skipping write"
+fi
+
+# Fix wireless config: radio1 must be 5g (key fix from backup EEPROM)
+if command -v uci > /dev/null 2>&1; then
+    uci -q set wireless.radio1.band='5g'
+    uci -q set wireless.radio1.channel='36'
+    uci -q set wireless.radio1.htmode='HE80'
+    uci -q commit wireless
+    echo "ap3000m-eeprom: wireless radio1 set to 5g/Ch36/HE80"
+fi
+
+touch /etc/ap3000m-eeprom-done
+echo "ap3000m-eeprom: initialization complete"

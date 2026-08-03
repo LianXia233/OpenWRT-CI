@@ -256,3 +256,27 @@ if [ -f "$RUST_FILE" ]; then
 		echo "rust fix failed; continuing!"
 	fi
 fi
+
+#AP3000M EEPROM 自动初始化 (备份EEPROM模板 + uci-defaults)
+if [ "$WRT_CONFIG" = "AP3000M" ]; then
+	echo " "
+	echo "AP3000M EEPROM fix: injecting..."
+
+	EEPROM_DIR="$GITHUB_WORKSPACE/AP3000M-EEPROM"
+	WRT_FILES="$PKG_PATH/../files"
+
+	if [ -d "$EEPROM_DIR" ]; then
+		# 固件目录
+		mkdir -p "$WRT_FILES/lib/firmware/mediatek/"
+		cp "$EEPROM_DIR/mt7981_eeprom_mt7976_dbdc.bin" "$WRT_FILES/lib/firmware/mediatek/"
+
+		# uci-defaults 脚本（首次启动自动 patch MAC 并修正 radio1 为 5g）
+		mkdir -p "$WRT_FILES/etc/uci-defaults/"
+		cp "$EEPROM_DIR/99-ap3000m-eeprom" "$WRT_FILES/etc/uci-defaults/"
+		chmod +x "$WRT_FILES/etc/uci-defaults/99-ap3000m-eeprom"
+
+		echo "AP3000M EEPROM fix injected!"
+	else
+		echo "AP3000M-EEPROM directory not found; skipping EEPROM fix!"
+	fi
+fi
