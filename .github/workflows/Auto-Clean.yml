@@ -16,12 +16,83 @@ jobs:
   auto_clean:
     runs-on: ubuntu-latest
     steps:
-      - name: Delete old Releases and Workflows
-        uses: ophub/delete-releases-workflows@main
-        with:
-          gh_token: ${{secrets.GITHUB_TOKEN}}
-          delete_releases: true
-          releases_keep_latest: 1
-          delete_tags: true
-          delete_workflows: true
-          workflows_keep_day: 30
+      - name: Delete old Releases per device (keep latest per model)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # 1. 获取所有非草稿 Release，按 published_at 降序
+          RELEASES=$(gh api "repos/${{ github.repository }}/releases?per_page=100" \
+            --jq '[.[] | select(.draft==false)] | sort_by(.published_at) | reverse')
+
+          echo "Total releases (non-draft): $(echo "$RELEASES" | jq 'length')"
+
+          # 2. 按机型分组（tag_name 中 -immortalwrt- 之前的部分即为机型名）
+          #    机型名可能含多个 '-'（如 H5000M-WIFI-YES），此处匹配第一个 -immortalwrt- 之前的所有内容
+          DEVICE_GROUPS=$(echo "$RELEASES" | jq -c '
+            group_by(.tag_name | split("-immortalwrt-")[0])
+            | map({device: .[0].tag_name | split("-immortalwrt-")[0], releases: .})
+          ')
+
+          DEVICE_COUNT=$(echo "$DEVICE_GROUPS" | jq 'length')
+          echo "Device models found: ${DEVICE_COUNT}"
+
+          DELETED=0
+
+          # 3. 遍历每个机型，保留最新一个，删除其余
+          for row in $(echo "$DEVICE_GROUPS" | jq -r '.[] | @base64'); do
+            _jq() { echo "${row}" | base64 -d | jq -r "${1}"; }
+
+            DEVICE=$(_jq '.device')
+            # releases 已按 published_at 降序排列，取第 2 个起即为旧版
+            OLD_IDS=$(_jq '[.releases[1:][].id] | join(" ")')
+
+            echo ""
+
+            if [ -z "${OLD_IDS}" ]; then
+              echo "[${DEVICE}] Only 1 release, nothing to delete."
+              continue
+            fi
+
+            echo "[${DEVICE}] Keeping latest, deleting $(echo "${OLD_IDS}" | wc -w) old release(s)..."
+
+            for RELEASE_ID in ${OLD_IDS}; do
+              TAG_NAME=$(echo "$RELEASES" | jq -r ".[] | select(.id==${RELEASE_ID}) | .tag_name")
+              echo "  Deleting Release ${RELEASE_ID} (tag: ${TAG_NAME})"
+
+              # 删除 Release（同时会删除关联的 tag）
+              gh api "repos/${{ github.repository }}/releases/${RELEASE_ID}" -X DELETE --silent || true
+
+              # 二次确认：手动删除残留 tag（部分情况下 tag 不会随 release 自动删除）
+              gh api "repos/${{ github.repository }}/git/refs/tags/${TAG_NAME}" -X DELETE --silent 2>/dev/null || true
+
+              DELETED=$((DELETED + 1))
+            done
+          done
+
+          echo ""
+          echo "=== Done: deleted ${DELETED} old release(s), kept ${DEVICE_COUNT} latest ==="
+
+      - name: Clean old workflow runs (keep 30 days)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          CUTOFF_DATE=$(date -d '30 days ago' +%Y-%m-%d)
+          echo "Deleting workflow runs older than ${CUTOFF_DATE}..."
+
+          WORKFLOWS=$(gh api "repos/${{ github.repository }}/actions/workflows" --jq '.workflows[].id')
+
+          for WF_ID in ${WORKFLOWS}; do
+            OLD_RUNS=$(gh api "repos/${{ github.repository }}/actions/workflows/${WF_ID}/runs?per_page=100&status=completed" \
+              --jq ".workflow_runs | map(select(.created_at < \"${CUTOFF_DATE}\")) | .[].id")
+
+            for RUN_ID in ${OLD_RUNS}; do
+              echo "  Deleting run ${RUN_ID}..."
+              gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}" -X DELETE --silent || true
+            done
+          done
+
+          echo "=== Workflow cleanup done ==="
