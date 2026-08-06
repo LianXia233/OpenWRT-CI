@@ -9,6 +9,11 @@ on:
     - cron: 0 21 * * *
   # 手动清理
   workflow_dispatch:
+    inputs:
+      keep_latest_per_device:
+        description: '保留每个机型最新一个 Release（不勾选则清除 Releases 中的全部文件）'
+        type: boolean
+        default: false
 
 permissions: write-all
 
@@ -16,63 +21,67 @@ jobs:
   auto_clean:
     runs-on: ubuntu-latest
     steps:
-      - name: Delete old Releases per device (keep latest per model)
+      - name: Clear Releases (delete all files / keep latest optional)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
-          # 1. 获取所有非草稿 Release，按 published_at 降序
-          RELEASES=$(gh api "repos/${{ github.repository }}/releases?per_page=100" \
-            --jq '[.[] | select(.draft==false)] | sort_by(.published_at) | reverse')
-
-          echo "Total releases (non-draft): $(echo "$RELEASES" | jq 'length')"
-
-          # 2. 按机型分组（tag_name 中 -immortalwrt- 之前的部分即为机型名）
-          #    机型名可能含多个 '-'（如 H5000M-WIFI-YES），此处匹配第一个 -immortalwrt- 之前的所有内容
-          DEVICE_GROUPS=$(echo "$RELEASES" | jq -c '
-            group_by(.tag_name | split("-immortalwrt-")[0])
-            | map({device: .[0].tag_name | split("-immortalwrt-")[0], releases: .})
-          ')
-
-          DEVICE_COUNT=$(echo "$DEVICE_GROUPS" | jq 'length')
-          echo "Device models found: ${DEVICE_COUNT}"
-
+          REPO="${{ github.repository }}"
+          # 默认清除全部；手动触发且勾选 keep_latest_per_device 时仅保留每个机型最新一个
+          KEEP_LATEST="${{ inputs.keep_latest_per_device }}"
+          PER_PAGE=100
           DELETED=0
 
-          # 3. 遍历每个机型，保留最新一个，删除其余
-          for row in $(echo "$DEVICE_GROUPS" | jq -r '.[] | @base64'); do
-            _jq() { echo "${row}" | base64 -d | jq -r "${1}"; }
+          echo ">>> 开始处理 Releases（KEEP_LATEST=${KEEP_LATEST}）"
 
-            DEVICE=$(_jq '.device')
-            # releases 已按 published_at 降序排列，取第 2 个起即为旧版
-            OLD_IDS=$(_jq '[.releases[1:][].id] | join(" ")')
+          # 1. 分页拉取全部非草稿 Release，按 published_at 降序暂存到临时文件
+          ALL=$(mktemp)
+          PAGE=1
+          while :; do
+            DATA=$(gh api "repos/${REPO}/releases?per_page=${PER_PAGE}&page=${PAGE}" \
+              --jq '[.[] | select(.draft==false)] | sort_by(.published_at) | reverse | .[] | "\(.id)\t\(.tag_name)"')
+            [ -z "${DATA}" ] && break
+            printf '%s\n' "${DATA}" >> "${ALL}"
+            PAGE=$((PAGE + 1))
+          done
 
-            echo ""
+          TOTAL=$(wc -l < "${ALL}")
+          echo "Total non-draft releases: ${TOTAL}"
 
-            if [ -z "${OLD_IDS}" ]; then
-              echo "[${DEVICE}] Only 1 release, nothing to delete."
+          # 2. 若开启 keep_latest，计算每个机型需保留的最新 Release id（机型名 = tag 中 -immortalwrt- 之前的部分）
+          KEEP_IDS=""
+          if [ "${KEEP_LATEST}" = "true" ]; then
+            # ALL 已按 published_at 降序排列，awk 保留每个机型首次出现的（即最新）Release id
+            KEEP_IDS=$(awk -F'\t' '{split($2,a,"-immortalwrt-"); print a[1]"\t"$1}' "${ALL}" \
+              | awk -F'\t' '!seen[$1]++{print $2}')
+            echo "Keep-latest mode: keeping $(echo "${KEEP_IDS}" | wc -w | tr -d ' ') release(s)."
+          fi
+
+          # 3. 遍历并删除（keep_latest 模式下跳过需保留的）
+          while IFS=$'\t' read -r RID RTAG; do
+            [ -z "${RID}" ] && continue
+
+            if [ "${KEEP_LATEST}" = "true" ] && echo "${KEEP_IDS}" | grep -qx "${RID}"; then
+              echo "  [keep] ${RTAG} (id=${RID})"
               continue
             fi
 
-            echo "[${DEVICE}] Keeping latest, deleting $(echo "${OLD_IDS}" | wc -w) old release(s)..."
+            echo "  [delete] ${RTAG} (id=${RID})"
+            # 删除 Release（同时会删除关联的 tag）
+            gh api "repos/${REPO}/releases/${RID}" -X DELETE --silent || true
+            # 二次确认：手动删除残留 tag（部分情况下 tag 不会随 release 自动删除）
+            gh api "repos/${REPO}/git/refs/tags/${RTAG}" -X DELETE --silent 2>/dev/null || true
+            DELETED=$((DELETED + 1))
+          done < "${ALL}"
 
-            for RELEASE_ID in ${OLD_IDS}; do
-              TAG_NAME=$(echo "$RELEASES" | jq -r ".[] | select(.id==${RELEASE_ID}) | .tag_name")
-              echo "  Deleting Release ${RELEASE_ID} (tag: ${TAG_NAME})"
+          rm -f "${ALL}"
 
-              # 删除 Release（同时会删除关联的 tag）
-              gh api "repos/${{ github.repository }}/releases/${RELEASE_ID}" -X DELETE --silent || true
-
-              # 二次确认：手动删除残留 tag（部分情况下 tag 不会随 release 自动删除）
-              gh api "repos/${{ github.repository }}/git/refs/tags/${TAG_NAME}" -X DELETE --silent 2>/dev/null || true
-
-              DELETED=$((DELETED + 1))
-            done
-          done
-
-          echo ""
-          echo "=== Done: deleted ${DELETED} old release(s), kept ${DEVICE_COUNT} latest ==="
+          if [ "${KEEP_LATEST}" = "true" ]; then
+            echo "=== Done: deleted ${DELETED} old release(s), kept $(echo "${KEEP_IDS}" | wc -w | tr -d ' ') latest ==="
+          else
+            echo "=== Done: deleted ${DELETED} release(s), Releases 已清空 ==="
+          fi
 
       - name: Clean old workflow runs (keep 30 days)
         env:
