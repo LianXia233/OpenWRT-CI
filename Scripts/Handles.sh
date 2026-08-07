@@ -280,3 +280,23 @@ if [ "$WRT_CONFIG" = "AP3000M" ]; then
 		echo "AP3000M-EEPROM directory not found; skipping EEPROM fix!"
 	fi
 fi
+
+
+#修复 dockerd 在 CI runner 上的构建失败
+# 根因：moby 的 hack/make/binary-daemon 中 copy_binaries() 在宿主已安装 docker
+# （存在 /usr/local/bin/runc）时会复制 containerd/runc/rootlesskit 等“嵌套可执行文件”，
+# 但 GitHub Actions runner 上 rootlesskit / dockerd-rootless.sh / dockerd-rootless-setuptool.sh
+# 不在 PATH，command -v 返回空，导致 cp '' 报错而中断编译。
+# 修复方式：把补丁放入 feeds 的 dockerd patches 目录，OpenWrt 在 Build/Prepare 阶段自动应用。
+DOCKERD_PATCHES_SRC="$GITHUB_WORKSPACE/Scripts/patches/dockerd"
+DOCKERD_DIR="$(find "$FEEDS_PACKAGES" -maxdepth 3 -type d -wholename '*/dockerd' -print -quit 2>/dev/null)"
+if [ -d "$DOCKERD_PATCHES_SRC" ] && [ -n "$DOCKERD_DIR" ]; then
+	echo " "
+
+	mkdir -p "$DOCKERD_DIR/patches"
+	if cp -f "$DOCKERD_PATCHES_SRC"/*.patch "$DOCKERD_DIR/patches/" 2>/dev/null; then
+		echo "dockerd build patch has been applied!"
+	else
+		echo "dockerd patch copy failed; continuing!"
+	fi
+fi
