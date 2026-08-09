@@ -1,8 +1,6 @@
 --- a/hack/make/binary-daemon
 +++ b/hack/make/binary-daemon
-@@ -13,8 +13,9 @@ copy_binaries() {
- 	if [ ! -x /usr/local/bin/runc ]; then
- 		return
+@@ -15,7 +15,8 @@
  	fi
  	echo "Copying nested executables into $dir"
  	for file in containerd containerd-shim-runc-v2 ctr runc docker-init rootlesskit dockerd-rootless.sh dockerd-rootless-setuptool.sh; do
@@ -11,3 +9,4 @@
 +		[ -n "$bin" ] && cp -f "$bin" "$dir/"
  	done
  }
+ 
