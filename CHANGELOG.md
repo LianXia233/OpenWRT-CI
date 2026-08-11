@@ -2,6 +2,15 @@
 
 本仓库的所有重要变更都会记录在此文件中。
 
+## [2026-08-12]
+
+### 变更（临时禁用）
+
+- **暂时禁用 Honk 插件**：按需求临时关闭，未删除任何逻辑，可一键恢复。
+  - `Scripts/Packages.sh`：将 `INSTALL_HONK_PREBUILT` 调用注释（函数体保留）。
+  - `Config/GENERAL.txt`：将 Honk 运行时依赖（`ca-bundle`/`jq`/`nsenter`/`tc-full`/`v2ray-geoip`/`v2ray-geosite`/`kmod-sched-core`/`kmod-sched-bpf`）与 `CONFIG_KERNEL_DEBUG_INFO_BTF=y` 全部注释。
+  - 恢复方法：取消 `Packages.sh` 中 `INSTALL_HONK_PREBUILT` 的注释，并取消 `GENERAL.txt` 中上述 `CONFIG_*` 行的注释即可。
+
 ## [2026-08-11]
 
 ### 新增
