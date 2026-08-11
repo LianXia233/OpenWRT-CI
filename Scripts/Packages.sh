@@ -61,8 +61,9 @@ UPDATE_PACKAGE "openclash" "vernesong/OpenClash" "dev" "pkg"
 UPDATE_PACKAGE "passwall" "Openwrt-Passwall/openwrt-passwall" "main" "pkg"
 UPDATE_PACKAGE "passwall2" "Openwrt-Passwall/openwrt-passwall2" "main" "pkg"
 
-# Honk eBPF 透明代理（提取 honk / luci-app-honk / luci-app-honk-legacy 三个包）
-UPDATE_PACKAGE "honk" "breeze303/openwrt-honk" "main" "pkg"
+# Honk eBPF 透明代理：使用上游预编译 APK（见下方 INSTALL_HONK_PREBUILT）
+# 说明：honk 为 Rust/eBPF 架构，从源码编译会超过 GitHub 6 小时上限导致构建取消，
+# 因此改为下载上游发布的预编译包，并在首次开机时离线安装进固件。
 
 UPDATE_PACKAGE "luci-app-tailscale" "asvow/luci-app-tailscale" "main"
 
@@ -89,65 +90,78 @@ UPDATE_PACKAGE "airpi3000m-fancontrol" "LianXia233/luci-app-airpi3000m-fancontro
 UPDATE_PACKAGE "luci-app-mt5700m" "LianXia233/luci-app-mt5700m" "main"
 UPDATE_PACKAGE "luci-app-h5000m-netmode" "FAN789/luci-app-h5000m-netmode" "main"
 
-#安装 Honk 主机编译依赖（eBPF 工具链）
-# honk 引擎为 Rust/eBPF 架构，编译需要：
-#   1. clang / llvm / libbpf / libclang（bindgen 与 eBPF 编译）
-#   2. rustup nightly-2026-07-20 工具链（含 rust-src，用于 -Zbuild-std=core 编译 bpfel-unknown-none 目标）
-#   3. bpf-linker 0.10.4（eBPF 链接器，带 SHA-256 校验）
-INSTALL_HONK_DEPS() {
+#安装 Honk 预编译 APK（避免从源码编译 Rust/eBPF 导致超过 6 小时上限）
+# 流程：
+#   1. 按编译目标架构（X86 -> x86_64，其余 -> aarch64_generic）从上游最新 release 下载
+#      honk 与 luci-app-honk 的 openwrt-25.12 APK（与 immortalwrt master 的 APK 格式匹配）。
+#   2. 将 APK 放入固件 files 覆盖层（/etc/honk/），并写入 uci-defaults 脚本，
+#      在设备首次开机时离线 apk add 安装（依赖由 GENERAL.txt 编入镜像，无需联网）。
+# 注意：上游 APK 基于 OpenWrt 25.12 构建，与 immortalwrt master 同内核/同 musl，ABI 兼容。
+INSTALL_HONK_PREBUILT() {
 	echo " "
 
-	local BPF_RUST_TOOLCHAIN="nightly-2026-07-20"
-	local BPF_LINKER_VERSION="0.10.4"
-	local BPF_LINKER_SHA256="4dda77daab6c5f120a468e6d3ede2498f5bd47ece712172cfb7290176d93d015"
-	local CARGO_BIN="${CARGO_HOME:-$HOME/.cargo}/bin"
+	# 确定目标架构（与 WRT-CORE 的 WRT_CONFIG 对应）
+	local HONK_ARCH="aarch64_generic"
+	case "${WRT_CONFIG:-}" in
+		X86) HONK_ARCH="x86_64" ;;
+	esac
 
-	# 系统依赖
-	sudo -E apt-get update -qq
-	sudo -E apt-get install -y --no-install-recommends \
-		clang llvm libbpf-dev libclang-dev pkg-config cmake zstd || {
-		echo "honk host deps: apt install failed!"
+	# 定位 OpenWrt 工作区与 files 覆盖层
+	local WRT_FILES="${GITHUB_WORKSPACE:-$(pwd)/..}/wrt/files"
+	local HONK_DIR="$WRT_FILES/etc/honk"
+	local UCI_DIR="$WRT_FILES/etc/uci-defaults"
+	mkdir -p "$HONK_DIR" "$UCI_DIR"
+
+	# 获取上游最新 release 的资产下载地址，筛选本架构的 honk / luci-app-honk（排除 legacy / cortex-a53）
+	local REL_JSON
+	REL_JSON="$(curl -fsSL --retry 5 --retry-all-errors \
+		"https://api.github.com/repos/breeze303/openwrt-honk/releases/latest")" || {
+		echo "honk prebuilt: failed to fetch release list!"
 		return 1
 	}
 
-	# Rust nightly 工具链（eBPF 组件）
-	export PATH="$CARGO_BIN:$PATH"
-	if ! command -v rustup >/dev/null 2>&1; then
-		curl --proto '=https' --tlsv1.2 -fsSL --retry 5 --retry-all-errors \
-			https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
-		export PATH="$CARGO_BIN:$PATH"
-	fi
-	if ! rustup run "$BPF_RUST_TOOLCHAIN" rustc --version >/dev/null 2>&1; then
-		rustup toolchain install "$BPF_RUST_TOOLCHAIN" --profile minimal --component rust-src
-	elif ! rustup component list --toolchain "$BPF_RUST_TOOLCHAIN" --installed | grep -q '^rust-src'; then
-		rustup component add --toolchain "$BPF_RUST_TOOLCHAIN" rust-src
-	fi
-	rustup run "$BPF_RUST_TOOLCHAIN" rustc --version
+	local DL_URLS
+	DL_URLS="$(printf '%s' "$REL_JSON" | jq -r \
+		--arg arch "$HONK_ARCH" \
+		'.assets[] | select(.name | test("-"+$arch+"-openwrt-25.12.apk$")) | select(.name | test("legacy|cortex-a53") | not) | .browser_download_url')" || {
+		echo "honk prebuilt: failed to parse release assets!"
+		return 1
+	}
 
-	# bpf-linker（eBPF 链接器，校验哈希后安装）
-	if ! bpf-linker --version 2>/dev/null | grep -Fq "$BPF_LINKER_VERSION"; then
-		local LINKER_ARCHIVE="$(mktemp)"
-		curl --proto '=https' --tlsv1.2 -fsSL --retry 5 --retry-all-errors -o "$LINKER_ARCHIVE" \
-			"https://github.com/aya-rs/bpf-linker/releases/download/v${BPF_LINKER_VERSION}/bpf-linker-x86_64-unknown-linux-musl.tar.zst"
-		echo "$BPF_LINKER_SHA256  $LINKER_ARCHIVE" | sha256sum -c - || {
-			echo "honk host deps: bpf-linker checksum mismatch!"
-			rm -f "$LINKER_ARCHIVE"
-			return 1
-		}
-		mkdir -p "$CARGO_BIN"
-		tar --zstd -xf "$LINKER_ARCHIVE" -C "$CARGO_BIN"
-		rm -f "$LINKER_ARCHIVE"
-	fi
-	bpf-linker --version
-
-	# 确保持久化到后续编译步骤的 PATH
-	if [ -n "${GITHUB_PATH:-}" ]; then
-		echo "$CARGO_BIN" >> "$GITHUB_PATH"
+	if [ -z "$DL_URLS" ]; then
+		echo "honk prebuilt: no matching APK for arch $HONK_ARCH!"
+		return 1
 	fi
 
-	echo "honk host deps have been installed!"
+	local URL COUNT=0
+	for URL in $DL_URLS; do
+		echo "honk prebuilt: downloading $URL"
+		curl -fsSL --retry 5 --retry-all-errors -o "$HONK_DIR/$(basename "$URL")" "$URL" && COUNT=$((COUNT + 1))
+	done
+
+	if [ "$COUNT" -eq 0 ]; then
+		echo "honk prebuilt: all downloads failed!"
+		return 1
+	fi
+
+	# 写入首次开机安装脚本（离线 apk add，依赖已在镜像内）
+	cat > "$UCI_DIR/99-honk-install" <<'EOF'
+#!/bin/sh
+HONK_DIR="/etc/honk"
+if command -v apk >/dev/null 2>&1 && [ -d "$HONK_DIR" ]; then
+	if apk add --allow-untrusted "$HONK_DIR"/*.apk >/dev/null 2>&1; then
+		rm -f "$HONK_DIR"/*.apk
+		echo "honk: prebuilt packages installed at first boot."
+	else
+		echo "honk: prebuilt install skipped (missing dependencies or unsupported target)."
+	fi
+fi
+EOF
+	chmod +x "$UCI_DIR/99-honk-install"
+
+	echo "honk prebuilt: $COUNT package(s) staged for $HONK_ARCH, will install at first boot."
 }
-INSTALL_HONK_DEPS
+INSTALL_HONK_PREBUILT
 
 #更新软件包版本
 UPDATE_VERSION() {
