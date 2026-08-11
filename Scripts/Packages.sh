@@ -165,7 +165,8 @@ EOF
 
 	echo "honk prebuilt: $COUNT package(s) staged for $HONK_ARCH, will install at first boot."
 }
-INSTALL_HONK_PREBUILT
+# 临时禁用 Honk 插件（2026-08-12）：取消下行注释即可重新启用
+# INSTALL_HONK_PREBUILT
 
 #更新软件包版本
 UPDATE_VERSION() {
