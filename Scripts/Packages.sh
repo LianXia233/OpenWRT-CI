@@ -92,18 +92,22 @@ UPDATE_PACKAGE "luci-app-h5000m-netmode" "FAN789/luci-app-h5000m-netmode" "main"
 
 #安装 Honk 预编译 APK（避免从源码编译 Rust/eBPF 导致超过 6 小时上限）
 # 流程：
-#   1. 按编译目标架构（X86 -> x86_64，其余 -> aarch64_generic）从上游最新 release 下载
-#      honk 与 luci-app-honk 的 openwrt-25.12 APK（与 immortalwrt master 的 APK 格式匹配）。
+#   1. 按编译目标架构从上游最新 release 下载 honk 与 luci-app-honk 的 openwrt-25.12 APK：
+#        x86      -> x86_64
+#        mediatek -> aarch64_cortex-a53（MT798x / MT7622 均为 Cortex-A53，MTK 机型专用）
+#        其余     -> aarch64_generic
+#      （与 immortalwrt master 的 APK 格式匹配）
 #   2. 将 APK 放入固件 files 覆盖层（/etc/honk/），并写入 uci-defaults 脚本，
 #      在设备首次开机时离线 apk add 安装（依赖由 GENERAL.txt 编入镜像，无需联网）。
 # 注意：上游 APK 基于 OpenWrt 25.12 构建，与 immortalwrt master 同内核/同 musl，ABI 兼容。
 INSTALL_HONK_PREBUILT() {
 	echo " "
 
-	# 确定目标架构（与 WRT-CORE 的 WRT_CONFIG 对应）
+	# 确定目标架构（优先用 WRT-CORE 导出的 WRT_TARGET，回退到 WRT_CONFIG）
 	local HONK_ARCH="aarch64_generic"
-	case "${WRT_CONFIG:-}" in
-		X86) HONK_ARCH="x86_64" ;;
+	case "${WRT_TARGET:-${WRT_CONFIG:-}}" in
+		x86) HONK_ARCH="x86_64" ;;
+		mediatek) HONK_ARCH="aarch64_cortex-a53" ;;
 	esac
 
 	# 定位 OpenWrt 工作区与 files 覆盖层
@@ -123,7 +127,7 @@ INSTALL_HONK_PREBUILT() {
 	local DL_URLS
 	DL_URLS="$(printf '%s' "$REL_JSON" | jq -r \
 		--arg arch "$HONK_ARCH" \
-		'.assets[] | select(.name | test("-"+$arch+"-openwrt-25.12.apk$")) | select(.name | test("legacy|cortex-a53") | not) | .browser_download_url')" || {
+		'.assets[] | select(.name | test("-"+$arch+"-openwrt-25.12.apk$")) | select(.name | test("legacy") | not) | .browser_download_url')" || {
 		echo "honk prebuilt: failed to parse release assets!"
 		return 1
 	}
