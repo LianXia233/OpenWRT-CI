@@ -300,3 +300,21 @@ if [ -d "$DOCKERD_PATCHES_SRC" ] && [ -n "$DOCKERD_DIR" ]; then
 		echo "dockerd patch copy failed; continuing!"
 	fi
 fi
+
+#修复 honk 包安装阶段 /var 目录冲突
+# 根因：honk 的 Package/honk/install 中执行 $(INSTALL_DIR) $(1)/var/share/honk，
+# 会在 pkgdir 下创建 var/ 目录；但 OpenWrt rootfs 中 /var 是指向 /tmp 的符号链接，
+# 构建系统复制 pkgdir 到 rootfs 时 cp 无法用目录覆盖符号链接，报错：
+#   cp: cannot overwrite non-directory '.../root-mediatek/./var' with directory '.../.pkgdir/honk/./var'
+# 修复方式：移除 install 中的 /var/share/honk 创建与 chmod；运行时数据目录由
+# honk.init 的 prepare_subscription_store() 在启动时自动 mkdir -p 创建。
+HONK_FILE="$(find "$PKG_PATH" -maxdepth 2 -type f -wholename '*/honk/Makefile' -print -quit 2>/dev/null)"
+if [ -f "$HONK_FILE" ]; then
+	echo " "
+
+	if sed -i '/chmod 0700 \$(1)\/var\/share\/honk/d; s# \$(1)/var/share/honk##g' "$HONK_FILE"; then
+		echo "honk /var directory conflict has been fixed!"
+	else
+		echo "honk fix failed; continuing!"
+	fi
+fi
