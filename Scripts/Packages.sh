@@ -61,6 +61,9 @@ UPDATE_PACKAGE "openclash" "vernesong/OpenClash" "dev" "pkg"
 UPDATE_PACKAGE "passwall" "Openwrt-Passwall/openwrt-passwall" "main" "pkg"
 UPDATE_PACKAGE "passwall2" "Openwrt-Passwall/openwrt-passwall2" "main" "pkg"
 
+# Honk eBPF 透明代理（提取 honk / luci-app-honk / luci-app-honk-legacy 三个包）
+UPDATE_PACKAGE "honk" "breeze303/openwrt-honk" "main" "pkg"
+
 UPDATE_PACKAGE "luci-app-tailscale" "asvow/luci-app-tailscale" "main"
 
 #UPDATE_PACKAGE "athena-led" "unraveloop/JDC-AX6600-Athena-LED-Controller" "main"
@@ -85,6 +88,66 @@ UPDATE_PACKAGE "luci-app-h5000m-fancontrol" "FAN789/luci-app-h5000m-fancontrol" 
 UPDATE_PACKAGE "airpi3000m-fancontrol" "LianXia233/luci-app-airpi3000m-fancontrol" "main" "all" "luci-app-airpi-fancontrol kmod-airpi-gpio-fan"
 UPDATE_PACKAGE "luci-app-mt5700m" "LianXia233/luci-app-mt5700m" "main"
 UPDATE_PACKAGE "luci-app-h5000m-netmode" "FAN789/luci-app-h5000m-netmode" "main"
+
+#安装 Honk 主机编译依赖（eBPF 工具链）
+# honk 引擎为 Rust/eBPF 架构，编译需要：
+#   1. clang / llvm / libbpf / libclang（bindgen 与 eBPF 编译）
+#   2. rustup nightly-2026-07-20 工具链（含 rust-src，用于 -Zbuild-std=core 编译 bpfel-unknown-none 目标）
+#   3. bpf-linker 0.10.4（eBPF 链接器，带 SHA-256 校验）
+INSTALL_HONK_DEPS() {
+	echo " "
+
+	local BPF_RUST_TOOLCHAIN="nightly-2026-07-20"
+	local BPF_LINKER_VERSION="0.10.4"
+	local BPF_LINKER_SHA256="4dda77daab6c5f120a468e6d3ede2498f5bd47ece712172cfb7290176d93d015"
+	local CARGO_BIN="${CARGO_HOME:-$HOME/.cargo}/bin"
+
+	# 系统依赖
+	sudo -E apt-get update -qq
+	sudo -E apt-get install -y --no-install-recommends \
+		clang llvm libbpf-dev libclang-dev pkg-config cmake zstd || {
+		echo "honk host deps: apt install failed!"
+		return 1
+	}
+
+	# Rust nightly 工具链（eBPF 组件）
+	export PATH="$CARGO_BIN:$PATH"
+	if ! command -v rustup >/dev/null 2>&1; then
+		curl --proto '=https' --tlsv1.2 -fsSL --retry 5 --retry-all-errors \
+			https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+		export PATH="$CARGO_BIN:$PATH"
+	fi
+	if ! rustup run "$BPF_RUST_TOOLCHAIN" rustc --version >/dev/null 2>&1; then
+		rustup toolchain install "$BPF_RUST_TOOLCHAIN" --profile minimal --component rust-src
+	elif ! rustup component list --toolchain "$BPF_RUST_TOOLCHAIN" --installed | grep -q '^rust-src'; then
+		rustup component add --toolchain "$BPF_RUST_TOOLCHAIN" rust-src
+	fi
+	rustup run "$BPF_RUST_TOOLCHAIN" rustc --version
+
+	# bpf-linker（eBPF 链接器，校验哈希后安装）
+	if ! bpf-linker --version 2>/dev/null | grep -Fq "$BPF_LINKER_VERSION"; then
+		local LINKER_ARCHIVE="$(mktemp)"
+		curl --proto '=https' --tlsv1.2 -fsSL --retry 5 --retry-all-errors -o "$LINKER_ARCHIVE" \
+			"https://github.com/aya-rs/bpf-linker/releases/download/v${BPF_LINKER_VERSION}/bpf-linker-x86_64-unknown-linux-musl.tar.zst"
+		echo "$BPF_LINKER_SHA256  $LINKER_ARCHIVE" | sha256sum -c - || {
+			echo "honk host deps: bpf-linker checksum mismatch!"
+			rm -f "$LINKER_ARCHIVE"
+			return 1
+		}
+		mkdir -p "$CARGO_BIN"
+		tar --zstd -xf "$LINKER_ARCHIVE" -C "$CARGO_BIN"
+		rm -f "$LINKER_ARCHIVE"
+	fi
+	bpf-linker --version
+
+	# 确保持久化到后续编译步骤的 PATH
+	if [ -n "${GITHUB_PATH:-}" ]; then
+		echo "$CARGO_BIN" >> "$GITHUB_PATH"
+	fi
+
+	echo "honk host deps have been installed!"
+}
+INSTALL_HONK_DEPS
 
 #更新软件包版本
 UPDATE_VERSION() {

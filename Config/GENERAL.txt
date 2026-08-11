@@ -1,6 +1,23 @@
 # HomeProxy 插件
 CONFIG_PACKAGE_luci-app-homeproxy=y
 
+# Honk eBPF 透明代理插件（默认启用）
+CONFIG_PACKAGE_honk=y
+CONFIG_PACKAGE_luci-app-honk=y
+
+# Honk 运行时依赖
+CONFIG_PACKAGE_ca-bundle=y
+CONFIG_PACKAGE_jq=y
+CONFIG_PACKAGE_nsenter=y
+CONFIG_PACKAGE_tc-full=y
+CONFIG_PACKAGE_v2ray-geoip=y
+CONFIG_PACKAGE_v2ray-geosite=y
+CONFIG_PACKAGE_kmod-sched-core=y
+CONFIG_PACKAGE_kmod-sched-bpf=y
+
+# Honk eBPF 内核需求（BTF 调试信息）
+CONFIG_KERNEL_DEBUG_INFO_BTF=y
+
 # 全设备网络模式与 5G 模组控制
 CONFIG_PACKAGE_luci-app-h5000m-netmode=y
 CONFIG_PACKAGE_luci-app-mt5700m=y
