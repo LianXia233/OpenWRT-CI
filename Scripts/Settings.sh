@@ -18,11 +18,29 @@ if [ -f "$WIFI_SH" ]; then
 	sed -i "s/BASE_SSID='.*'/BASE_SSID='$WRT_SSID'/g" $WIFI_SH
 	#修改WIFI密码
 	sed -i "s/BASE_WORD='.*'/BASE_WORD='$WRT_WORD'/g" $WIFI_SH
+	#修改加密方式为 WPA-PSK/WPA2-PSK Mixed Mode
+	sed -i "s/encryption='.*'/encryption='psk-mixed'/g" $WIFI_SH
+	#设置国家码为 CN
+	sed -i "s/country='.*'/country='CN'/g" $WIFI_SH
+	#修改2.4G默认频宽为 40MHz, 5G 默认频宽为 160MHz
+	sed -i "s/htmode='HT20'/htmode='HT40'/g" $WIFI_SH
+	sed -i "s/htmode='VHT80'/htmode='VHT160'/g" $WIFI_SH
 elif [ -f "$WIFI_UC" ]; then
 	#修改WIFI名称
 	sed -i "s/ssid='.*'/ssid='$WRT_SSID'/g" $WIFI_UC
 	#修改WIFI密码
 	sed -i "s/key='.*'/key='$WRT_WORD'/g" $WIFI_UC
+	#修改加密方式为 WPA-PSK/WPA2-PSK Mixed Mode
+	sed -i "s/encryption = 'none'/encryption = 'psk-mixed'/g" $WIFI_UC
+	#设置国家码为 CN（6G 分支）
+	sed -i "s/country = '00'/country = 'CN'/g" $WIFI_UC
+	#在 else 分支添加 country = 'CN'
+	sed -i "s/} else {/} else {\\n\\t\\tcountry = 'CN';/" $WIFI_UC
+	#修改2.4G默认频宽为 40MHz
+	sed -i 's/width = 20;/width = 40;/g' $WIFI_UC
+	#修改5G默认频宽为 160MHz（移除 80MHz 上限）
+	sed -i 's/width > 80)/width > 160)/g' $WIFI_UC
+	sed -i 's/width = 80;/width = 160;/g' $WIFI_UC
 fi
 
 CFG_FILE="./package/base-files/files/bin/config_generate"
@@ -30,6 +48,9 @@ CFG_FILE="./package/base-files/files/bin/config_generate"
 sed -i "s/192\.168\.[0-9]*\.[0-9]*/$WRT_IP/g" $CFG_FILE
 #修改默认主机名
 sed -i "s/hostname='.*'/hostname='$WRT_NAME'/g" $CFG_FILE
+#修改默认时区
+sed -i "s/timezone='.*'/timezone='CST-8'/g" $CFG_FILE
+sed -i "s/zonename='.*'/zonename='Asia\/Shanghai'/g" $CFG_FILE
 
 #配置文件修改
 echo "CONFIG_PACKAGE_luci=y" >> ./.config
