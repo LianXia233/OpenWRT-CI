@@ -199,6 +199,21 @@ if [ -n "$HP_DIR" ]; then
 	fi
 fi
 
+#修复homeproxy ucode兼容性问题
+# update_subscriptions.uc: luci.sys.init_action不存在 → system()调用
+# generate_client.uc: math.isnan不存在 → type() === 'double'
+HP_SCRIPTS="$HP_DIR/root/etc/homeproxy/scripts"
+HP_FIXES="$GITHUB_WORKSPACE/Scripts/homeproxy"
+if [ -n "$HP_DIR" ] && [ -d "$HP_SCRIPTS" ] && [ -d "$HP_FIXES" ]; then
+	echo " "
+	if cp -f "$HP_FIXES/update_subscriptions.uc" "$HP_SCRIPTS/" && \
+	   cp -f "$HP_FIXES/generate_client.uc" "$HP_SCRIPTS/"; then
+		echo "homeproxy ucode compatibility fixes applied!"
+	else
+		echo "homeproxy ucode fix failed; continuing!"
+	fi
+fi
+
 #修改argon主题字体和颜色
 if [ -d "$PKG_PATH/luci-theme-argon" ]; then
 	echo " "
