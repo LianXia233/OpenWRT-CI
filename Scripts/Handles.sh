@@ -299,20 +299,71 @@ fi
 
 #修复 dockerd 在 CI runner 上的构建失败
 # 根因：moby 的 hack/make/binary-daemon 中 copy_binaries() 在宿主已安装 docker
-# （存在 /usr/local/bin/runc）时会复制 containerd/runc/rootlesskit 等“嵌套可执行文件”，
-# 但 GitHub Actions runner 上 rootlesskit / dockerd-rootless.sh / dockerd-rootless-setuptool.sh
-# 不在 PATH，command -v 返回空，导致 cp '' 报错而中断编译。
-# 修复方式：把补丁放入 feeds 的 dockerd patches 目录，OpenWrt 在 Build/Prepare 阶段自动应用。
+# （存在 /usr/local/bin/runc）且同架构时，会尝试从宿主 PATH 拷贝
+# containerd / runc / rootlesskit / dockerd-rootless.sh 等“嵌套可执行文件”，
+# 但 GitHub Actions runner 上这些并不在 PATH，command -v 返回空导致 cp '' 报错，
+# 配合 set -e 直接中断编译（报错位置：make[3]: *** [Makefile:166: .../.built] Error 1）。
+# 修复策略（双保险，确保万无一失）：
+#   1) 保留 999-fix-nested-binaries.patch 放入 patches/（OpenWrt 标准机制，能用时生效）；
+#   2) 额外把 fix-binary-daemon.sh 拷入 dockerd 包目录，并修改其 Build/Compile，
+#      在源码解包后、执行 ./hack/make.sh binary 之前对 hack/make/binary-daemon
+#      做就地 sed 修正。该方式不依赖 OpenWrt 的补丁应用机制，必然生效。
 DOCKERD_PATCHES_SRC="$GITHUB_WORKSPACE/Scripts/patches/dockerd"
-DOCKERD_DIR="$(find "$FEEDS_PACKAGES" -maxdepth 3 -type d -wholename '*/dockerd' -print -quit 2>/dev/null)"
-if [ -d "$DOCKERD_PATCHES_SRC" ] && [ -n "$DOCKERD_DIR" ]; then
+if [ -d "$DOCKERD_PATCHES_SRC" ]; then
 	echo " "
 
-	mkdir -p "$DOCKERD_DIR/patches"
-	if cp -f "$DOCKERD_PATCHES_SRC"/*.patch "$DOCKERD_DIR/patches/" 2>/dev/null; then
-		echo "dockerd build patch has been applied!"
+	# 收集 dockerd 包可能存在的所有位置（拷贝与软链两种安装方式均覆盖）
+	DOCKERD_DIRS="$(
+		find "$FEEDS_PACKAGES" -maxdepth 3 -type d -wholename '*/dockerd' 2>/dev/null
+		find "$PKG_PATH/feeds/packages" -maxdepth 2 \( -type d -o -type l \) -name 'dockerd' 2>/dev/null
+	)"
+
+	APPLIED=0
+	for D in $DOCKERD_DIRS; do
+		[ -e "$D" ] || continue
+		mkdir -p "$D/patches"
+		# 1) 标准补丁机制（能用时生效）
+		if cp -f "$DOCKERD_PATCHES_SRC"/*.patch "$D/patches/" 2>/dev/null; then
+			echo "dockerd patch copied to: $D/patches"
+			APPLIED=1
+		fi
+		# 2) 修正脚本也放入包目录，供 Build/Compile 直接调用
+		if cp -f "$DOCKERD_PATCHES_SRC/fix-binary-daemon.sh" "$D/" 2>/dev/null; then
+			chmod +x "$D/fix-binary-daemon.sh"
+			echo "dockerd fix script copied to: $D"
+			APPLIED=1
+		fi
+	done
+
+	# 修改 dockerd Makefile 的 Build/Compile，在 ./hack/make.sh binary 之前调用修正脚本
+	DOCKERD_MAKEFILES="$(
+		find "$FEEDS_PACKAGES" -maxdepth 3 -type f -wholename '*/dockerd/Makefile' 2>/dev/null
+		find "$PKG_PATH/feeds/packages" -maxdepth 2 -type f -name 'Makefile' -path '*/dockerd/*' 2>/dev/null
+	)"
+	for MK in $DOCKERD_MAKEFILES; do
+		[ -f "$MK" ] || continue
+		python3 - "$MK" <<'PYEOF'
+import sys
+mk = sys.argv[1]
+s = open(mk, encoding='utf-8').read()
+marker = '\t./hack/make.sh binary\n'
+inject = '\tbash "$(CURDIR)/fix-binary-daemon.sh" "$(PKG_BUILD_DIR)"; \\\n'
+if 'fix-binary-daemon.sh' in s:
+	pass  # 已注入，跳过（幂等）
+elif marker in s:
+	s = s.replace(marker, inject + marker, 1)
+	open(mk, 'w', encoding='utf-8').write(s)
+	print('dockerd Makefile Build/Compile patched: ' + mk)
+else:
+	print('dockerd Makefile marker not found, skip: ' + mk)
+PYEOF
+		APPLIED=1
+	done
+
+	if [ "$APPLIED" -eq 1 ]; then
+		echo "dockerd build fix has been applied!"
 	else
-		echo "dockerd patch copy failed; continuing!"
+		echo "dockerd build fix failed; continuing!"
 	fi
 fi
 
