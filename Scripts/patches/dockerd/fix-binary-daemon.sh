@@ -19,7 +19,7 @@ TARGET="$BUILD_DIR/hack/make/binary-daemon"
 
 if [ ! -f "$TARGET" ]; then
 	echo "fix-binary-daemon: $TARGET not found, skip"
-	exit 0
+	return 0
 fi
 
 if sed -i 's#cp -f "$(command -v "$file")" "$dir/"#bin="$(command -v "$file" 2>/dev/null || true)"; [ -n "$bin" ] \&\& cp -f "$bin" "$dir/"#' "$TARGET"; then
@@ -27,3 +27,28 @@ if sed -i 's#cp -f "$(command -v "$file")" "$dir/"#bin="$(command -v "$file" 2>/
 else
 	echo "fix-binary-daemon: sed failed on $TARGET" >&2
 fi
+
+# 重新导出 Makefile 通过前缀传入的关键环境变量，确保后续 `./hack/make.sh binary`
+# （与脚本同 shell，由 Handles.sh 以 source 方式注入）仍能继承这些变量。
+# 脚本以 source 运行，故上方使用 return 而非 exit，避免误退出整个 recipe shell。
+export DOCKER_GITCOMMIT="${DOCKER_GITCOMMIT:-unknown}"
+export DOCKER_BUILDTAGS="${DOCKER_BUILDTAGS:-}"
+export VERSION="${VERSION:-}"
+export GOOS="${GOOS:-linux}"
+export GOARCH="${GOARCH:-amd64}"
+export CGO_ENABLED="${CGO_ENABLED:-1}"
+export PATH="${PATH}"
+export GOPATH="${GOPATH:-}"
+export GOCACHE="${GOCACHE:-}"
+export GOMODCACHE="${GOMODCACHE:-}"
+export GOENV="${GOENV:-}"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-}"
+export GOFLAGS="${GOFLAGS:-}"
+export CC="${CC:-}"
+export CXX="${CXX:-}"
+export CGO_CFLAGS="${CGO_CFLAGS:-}"
+export CGO_CPPFLAGS="${CGO_CPPFLAGS:-}"
+export CGO_CXXFLAGS="${CGO_CXXFLAGS:-}"
+export CGO_LDFLAGS="${CGO_LDFLAGS:-}"
+
+echo "fix-binary-daemon: environment re-exported for ./hack/make.sh binary"
