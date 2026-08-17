@@ -307,7 +307,9 @@ fi
 #   1) 保留 999-fix-nested-binaries.patch 放入 patches/（OpenWrt 标准机制，能用时生效）；
 #   2) 额外把 fix-binary-daemon.sh 拷入 dockerd 包目录，并修改其 Build/Compile，
 #      在源码解包后、执行 ./hack/make.sh binary 之前对 hack/make/binary-daemon
-#      做就地 sed 修正。该方式不依赖 OpenWrt 的补丁应用机制，必然生效。
+#      做就地 sed 修正，并以 `source`（.）方式注入，避免 `bash "; \` 把
+#      DOCKER_GITCOMMIT / GO_PKG_VARS 等前缀环境变量截断——否则 ./hack/make.sh binary
+#      会因缺少 DOCKER_GITCOMMIT 而报错（error: .git directory missing and DOCKER_GITCOMMIT not specified）。
 DOCKERD_PATCHES_SRC="$GITHUB_WORKSPACE/Scripts/patches/dockerd"
 if [ -d "$DOCKERD_PATCHES_SRC" ]; then
 	echo " "
@@ -347,7 +349,7 @@ import sys
 mk = sys.argv[1]
 s = open(mk, encoding='utf-8').read()
 marker = '\t./hack/make.sh binary\n'
-inject = '\tbash "$(CURDIR)/fix-binary-daemon.sh" "$(PKG_BUILD_DIR)"; \\\n'
+inject = '\t. "$(CURDIR)/fix-binary-daemon.sh" "$(PKG_BUILD_DIR)"\n'
 if 'fix-binary-daemon.sh' in s:
 	pass  # 已注入，跳过（幂等）
 elif marker in s:
