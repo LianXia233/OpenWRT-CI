@@ -75,7 +75,7 @@ OpenWRT-CI/
 
 | 项目 | 默认值 |
 | :--- | :--- |
-| Wi-Fi SSID（2.4G / 5G） | `OWRT_2.4G` |
+| Wi-Fi SSID（2.4G / 5G） | `OWRT` |
 | Wi-Fi 密码 | `12345678` |
 | 加密方式 | WPA-PSK / WPA2-PSK Mixed Mode |
 | 管理地址 | `192.168.10.1` |
