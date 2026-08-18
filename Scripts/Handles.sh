@@ -349,7 +349,11 @@ import sys
 mk = sys.argv[1]
 s = open(mk, encoding='utf-8').read()
 marker = '\t./hack/make.sh binary\n'
-inject = '\t. "$(CURDIR)/fix-binary-daemon.sh" "$(PKG_BUILD_DIR)"\n'
+# 注意：必须用 `&& \` 续行符结尾，确保 ./hack/make.sh binary 与
+# cd/注入脚本处于同一条 make recipe（同一 shell）中执行；
+# 否则它会退化为独立 recipe 行，在包目录而非 PKG_BUILD_DIR 下执行，
+# 导致 `./hack/make.sh: No such file or directory`（Error 127）。
+inject = '\tcd $(PKG_BUILD_DIR) && . "$(CURDIR)/fix-binary-daemon.sh" "$(PKG_BUILD_DIR)" && \\\n'
 if 'fix-binary-daemon.sh' in s:
 	pass  # 已注入，跳过（幂等）
 elif marker in s:
