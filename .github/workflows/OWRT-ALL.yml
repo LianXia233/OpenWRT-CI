@@ -48,7 +48,7 @@ jobs:
       #默认主机名
       WRT_NAME: OWRT
       #默认WIFI名称
-      WRT_SSID: OWRT
+      WRT_SSID: OWRT_2.4G
       #默认WIFI密码
       WRT_WORD: 12345678
       #默认地址
