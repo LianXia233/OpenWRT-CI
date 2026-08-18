@@ -49,7 +49,7 @@ jobs:
       WRT_CONFIG: ${{inputs.CONFIG}}
       WRT_THEME: aurora
       WRT_NAME: OWRT
-      WRT_SSID: OWRT_2.4G
+      WRT_SSID: OWRT
       WRT_WORD: 12345678
       WRT_IP: 192.168.10.1
       WRT_PW: 无
