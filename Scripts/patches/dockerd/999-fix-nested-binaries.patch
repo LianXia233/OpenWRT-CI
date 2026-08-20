@@ -1,12 +1,14 @@
 --- a/hack/make/binary-daemon
 +++ b/hack/make/binary-daemon
-@@ -15,7 +15,8 @@
+@@ -15,7 +15,9 @@
  	fi
  	echo "Copying nested executables into $dir"
  	for file in containerd containerd-shim-runc-v2 ctr runc docker-init rootlesskit dockerd-rootless.sh dockerd-rootless-setuptool.sh; do
 -		cp -f "$(command -v "$file")" "$dir/"
 +		bin="$(command -v "$file" 2>/dev/null || true)"
-+		[ -n "$bin" ] && cp -f "$bin" "$dir/"
++		# 用 if 包裹：缺失时跳过，且避免 `[ -n "$bin" ] && cp` 在 bin 为空时
++		# 因 set -e 直接退出（AND-OR 列表整体返回非零且无任何错误输出）
++		if [ -n "$bin" ]; then cp -f "$bin" "$dir/"; fi
  	done
  }
  

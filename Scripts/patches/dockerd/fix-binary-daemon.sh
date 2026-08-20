@@ -22,7 +22,7 @@ if [ ! -f "$TARGET" ]; then
 	return 0
 fi
 
-if sed -i 's#cp -f "$(command -v "$file")" "$dir/"#bin="$(command -v "$file" 2>/dev/null || true)"; [ -n "$bin" ] \&\& cp -f "$bin" "$dir/"#' "$TARGET"; then
+if sed -i 's#cp -f "$(command -v "$file")" "$dir/"#bin="$(command -v "$file" 2>/dev/null || true)"; if [ -n "$bin" ]; then cp -f "$bin" "$dir/"; fi#' "$TARGET"; then
 	echo "fix-binary-daemon: patched $TARGET"
 else
 	echo "fix-binary-daemon: sed failed on $TARGET" >&2
