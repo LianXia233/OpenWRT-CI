@@ -73,13 +73,25 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo -E apt -yqq purge firefox
-          sudo -E apt -yqq update
-          sudo -E apt -yqq full-upgrade
-          sudo -E apt -yqq autoremove --purge
-          sudo -E apt -yqq autoclean
-          sudo -E apt -yqq clean
-          sudo -E apt -yqq install dos2unix libfuse-dev
+          # apt 增加超时与重试，避免偶发网络挂起导致 job 6 小时超时取消
+          apt_retry() {
+            local cmd="$1"; shift
+            for i in 1 2 3; do
+              timeout 300 sudo -E apt -yqq -o Acquire::Retries=3 \
+                -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 \
+                -o DPkg::Lock::Timeout=120 "$cmd" "$@" && return 0
+              echo "apt $cmd 第 ${i} 次失败或超时，10 秒后重试" >&2
+              sleep 10
+            done
+            return 1
+          }
+          apt_retry purge firefox
+          apt_retry update
+          apt_retry full-upgrade
+          apt_retry autoremove --purge
+          apt_retry autoclean
+          apt_retry clean
+          apt_retry install dos2unix libfuse-dev
           sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
           sudo -E systemctl daemon-reload
           sudo -E timedatectl set-timezone "Asia/Shanghai"
