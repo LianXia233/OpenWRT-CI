@@ -1,0 +1,35 @@
+From: LianXia233 <openwrt-ci>
+Subject: [PATCH] mt76: mt7996: pass WED hw_rro as enum for MT7987 (V3.1) support
+
+mtk_wed public header changed wlan.hw_rro from bool to
+enum mtk_wed_hwrro_mode. The upstream mt76 driver still assigns a
+bool (mt7996_has_hwrro()), which collapses MTK_WED_HWRRO_V3_1 into
+V3 and breaks MT7987 hardware RX return on WED.
+
+Route the mode through dev->mt76.hwrro_mode (already an enum:
+MT76_HWRRO_OFF / MT76_HWRRO_V3 / MT76_HWRRO_V3_1).
+
+Signed-off-by: LianXia233 <openwrt-ci>
+---
+ mt7996/mmio.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/mt7996/mmio.c b/mt7996/mmio.c
+index 1d41be3b..aaaaaaaa 100644
+--- a/mt7996/mmio.c
++++ b/mt7996/mmio.c
+@@ -518,8 +518,13 @@
+ 		wed->wlan.id = MT7996_DEVICE_ID_2;
+ 		wed->wlan.tx_tbit[0] = ffs(MT_INT_TX_DONE_BAND2) - 1;
+ 	} else {
+-		wed->wlan.hw_rro = mt7996_has_hwrro(dev);
++		if (dev->mt76.hwrro_mode == MT76_HWRRO_V3_1)
++			wed->wlan.hw_rro = MTK_WED_HWRRO_V3_1;
++		else if (dev->mt76.hwrro_mode == MT76_HWRRO_V3)
++			wed->wlan.hw_rro = MTK_WED_HWRRO_V3;
+ 		wed->wlan.wpdma_int = wed->wlan.phy_base + MT_INT_SOURCE_CSR;
+ 		wed->wlan.wpdma_mask = wed->wlan.phy_base + MT_INT_MASK_CSR;
+ 		wed->wlan.wpdma_tx = wed->wlan.phy_base + MT_TXQ_RING_BASE(0) +
+ 				     MT7996_TXQ_BAND0 * MT_RING_SIZE;
+-- 
+2.39.2

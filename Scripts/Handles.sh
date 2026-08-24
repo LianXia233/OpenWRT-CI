@@ -297,6 +297,52 @@ if [ "$WRT_CONFIG" = "AP3000M" ]; then
 fi
 
 
+#MT7987 WED (Wireless Ethernet Dispatch) V3.1 硬件路径支持
+# 背景：immortalwrt master（内核 6.18）缺少 MT7987 的 WED hwpath 补丁
+# （联发科 mtk-openwrt-feeds 的 999-wed-10-add-mt7987-hwpath-support.patch），
+# DTS 缺 wo-ccif 节点导致 mtk_wed_wo_init 返回 -ENODEV、WED 强制回落 N，
+# dmesg 报 "platform 15010000.wed: failed to attach wed device"。
+# 本段把已移植到 6.18 API 的 WED V3.1 补丁注入 target/linux/mediatek/patches-*，
+# 并同步修正 mt76 侧 hw_rro 枚举赋值，使 MT7987（H5000M / MT5700M 平台）硬件加速可用。
+# 说明：补丁基于 6.18 内核 API 移植；patches-* 目录动态匹配，不硬编码内核版本，
+# 未来内核升级导致补丁无法应用时构建会明确报错，便于及时适配。
+WED_PATCHES_SRC="$GITHUB_WORKSPACE/Scripts/patches/wed"
+if [ -d "$WED_PATCHES_SRC" ]; then
+	echo " "
+
+	WED_APPLIED=0
+
+	# 1) 内核侧：MT7987 WED V3.1 支持补丁（含 mtk_wed.c/.h/_regs.h/_debugfs.c/_mcu.c/_wo.c 与公共头）
+	WED_PATCH_DIRS="$(find "$GITHUB_WORKSPACE/wrt/target/linux/mediatek" -maxdepth 1 -type d -name 'patches-*' 2>/dev/null)"
+	for PD in $WED_PATCH_DIRS; do
+		[ -d "$PD" ] || continue
+		if cp -f "$WED_PATCHES_SRC"/999-mtk7987-wed-v31.patch "$PD/"; then
+			echo "mt7987 WED v3.1 patch copied to: $PD"
+			WED_APPLIED=1
+		fi
+	done
+
+	# 2) mt76 侧：WED 公共头 wlan.hw_rro 由 bool 改为 enum 后，
+	#    mt7996/mmio.c 仍需按 hwrro_mode 传枚举（否则 V3.1 被折叠成 V3）
+	MT76_PATCH_DIRS="$(
+		find "$GITHUB_WORKSPACE/wrt/package/kernel/mt76" -maxdepth 1 -type d -name 'patches' 2>/dev/null
+		find "$GITHUB_WORKSPACE/wrt/feeds/packages" -maxdepth 4 -type d -path '*/kernel/mt76/patches' 2>/dev/null
+	)"
+	for PD in $MT76_PATCH_DIRS; do
+		[ -d "$PD" ] || continue
+		if cp -f "$WED_PATCHES_SRC"/998-mt76-wed-hwrro-enum.patch "$PD/"; then
+			echo "mt76 hw_rro enum patch copied to: $PD"
+			WED_APPLIED=1
+		fi
+	done
+
+	if [ "$WED_APPLIED" -eq 1 ]; then
+		echo "mt7987 WED v3.1 support has been injected!"
+	else
+		echo "mt7987 WED patch target not found (mediatek target or mt76 missing); continuing!"
+	fi
+fi
+
 #修复 dockerd 在 CI runner 上的构建失败
 # 根因：moby 的 hack/make/binary-daemon 中 copy_binaries() 在宿主已安装 docker
 # （存在 /usr/local/bin/runc）且同架构时，会尝试从宿主 PATH 拷贝
