@@ -297,18 +297,19 @@ if [ "$WRT_CONFIG" = "AP3000M" ]; then
 fi
 
 
-#MT7987 WED (Wireless Ethernet Dispatch) V3.1 硬件路径支持
+#MT7987 WED (Wireless Ethernet Dispatch) V3.1 硬件路径支持（仅 H5000M-WIFI-YES 机型）
 # 背景：immortalwrt master（内核 6.18）缺少 MT7987 的 WED hwpath 补丁
 # （联发科 mtk-openwrt-feeds 的 999-wed-10-add-mt7987-hwpath-support.patch），
 # DTS 缺 wo-ccif 节点导致 mtk_wed_wo_init 返回 -ENODEV、WED 强制回落 N，
 # dmesg 报 "platform 15010000.wed: failed to attach wed device"。
 # 本段把已移植到 6.18 API 的 WED V3.1 补丁注入 target/linux/mediatek/patches-*，
-# 并同步修正 mt76 侧 hw_rro 枚举赋值，使 MT7987（H5000M / MT5700M 平台）硬件加速可用。
-# 说明：补丁基于 6.18 内核 API 移植；patches-* 目录动态匹配，不硬编码内核版本，
-# 未来内核升级导致补丁无法应用时构建会明确报错，便于及时适配。
+# 并同步修正 mt76 侧 hw_rro 枚举赋值，使 MT7987（H5000M 平台）硬件加速可用。
+# 注意：本补丁仅适用于 H5000M（MT7987+MT7992）机型，其他机型（AP3000M / X86 等）
+# SoC 与 WiFi 芯片不同，注入会导致编译失败，因此只对 H5000M-WIFI-YES 注入。
 WED_PATCHES_SRC="$GITHUB_WORKSPACE/Scripts/patches/wed"
-if [ -d "$WED_PATCHES_SRC" ]; then
+if [ "$WRT_CONFIG" = "H5000M-WIFI-YES" ] && [ -d "$WED_PATCHES_SRC" ]; then
 	echo " "
+	echo "WED patch injection: target machine is H5000M-WIFI-YES, applying mt7987 WED v3.1 patches..."
 
 	WED_APPLIED=0
 
