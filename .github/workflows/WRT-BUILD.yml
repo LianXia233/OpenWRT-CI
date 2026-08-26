@@ -14,6 +14,7 @@ on:
         type: choice
         options:
           - H5000M-WIFI-YES
+          - AP3000M
           - X86
       SOURCE:
         description: '源码仓库'
