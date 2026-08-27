@@ -15,7 +15,8 @@
 | 工作流 | 触发方式 | 作用 |
 | :--- | :--- | :--- |
 | **WRT-BUILD** | 手动 `workflow_dispatch` | 手动编译 / 预览配置。可选配置、源码、分支，默认仅生成配置不编译（`TEST=true`） |
-| **MTK-AUTO** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动编译 `H5000M-WIFI-YES` + `AP3000M` 并发布 Release |
+| **H5000M-AUTO** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动编译 `H5000M-WIFI-YES` 并发布 Release |
+| **AP3000M-AUTO** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动编译 `AP3000M` 并发布 Release |
 | **OWRT-ALL** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动编译 `X86`（x86_64）并发布 Release |
 | **Auto-Clean** | 每天定时 + 手动 | 清理旧 Release 与 Workflow 运行记录（保留最近 1 个 Release、30 天运行记录） |
 | **Cache-Clean** | 每周定时 + 手动 | 清理 GitHub Actions 编译缓存 |
@@ -33,7 +34,8 @@ OpenWRT-CI/
 ├── .github/workflows/        # 云编译工作流
 │   ├── WRT-CORE.yml          # 公用编译核心（被调用）
 │   ├── WRT-BUILD.yml         # 手动编译入口
-│   ├── MTK-AUTO.yml          # 定时自动编译 H5000M-WIFI-YES
+│   ├── H5000M-AUTO.yml       # 定时自动编译 H5000M-WIFI-YES
+│   ├── AP3000M-AUTO.yml      # 定时自动编译 AP3000M
 │   ├── OWRT-ALL.yml          # 定时自动编译 X86
 │   ├── Auto-Clean.yml        # 清理旧 Release / 运行记录
 │   └── Cache-Clean.yml       # 清理编译缓存
