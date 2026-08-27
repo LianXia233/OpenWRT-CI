@@ -325,17 +325,21 @@ if [ "$WRT_CONFIG" = "H5000M-WIFI-YES" ] && [ -d "$WED_PATCHES_SRC" ]; then
 
 	# 2) mt76 侧：WED 公共头 wlan.hw_rro 由 bool 改为 enum 后，
 	#    mt7996/mmio.c 仍需按 hwrro_mode 传枚举（否则 V3.1 被折叠成 V3）
-	MT76_PATCH_DIRS="$(
-		find "$GITHUB_WORKSPACE/wrt/package/kernel/mt76" -maxdepth 1 -type d -name 'patches' 2>/dev/null
-		find "$GITHUB_WORKSPACE/wrt/feeds/packages" -maxdepth 4 -type d -path '*/kernel/mt76/patches' 2>/dev/null
-	)"
-	for PD in $MT76_PATCH_DIRS; do
-		[ -d "$PD" ] || continue
-		if cp -f "$WED_PATCHES_SRC"/998-mt76-wed-hwrro-enum.patch "$PD/"; then
-			echo "mt76 hw_rro enum patch copied to: $PD"
-			WED_APPLIED=1
-		fi
-	done
+	# 【临时禁用 2026-08-28】998-mt76-wed-hwrro-enum.patch 与上游 mt76
+	# （2026.08.08~503c643b）的 mt7996/mmio.c 上下文不匹配，2 个 hunk
+	# 全部失败导致 mt76 编译中断（Run #33100607008）。补丁文件已删除，
+	# 如需恢复请对照当前 mt76 commit 重新校准后再取消下方注释。
+	# MT76_PATCH_DIRS="$(
+	# 	find "$GITHUB_WORKSPACE/wrt/package/kernel/mt76" -maxdepth 1 -type d -name 'patches' 2>/dev/null
+	# 	find "$GITHUB_WORKSPACE/wrt/feeds/packages" -maxdepth 4 -type d -path '*/kernel/mt76/patches' 2>/dev/null
+	# )"
+	# for PD in $MT76_PATCH_DIRS; do
+	# 	[ -d "$PD" ] || continue
+	# 	if cp -f "$WED_PATCHES_SRC"/998-mt76-wed-hwrro-enum.patch "$PD/"; then
+	# 		echo "mt76 hw_rro enum patch copied to: $PD"
+	# 		WED_APPLIED=1
+	# 	fi
+	# done
 
 	if [ "$WED_APPLIED" -eq 1 ]; then
 		echo "mt7987 WED v3.1 support has been injected!"
@@ -437,3 +441,4 @@ if [ -f "$HONK_FILE" ]; then
 		echo "honk fix failed; continuing!"
 	fi
 fi
+
