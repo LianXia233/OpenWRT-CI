@@ -27,8 +27,8 @@ jobs:
       fail-fast: false
       matrix:
         CONFIG: [H5000M-WIFI-YES, AP3000M]
-        SOURCE: [immortalwrt/immortalwrt]
-        BRANCH: [master]
+        SOURCE: [VIKINGYFY/immortalwrt]
+        BRANCH: [main]
 
     uses: ./.github/workflows/WRT-CORE.yml
     with:
