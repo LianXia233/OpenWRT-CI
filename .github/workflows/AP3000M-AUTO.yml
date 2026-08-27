@@ -2,7 +2,7 @@
 # Copyright (C) 2026 VIKINGYFY
 
 # 定时自动编译：Auto-Clean 清理完成后自动构建 AP3000M
-# （从 MTK-AUTO 拆分出的独立工作流，与 H5000M-WIFI-YES 分开编译）
+# （从原 MTK-AUTO 拆分出的独立工作流，与 H5000M-AUTO 分开编译）
 name: AP3000M-AUTO
 
 on:
