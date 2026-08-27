@@ -28,7 +28,7 @@ jobs:
       matrix:
         CONFIG: [H5000M-WIFI-YES, AP3000M]
         SOURCE: [VIKINGYFY/immortalwrt]
-        BRANCH: [main]
+        BRANCH: [owrt]
 
     uses: ./.github/workflows/WRT-CORE.yml
     with:
