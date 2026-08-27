@@ -303,7 +303,7 @@ fi
 # DTS 缺 wo-ccif 节点导致 mtk_wed_wo_init 返回 -ENODEV、WED 强制回落 N，
 # dmesg 报 "platform 15010000.wed: failed to attach wed device"。
 # 本段把已移植到 6.18 API 的 WED V3.1 补丁注入 target/linux/mediatek/patches-*，
-# 并同步修正 mt76 侧 hw_rro 枚举赋值，使 MT7987（H5000M 平台）硬件加速可用。
+# 使 MT7987（H5000M 平台）硬件加速可用。
 # 注意：本补丁仅适用于 H5000M（MT7987+MT7992）机型，其他机型（AP3000M / X86 等）
 # SoC 与 WiFi 芯片不同，注入会导致编译失败，因此只对 H5000M-WIFI-YES 注入。
 WED_PATCHES_SRC="$GITHUB_WORKSPACE/Scripts/patches/wed"
@@ -322,24 +322,6 @@ if [ "$WRT_CONFIG" = "H5000M-WIFI-YES" ] && [ -d "$WED_PATCHES_SRC" ]; then
 			WED_APPLIED=1
 		fi
 	done
-
-	# 2) mt76 侧：WED 公共头 wlan.hw_rro 由 bool 改为 enum 后，
-	#    mt7996/mmio.c 仍需按 hwrro_mode 传枚举（否则 V3.1 被折叠成 V3）
-	# 【临时禁用 2026-08-28】998-mt76-wed-hwrro-enum.patch 与上游 mt76
-	# （2026.08.08~503c643b）的 mt7996/mmio.c 上下文不匹配，2 个 hunk
-	# 全部失败导致 mt76 编译中断（Run #33100607008）。补丁文件已删除，
-	# 如需恢复请对照当前 mt76 commit 重新校准后再取消下方注释。
-	# MT76_PATCH_DIRS="$(
-	# 	find "$GITHUB_WORKSPACE/wrt/package/kernel/mt76" -maxdepth 1 -type d -name 'patches' 2>/dev/null
-	# 	find "$GITHUB_WORKSPACE/wrt/feeds/packages" -maxdepth 4 -type d -path '*/kernel/mt76/patches' 2>/dev/null
-	# )"
-	# for PD in $MT76_PATCH_DIRS; do
-	# 	[ -d "$PD" ] || continue
-	# 	if cp -f "$WED_PATCHES_SRC"/998-mt76-wed-hwrro-enum.patch "$PD/"; then
-	# 		echo "mt76 hw_rro enum patch copied to: $PD"
-	# 		WED_APPLIED=1
-	# 	fi
-	# done
 
 	if [ "$WED_APPLIED" -eq 1 ]; then
 		echo "mt7987 WED v3.1 support has been injected!"
