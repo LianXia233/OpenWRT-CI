@@ -126,21 +126,36 @@ jobs:
         run: |
           find ./ -maxdepth 3 -type f -iregex ".*\(txt\|sh\)$" -exec dos2unix {} \; -exec chmod +x {} \;
 
-      - name: Check Caches
+      # 缓存拆为 toolchain 与 ccache 两份，分别带 restore-keys 回退：
+      # 精确 key 含上游 commit（WRT_HASH），上游一更新精确 key 必然 miss；
+      # 没有回退 key 时会全量重建 toolchain（gcc 两轮约 2 小时），是提速的最大瓶颈。
+      # restore-keys 命中同机型最近一次缓存即可复用大部分产物，增量重编差异部分。
+      - name: Check Toolchain Cache
+        id: check-toolchain
+        if: env.WRT_TEST != 'true'
+        uses: actions/cache@v4
+        with:
+          key: toolchain-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_HASH}}
+          restore-keys: |
+            toolchain-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-
+          path: ./wrt/staging_dir/
+
+      - name: Check Ccache Cache
         id: check-cache
         if: env.WRT_TEST != 'true'
         uses: actions/cache@v4
         with:
-          key: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_HASH}}
-          path: |
-            ./wrt/.ccache
-            ./wrt/staging_dir/host*
-            ./wrt/staging_dir/tool*
+          key: ccache-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_HASH}}
+          restore-keys: |
+            ccache-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-
+          path: ./wrt/.ccache
 
       - name: Update Caches
         if: env.WRT_TEST != 'true'
         run: |
           if [ -d "./wrt/staging_dir" ]; then
+            # 归一化时间戳 + tmp/.build 标记：让 OpenWrt 跳过 toolchain 重建检查，
+            # 但源码（build_dir）保持原样，包级别由 make 自身的 stamp 决定增量重编
             find "./wrt/staging_dir" -type d -name "stamp" -not -path "*target*" | while read -r DIR; do
               find "$DIR" -type f -exec touch {} +
             done
@@ -152,14 +167,8 @@ jobs:
             echo "caches missed!"
           fi
 
-          if [ "${{steps.check-cache.outputs.cache-hit}}" != 'true' ]; then
-            CACHE_LIST=$(gh cache list --key "$WRT_CONFIG-$WRT_INFO" --json id --jq '.[].id')
-            for CACHE_KEY in $CACHE_LIST; do
-              gh cache delete "$CACHE_KEY"
-            done
-
-            echo "caches cleanup done!"
-          fi
+          # 不再按 miss 删除旧缓存：restore-keys 命中的旧缓存正是本次构建的复用基础，
+          # 删除后下一次构建将无缓存可用；GitHub 会按 LRU 自动淘汰（上限 10GB）。
 
       - name: Update Feeds
         run: |
@@ -194,7 +203,8 @@ jobs:
         run: |
           cd ./wrt/
 
-          make download -j$(nproc)
+          # 第二次串行 download 兜底：并行下载偶发失败的源码补齐，避免编译中途卡在下载
+          make download -j$(nproc) && make download -j1
 
       - name: Compile Firmware
         if: env.WRT_TEST != 'true'
