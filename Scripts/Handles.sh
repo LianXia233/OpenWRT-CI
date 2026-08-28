@@ -297,39 +297,6 @@ if [ "$WRT_CONFIG" = "AP3000M" ]; then
 fi
 
 
-#MT7987 WED (Wireless Ethernet Dispatch) V3.1 硬件路径支持（仅 H5000M-WIFI-YES 机型）
-# 背景：immortalwrt master（内核 6.18）缺少 MT7987 的 WED hwpath 补丁
-# （联发科 mtk-openwrt-feeds 的 999-wed-10-add-mt7987-hwpath-support.patch），
-# DTS 缺 wo-ccif 节点导致 mtk_wed_wo_init 返回 -ENODEV、WED 强制回落 N，
-# dmesg 报 "platform 15010000.wed: failed to attach wed device"。
-# 本段把已移植到 6.18 API 的 WED V3.1 补丁注入 target/linux/mediatek/patches-*，
-# 使 MT7987（H5000M 平台）硬件加速可用。
-# 注意：本补丁仅适用于 H5000M（MT7987+MT7992）机型，其他机型（AP3000M / X86 等）
-# SoC 与 WiFi 芯片不同，注入会导致编译失败，因此只对 H5000M-WIFI-YES 注入。
-WED_PATCHES_SRC="$GITHUB_WORKSPACE/Scripts/patches/wed"
-if [ "$WRT_CONFIG" = "H5000M-WIFI-YES" ] && [ -d "$WED_PATCHES_SRC" ]; then
-	echo " "
-	echo "WED patch injection: target machine is H5000M-WIFI-YES, applying mt7987 WED v3.1 patches..."
-
-	WED_APPLIED=0
-
-	# 1) 内核侧：MT7987 WED V3.1 支持补丁（含 mtk_wed.c/.h/_regs.h/_debugfs.c/_mcu.c/_wo.c 与公共头）
-	WED_PATCH_DIRS="$(find "$GITHUB_WORKSPACE/wrt/target/linux/mediatek" -maxdepth 1 -type d -name 'patches-*' 2>/dev/null)"
-	for PD in $WED_PATCH_DIRS; do
-		[ -d "$PD" ] || continue
-		if cp -f "$WED_PATCHES_SRC"/999-mtk7987-wed-v31.patch "$PD/"; then
-			echo "mt7987 WED v3.1 patch copied to: $PD"
-			WED_APPLIED=1
-		fi
-	done
-
-	if [ "$WED_APPLIED" -eq 1 ]; then
-		echo "mt7987 WED v3.1 support has been injected!"
-	else
-		echo "mt7987 WED patch target not found (mediatek target or mt76 missing); continuing!"
-	fi
-fi
-
 #修复 dockerd 在 CI runner 上的构建失败
 # 根因：moby 的 hack/make/binary-daemon 中 copy_binaries() 在宿主已安装 docker
 # （存在 /usr/local/bin/runc）且同架构时，会尝试从宿主 PATH 拷贝
