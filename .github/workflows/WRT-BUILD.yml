@@ -18,7 +18,7 @@ on:
           - X86
       SOURCE:
         description: '源码仓库'
-        default: 'VIKINGYFY/immortalwrt'
+        default: 'immortalwrt/immortalwrt'
         required: true
         type: choice
         options:
