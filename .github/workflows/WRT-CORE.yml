@@ -58,6 +58,8 @@ env:
   WRT_SOURCE: ${{inputs.WRT_SOURCE}}
   WRT_PACKAGE: ${{inputs.WRT_PACKAGE}}
   WRT_TEST: ${{inputs.WRT_TEST}}
+  CCACHE_MAXSIZE: 2G
+  CCACHE_COMPRESS: 'true'
 
 jobs:
   core:
@@ -170,6 +172,18 @@ jobs:
           # 不再按 miss 删除旧缓存：restore-keys 命中的旧缓存正是本次构建的复用基础，
           # 删除后下一次构建将无缓存可用；GitHub 会按 LRU 自动淘汰（上限 10GB）。
 
+      - name: Check Feeds Cache
+        id: check-feeds
+        if: env.WRT_TEST != 'true'
+        uses: actions/cache@v4
+        with:
+          key: feeds-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_HASH}}
+          restore-keys: |
+            feeds-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-
+          path: |
+            ./wrt/feeds/
+            ./wrt/package/feeds/
+
       - name: Update Feeds
         run: |
           cd ./wrt/
@@ -197,6 +211,16 @@ jobs:
           $GITHUB_WORKSPACE/Scripts/Settings.sh
 
           make defconfig -j$(nproc) && make clean -j$(nproc)
+
+      - name: Check Download Cache
+        id: check-dl
+        if: env.WRT_TEST != 'true'
+        uses: actions/cache@v4
+        with:
+          key: dl-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_HASH}}
+          restore-keys: |
+            dl-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-
+          path: ./wrt/dl/
 
       - name: Download Packages
         if: env.WRT_TEST != 'true'
