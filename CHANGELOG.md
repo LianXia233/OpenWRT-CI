@@ -1,4 +1,11 @@
 # 更新日志
+## [2026-08-29] 源码切换：H5000M / AP3000M 改用 ImmortalWrt 主线
+### Changed
+- H5000M-AUTO / AP3000M-AUTO 工作流的 `SOURCE` 由 `VIKINGYFY/immortalwrt` 切换为 `immortalwrt/immortalwrt`，`BRANCH` 由 `owrt` 调整为 `master`；X86（OWRT-ALL）保持 `immortalwrt/immortalwrt` + `master` 不变。
+- WRT-BUILD 手动编译默认源码/分支同步调整为 `immortalwrt/immortalwrt` + `master`。
+- README 鸣谢保留 VIKINGYFY（OpenWRT-CI 编译框架），设备源码说明统一为 ImmortalWrt 主线。
+
+
 
 本仓库的所有重要变更都会记录在此文件中。
 
