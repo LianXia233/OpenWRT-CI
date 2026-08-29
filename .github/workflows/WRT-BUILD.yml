@@ -27,7 +27,7 @@ on:
           - LiBwrt/openwrt-6.x
       BRANCH:
         description: '源码分支'
-        default: 'main'
+        default: 'master'
         required: true
         type: string
       PACKAGE:
