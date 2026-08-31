@@ -4,10 +4,10 @@
 name: Cache-Clean
 
 on:
-  # 自动清理：每周日 UTC 20:00（北京时间周一 04:00）
-  schedule:
-    - cron: 0 20 * * 0
-  # 手动清理
+  # 不再每周定时全量清空：
+  #   每周一 04:00（CST）执行一次 `gh cache delete --all`，会让本周第一次编译
+  #   必然冷启动（实测 211.8 分钟，是正常耗时的 4~5 倍）。
+  #   GitHub 会按 LRU 自动回收超配额缓存，需要彻底清理时手动触发本工作流即可。
   workflow_dispatch:
 
 permissions: write-all
@@ -21,8 +21,6 @@ jobs:
     steps:
       - name: Checkout Projects
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
       - name: Cache Clean
         run: gh cache delete --all
