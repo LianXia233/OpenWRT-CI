@@ -19,7 +19,7 @@
 | **AP3000M-AUTO** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动编译 `AP3000M` 并发布 Release |
 | **OWRT-ALL** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动编译 `X86`（x86_64）并发布 Release |
 | **Auto-Clean** | 每天定时 + 手动 | 清理旧 Release 与 Workflow 运行记录（保留最近 1 个 Release、30 天运行记录） |
-| **Cache-Clean** | 每周定时 + 手动 | 清理 GitHub Actions 编译缓存 |
+| **Cache-Clean** | 仅手动触发 | 清理 GitHub Actions 编译缓存（已移除每周定时清空：那会让本周第一次构建必然冷启动，配额交由 GitHub 按 LRU 自动回收） |
 
 **手动编译步骤：** 仓库页面 → `Actions` → 选择 `WRT-BUILD` → `Run workflow` → 选择配置与源码 → 如需真正编译请把 `TEST` 设为 `false`。
 
