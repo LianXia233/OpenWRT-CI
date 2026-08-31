@@ -58,13 +58,14 @@ env:
   WRT_SOURCE: ${{inputs.WRT_SOURCE}}
   WRT_PACKAGE: ${{inputs.WRT_PACKAGE}}
   WRT_TEST: ${{inputs.WRT_TEST}}
-  CCACHE_MAXSIZE: 2G
-  CCACHE_COMPRESS: 'true'
 
 jobs:
   core:
     name: ${{inputs.WRT_SOURCE}}
     runs-on: ubuntu-latest
+    # 略低于平台 6h 硬上限：被硬上限杀掉时 runner 直接终止，
+    # 缓存的 post 保存步骤会被整段跳过，下次必然冷编译。
+    timeout-minutes: 345
     steps:
       - name: Checkout Projects
         uses: actions/checkout@v4
@@ -75,25 +76,17 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          # apt 增加超时与重试，避免偶发网络挂起导致 job 6 小时超时取消
-          apt_retry() {
-            local cmd="$1"; shift
-            for i in 1 2 3; do
-              timeout 300 sudo -E apt -yqq -o Acquire::Retries=3 \
-                -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 \
-                -o DPkg::Lock::Timeout=120 "$cmd" "$@" && return 0
-              echo "apt $cmd 第 ${i} 次失败或超时，10 秒后重试" >&2
-              sleep 10
-            done
-            return 1
-          }
-          apt_retry purge firefox
-          apt_retry update
-          apt_retry full-upgrade
-          apt_retry autoremove --purge
-          apt_retry autoclean
-          apt_retry clean
-          apt_retry install dos2unix libfuse-dev
+          sudo -E apt -yqq purge firefox
+          # 移除 runner 预置的 google-chrome apt 源：其镜像偶发哈希不一致
+          # （File has unexpected size / Mirror sync in progress?），会导致
+          # `apt update` 返回非零并中断整个初始化步骤。
+          sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
+          sudo -E apt -yqq update || sudo -E apt -yqq update
+          # 不做 full-upgrade / autoremove：托管 runner 每次全量升级要数分钟，
+          # 对 OpenWrt 编译零收益，属于纯耗时项
+          sudo -E apt -yqq autoclean
+          sudo -E apt -yqq clean
+          sudo -E apt -yqq install dos2unix libfuse-dev ccache
           sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
           sudo -E systemctl daemon-reload
           sudo -E timedatectl set-timezone "Asia/Shanghai"
@@ -128,36 +121,52 @@ jobs:
         run: |
           find ./ -maxdepth 3 -type f -iregex ".*\(txt\|sh\)$" -exec dos2unix {} \; -exec chmod +x {} \;
 
-      # 缓存拆为 toolchain 与 ccache 两份，分别带 restore-keys 回退：
-      # 精确 key 含上游 commit（WRT_HASH），上游一更新精确 key 必然 miss；
-      # 没有回退 key 时会全量重建 toolchain（gcc 两轮约 2 小时），是提速的最大瓶颈。
-      # restore-keys 命中同机型最近一次缓存即可复用大部分产物，增量重编差异部分。
-      - name: Check Toolchain Cache
-        id: check-toolchain
-        if: env.WRT_TEST != 'true'
-        uses: actions/cache@v4
-        with:
-          key: toolchain-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_HASH}}
-          restore-keys: |
-            toolchain-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-
-          path: ./wrt/staging_dir/
-
-      - name: Check Ccache Cache
+      # 关键改动 1：工具链 + ccache 合成一份缓存
+      #   - 只缓存 staging_dir/host* 与 staging_dir/tool*：
+      #     staging_dir/target-* 会被下一步的 `make clean` 删除
+      #     （Makefile 中 _clean: rm -rf $(BUILD_DIR) $(STAGING_DIR) $(BIN_DIR)），
+      #     打包上传它纯属浪费带宽，且随配置漂移污染缓存。
+      #   - key 绑定 WRT_TARGET 而非 WRT_CONFIG：H5000M 与 AP3000M 同为
+      #     mediatek/filogic，可共用同一份工具链，避免每天白编译一次。
+      #   - key 不再把 commit hash 放在唯一位置上，配合 restore-keys 做前缀回退，
+      #     上游一有新提交也能命中上次的工具链。
+      #   - save-always：失败/超时/取消也要保存，否则会陷入
+      #     「超时 → 无缓存 → 再超时」的死循环。
+      - name: Check Caches (Toolchain & ccache)
         id: check-cache
         if: env.WRT_TEST != 'true'
         uses: actions/cache@v4
         with:
-          key: ccache-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_HASH}}
+          save-always: true
+          key: wrt-tc-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
           restore-keys: |
-            ccache-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-
-          path: ./wrt/.ccache
+            wrt-tc-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-
+          path: |
+            ./wrt/.ccache
+            ./wrt/staging_dir/host*
+            ./wrt/staging_dir/tool*
+
+      # 关键改动 2：dl 缓存按「源码 + 分支」共享
+      #   下载的源码包与机型无关。原 key 带 WRT_CONFIG，H5000M / AP3000M / X86
+      #   各存一份 2.1GB，三份就是 6.3GB，直接把 10GB 配额撑爆触发 LRU 淘汰，
+      #   结果是所有缓存一起失效。共享后每个源码分支只存一份。
+      - name: Check Caches (Download)
+        if: env.WRT_TEST != 'true'
+        uses: actions/cache@v4
+        with:
+          save-always: true
+          key: wrt-dl-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
+          restore-keys: |
+            wrt-dl-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-
+          path: |
+            ./wrt/dl
 
       - name: Update Caches
         if: env.WRT_TEST != 'true'
         run: |
           if [ -d "./wrt/staging_dir" ]; then
-            # 归一化时间戳 + tmp/.build 标记：让 OpenWrt 跳过 toolchain 重建检查，
-            # 但源码（build_dir）保持原样，包级别由 make 自身的 stamp 决定增量重编
+            # 归一化时间戳 + tmp/.build 标记：让 OpenWrt 跳过工具链重建检查。
+            # 源码（build_dir）本来就不在缓存里，包级增量由 ccache 与 make stamp 决定。
             find "./wrt/staging_dir" -type d -name "stamp" -not -path "*target*" | while read -r DIR; do
               find "$DIR" -type f -exec touch {} +
             done
@@ -169,20 +178,12 @@ jobs:
             echo "caches missed!"
           fi
 
-          # 不再按 miss 删除旧缓存：restore-keys 命中的旧缓存正是本次构建的复用基础，
-          # 删除后下一次构建将无缓存可用；GitHub 会按 LRU 自动淘汰（上限 10GB）。
+          # 不再在 cache miss 时删除历史缓存：
+          # 上面的 restore-keys 正是依赖历史缓存做前缀回退，删掉等于每次都冷启动。
+          # 配额交给 GitHub LRU 自动回收，必要时用 Cache-Clean 手动清理。
 
-      - name: Check Feeds Cache
-        id: check-feeds
-        if: env.WRT_TEST != 'true'
-        uses: actions/cache@v4
-        with:
-          key: feeds-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_HASH}}
-          restore-keys: |
-            feeds-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-
-          path: |
-            ./wrt/feeds/
-            ./wrt/package/feeds/
+      # feeds 缓存已移除：实测 `feeds update -a` 仅约 1 分钟，
+      # 而缓存键绑定 commit hash 几乎必然 miss，多出的两次上传/下载是净亏损。
 
       - name: Update Feeds
         run: |
@@ -208,34 +209,139 @@ jobs:
             cat $GITHUB_WORKSPACE/Config/$WRT_CONFIG.txt $GITHUB_WORKSPACE/Config/GENERAL.txt >> .config
           fi
 
+          # 显式启用 ccache：缓存落到 ./.ccache，与上面缓存的 path 对应。
+          # 重复编译、仅改配置或插件时可大幅缩短耗时。
+          echo "CONFIG_CCACHE=y" >> .config
+
           $GITHUB_WORKSPACE/Scripts/Settings.sh
 
-          make defconfig -j$(nproc) && make clean -j$(nproc)
-
-      - name: Check Download Cache
-        id: check-dl
-        if: env.WRT_TEST != 'true'
-        uses: actions/cache@v4
-        with:
-          key: dl-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_HASH}}
-          restore-keys: |
-            dl-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-
-          path: ./wrt/dl/
+          make defconfig && make clean
 
       - name: Download Packages
         if: env.WRT_TEST != 'true'
         run: |
           cd ./wrt/
 
-          # 第二次串行 download 兜底：并行下载偶发失败的源码补齐，避免编译中途卡在下载
-          make download -j$(nproc) && make download -j1
+          # 只在并行下载失败时才做串行兜底，不再每次都跑两遍全量校验
+          make download -j$(nproc) || make download -j1
+
+      # 关键改动 3：AP3000M 跳过 rust/host 源码构建
+      #   luci-app-airpi-fancontrol 的守护进程 airpi-fanctl 是 Rust 写的，
+      #   默认路径会让 OpenWrt 从源码构建整套 rust/host（rustc + cargo + LLVM），
+      #   约 1.5~3 小时。这里用 runner 自带的 rustup 配合已构建好的 aarch64 musl
+      #   交叉链接器直接 cargo，再通过 AIRPI_PREBUILT=1 交给包 Makefile。
+      - name: Prebuild AirPi Rust Binary (AP3000M)
+        if: contains(env.WRT_CONFIG, 'AP3000M') && env.WRT_TEST != 'true'
+        run: |
+          cd ./wrt/
+
+          PKG_DIR="$(pwd)/package/luci-app-airpi-fancontrol"
+          PREBUILT_DIR="$(pwd)/airpi-prebuilt"
+
+          if [ ! -f "$PKG_DIR/src/Cargo.toml" ]; then
+            echo "::warning::未找到 $PKG_DIR/src/Cargo.toml，跳过预编译（将由源码构建 rust/host）"
+            exit 0
+          fi
+
+          # 失败即回退的正确写法：先在父 shell 关闭 errexit（GHA 的 run 默认是
+          # bash -e），再把受保护子 shell 当作普通语句执行并取回退出码。
+          set +e
+          (
+            set -euxo pipefail
+
+            # 命中缓存时秒过，冷编译才会真正构建工具链
+            make toolchain/install -j$(nproc)
+
+            LINKER="$(find "$(pwd)/staging_dir" -type f -name 'aarch64-openwrt-linux-musl-gcc' -perm -111 | head -1)"
+            [ -n "$LINKER" ] || LINKER="$(find "$(pwd)/staging_dir" -type f -name 'aarch64-*linux-musl-gcc' -perm -111 | head -1)"
+            [ -n "$LINKER" ] || { echo "未找到 aarch64 musl 交叉链接器"; exit 1; }
+            LINKER="$(readlink -f "$LINKER")"
+            echo "使用交叉链接器: $LINKER"
+
+            if ! command -v rustup >/dev/null 2>&1; then
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+                | sh -s -- -y --profile minimal --default-toolchain stable
+            fi
+            export PATH="$HOME/.cargo/bin:$PATH"
+            rustup target add aarch64-unknown-linux-musl
+
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER="$LINKER"
+
+            cd "$PKG_DIR/src"
+            cargo build --locked --release --target aarch64-unknown-linux-musl
+
+            # 产物自检：cargo 退出 0 但产物缺失同样按失败处理
+            BIN="target/aarch64-unknown-linux-musl/release/airpi-fanctl"
+            [ -f "$BIN" ] || { echo "cargo 未产出 $BIN"; exit 1; }
+
+            mkdir -p "$PREBUILT_DIR"
+            cp -f "$BIN" "$PREBUILT_DIR/airpi-fanctl"
+
+            python3 "$GITHUB_WORKSPACE/Scripts/inject_airpi_prebuilt.py" "$PKG_DIR/Makefile"
+          )
+          RC=$?
+          set -e
+
+          if [ "$RC" -eq 0 ]; then
+            echo "airpi-fanctl 预编译完成，本次将跳过 rust/host 构建"
+          else
+            echo "::warning::airpi-fanctl 预编译失败（rc=$RC），回退到源码构建 rust/host（本次编译将额外增加约 1.5~3 小时）"
+            rm -rf "$PREBUILT_DIR"
+          fi
+
+          # 一致性兜底：标记存在但二进制缺失时主动撤销注入
+          if grep -q '^AIRPI_PREBUILT:=1$' "$PKG_DIR/Makefile" && [ ! -f "$PREBUILT_DIR/airpi-fanctl" ]; then
+            echo "::warning::预编译标记与二进制不一致，撤销注入并回退源码构建"
+            sed -i '/^AIRPI_PREBUILT:=1$/d; /^AIRPI_PREBUILT_BIN:=/d' "$PKG_DIR/Makefile"
+            rm -rf "$PREBUILT_DIR"
+          fi
 
       - name: Compile Firmware
         if: env.WRT_TEST != 'true'
         run: |
           cd ./wrt/
 
-          make -j$(nproc) || make -j1 V=s
+          # 指向被缓存的 .ccache 目录，限制容量并开启压缩，避免占满 10GB 配额
+          export CCACHE_DIR="$(pwd)/.ccache"
+          export CCACHE_MAXSIZE=5G
+          export CCACHE_COMPRESS=true
+          ccache -z 2>/dev/null || true
+
+          # 关键改动 4：失败重试必须保持并行。
+          #   原来的 `make -j$(nproc) || make -j1 V=s` 一旦偶发失败就退化成单线程，
+          #   几小时的编译会直接拖过上限被取消。
+          #   输出同时写入 build.log，失败时提取首个出错包并以 ::error:: 注解上报。
+          #   必须关闭 errexit：GHA 的 run 以 bash -e 执行，开了 pipefail 后
+          #   首次 make 失败会让整个步骤就地终止，重试与诊断分支永远不会执行。
+          set +e -o pipefail
+
+          make -j$(nproc) 2>&1 | tee build.log
+          RC=${PIPESTATUS[0]}
+
+          if [ "$RC" -ne 0 ]; then
+            echo "第一次编译失败（rc=$RC），保持并行重试并追加日志"
+            make -j$(nproc) V=s 2>&1 | tee -a build.log
+            RC=${PIPESTATUS[0]}
+          fi
+
+          if [ "$RC" -ne 0 ]; then
+            echo "::group::编译失败诊断"
+            grep -E "^(ERROR: |make(\\[[0-9]+\\])?: \*\*\* ).*(failed to build|Error [0-9]|too big)" build.log \
+              | sort -u | head -n 10 | while IFS= read -r LINE; do echo "::error::$LINE"; done
+
+            if ! grep -qE "^(ERROR: |make(\\[[0-9]+\\])?: \*\*\* )" build.log; then
+              echo "::error::未匹配到包级错误行，输出日志末尾 30 行"
+              tail -n 30 build.log
+            else
+              echo "--- 编译错误上下文（C/C++ / 链接 / 镜像）---"
+              grep -nE "error:|Error [0-9]+|collect2:|undefined reference|too big" build.log | head -n 25
+            fi
+            echo "::endgroup::"
+          fi
+
+          ccache -s 2>/dev/null || true
+
+          exit "$RC"
 
       - name: Machine Information
         run: |
