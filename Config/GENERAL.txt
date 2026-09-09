@@ -34,6 +34,10 @@ CONFIG_PACKAGE_luci-app-easytier=y
 CONFIG_PACKAGE_ubus-at-daemon=y
 CONFIG_PACKAGE_sms-tool=y
 CONFIG_PACKAGE_sms-tool_q=y
+# MT5700M 后端 at-webserver（Rust 二进制，提供 /usr/sbin/mt5700m-at 与 www/5700 WebUI；
+# LuCI 壳的所有 AT 命令均调用 mt5700m-at，漏编译将导致页面整体报错/无数据）
+CONFIG_PACKAGE_at-webserver=y
+CONFIG_PACKAGE_luci-app-at-webserver=y
 
 # USB 核心支持
 CONFIG_PACKAGE_kmod-usb2=y
