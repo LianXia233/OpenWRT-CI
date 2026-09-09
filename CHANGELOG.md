@@ -1,4 +1,18 @@
 # 更新日志
+## [2026-09-09] 修复 luci-app-mt5700m 集成：折叠 Rust 后端与 WebUI
+
+### 修复（插件）
+
+- **问题**：此前 `luci-app-mt5700m` 的集成存在两处错误，导致编译出的固件里 MT5700M 管理页缺少 AT 后端、无法正常使用：
+  - `Scripts/Packages.sh` 把 `mt5700webui-openwrt-server/at-webserver`（Rust 源码 crate，**没有 OpenWrt Makefile**）当作独立包 `mv` 进 `package/`，并在 `Config/GENERAL.txt` 写了 `CONFIG_PACKAGE_at-webserver=y`。但 OpenWrt buildroot 不会把它识别为软件包，于是 `/usr/bin/at-webserver`（及其软链 `/usr/sbin/mt5700m-at`）与 `/www/5700` WebUI 根本不会被编进固件——管理页的 AT 终端、拨号、状态查询全部失效。
+  - `Config/GENERAL.txt` 误加 `CONFIG_PACKAGE_sms-tool=y`（该包来自 packages feed，与本插件无关）；插件真正依赖的是 QModem 的 `sms-tool_q` 与 `ubus-at-daemon`。
+- **修复**：复刻上游 `scripts/build-release.sh` 的「折叠」流程，在 `Scripts/Packages.sh` 新增 `FOLD_MT5700M`：
+  - 把 LuCI 壳（仓库内同名子目录）提升到 `package/` 一级；
+  - 按编译目标用 cargo + rust-lld（自包含 musl，无需 OpenWrt 交叉工具链）交叉编译 Rust 后端 `at-webserver`：mediatek → `aarch64-unknown-linux-musl`，x86 → `x86_64-unknown-linux-musl`；
+  - 把 `www/5700` 前端、`/usr/bin/at-webserver` 二进制、`at-webserver` init.d 折叠进 LuCI 壳后一起编译。
+- `Config/GENERAL.txt` 移除 `CONFIG_PACKAGE_at-webserver=y` 与 `CONFIG_PACKAGE_sms-tool=y`，保留 `luci-app-mt5700m` / `luci-i18n-mt5700m-zh-cn` / `ubus-at-daemon` / `sms-tool_q`。
+- `TEST=true`（仅生成配置）时跳过 Rust 后端编译；正式编译若后端构建失败会直接报错终止，避免静默产出缺少 AT 后端的固件。
+
 ## [2026-08-31] 编译提速：缓存重构、并行重试与 Rust 预编译（PR #5）
 
 ### 优化（编译提速）
