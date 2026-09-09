@@ -90,7 +90,6 @@ UPDATE_PACKAGE "luci-app-airpi-fancontrol" "LianXia233/luci-app-airpi3000m-fanco
 # luci-app-mt5700m 是两层 monorepo：仓库根没有 Makefile，包实际位于
 #   luci-app-mt5700m/                                   (LuCI 壳)
 #   mt5700webui-openwrt-server/at-webserver/            (Rust 后端，提供 /usr/sbin/mt5700m-at 与 www/5700)
-#   mt5700webui-openwrt-server/luci-app-at-webserver/   (AT WebServer 独立 LuCI 页)
 # OpenWrt buildroot 仅识别 package/<name>/Makefile 一层，直接把仓库整个 clone 进
 # package/ 会导致所有子包都未被识别而漏编译（固件里连菜单都没有）。
 # 注意：不能用 UPDATE_PACKAGE 的 "all" —— 壳一级目录与仓库同名，
@@ -99,9 +98,8 @@ UPDATE_PACKAGE "luci-app-mt5700m" "LianXia233/luci-app-mt5700m" "main"
 if [ -d ./luci-app-mt5700m ]; then
 	# 第一层：LuCI 壳（先用临时名避开与仓库根同名冲突）
 	[ -d ./luci-app-mt5700m/luci-app-mt5700m ] && mv -f ./luci-app-mt5700m/luci-app-mt5700m ./luci-app-mt5700m_shell
-	# 第二层：at-webserver 后端与独立 LuCI 页
+	# 第二层：at-webserver 后端
 	[ -d ./luci-app-mt5700m/mt5700webui-openwrt-server/at-webserver ] && mv -f ./luci-app-mt5700m/mt5700webui-openwrt-server/at-webserver ./at-webserver
-	[ -d ./luci-app-mt5700m/mt5700webui-openwrt-server/luci-app-at-webserver ] && mv -f ./luci-app-mt5700m/mt5700webui-openwrt-server/luci-app-at-webserver ./luci-app-at-webserver
 	# 清理仓库根残留
 	rm -rf ./luci-app-mt5700m
 	# 壳目录还原为正式包名
