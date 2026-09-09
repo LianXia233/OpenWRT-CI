@@ -87,24 +87,82 @@ UPDATE_PACKAGE "vnt" "lmq8267/luci-app-vnt" "main"
 # FAN789 插件及其他专用硬件插件
 UPDATE_PACKAGE "luci-app-h5000m-fancontrol" "FAN789/luci-app-h5000m-fancontrol" "main"
 UPDATE_PACKAGE "luci-app-airpi-fancontrol" "LianXia233/luci-app-airpi3000m-fancontrol" "main" "all" "luci-app-airpi-fancontrol kmod-airpi-gpio-fan"
-# luci-app-mt5700m 是两层 monorepo：仓库根没有 Makefile，包实际位于
-#   luci-app-mt5700m/                                   (LuCI 壳)
-#   mt5700webui-openwrt-server/at-webserver/            (Rust 后端，提供 /usr/sbin/mt5700m-at 与 www/5700)
-# OpenWrt buildroot 仅识别 package/<name>/Makefile 一层，直接把仓库整个 clone 进
-# package/ 会导致所有子包都未被识别而漏编译（固件里连菜单都没有）。
-# 注意：不能用 UPDATE_PACKAGE 的 "all" —— 壳一级目录与仓库同名，
-# cp -rf 会把目录复制进自身报错，故此处手动逐层移动。
+# luci-app-mt5700m 是两层 monorepo：仓库根没有 Makefile，真正可编译的包是
+#   luci-app-mt5700m/luci-app-mt5700m            (LuCI 壳，含 Makefile)
+#   mt5700webui-openwrt-server/at-webserver/     (Rust AT 后端源码，无 OpenWrt Makefile)
+# 上游发布流程（scripts/build-release.sh）会先用 cargo 交叉编译出静态二进制
+# at-webserver，再把 www/5700 前端 + 二进制 + init.d 脚本“折叠”进 LuCI 壳后
+# 一起编译。若只编译 LuCI 壳，固件会缺少 /usr/bin/at-webserver（以及
+# /usr/sbin/mt5700m-at 软链）与 /www/5700 WebUI，管理页的 AT 终端/拨号会全部失效。
+# 因此这里复刻上游折叠流程（见下方 FOLD_MT5700M）：
+#   1. 把 LuCI 壳（仓库内同名子目录）提升到 package/ 一级；
+#   2. 按编译目标架构用 cargo + rust-lld（自包含 musl，无需 OpenWrt 交叉工具链）
+#      编译 Rust 后端：mediatek → aarch64-unknown-linux-musl，x86 → x86_64-unknown-linux-musl；
+#   3. 把 www/5700、二进制、init.d 折叠进壳目录。
+# 注意：不能用 UPDATE_PACKAGE 的 "all" —— 壳目录与仓库根同名，cp -rf 会复制进自身。
 UPDATE_PACKAGE "luci-app-mt5700m" "LianXia233/luci-app-mt5700m" "main"
-if [ -d ./luci-app-mt5700m ]; then
+FOLD_MT5700M() {
+	local SHELL_DIR="./luci-app-mt5700m"
+	local SERVER_DIR="./luci-app-mt5700m/mt5700webui-openwrt-server/at-webserver"
+	local TMP_SHELL="./luci-app-mt5700m_shell"
+	local RUST_TARGET="aarch64-unknown-linux-musl"
+	local BIN_PATH=""
+
+	[ -d "$SHELL_DIR" ] || { echo "luci-app-mt5700m: clone not found, skip fold"; return 0; }
+	[ -d "$SHELL_DIR/luci-app-mt5700m" ] || { echo "luci-app-mt5700m: shell dir missing in repo, skip fold"; return 0; }
+	[ -d "$SERVER_DIR" ] || { echo "luci-app-mt5700m: at-webserver source missing in repo, skip fold"; return 0; }
+
 	# 第一层：LuCI 壳（先用临时名避开与仓库根同名冲突）
-	[ -d ./luci-app-mt5700m/luci-app-mt5700m ] && mv -f ./luci-app-mt5700m/luci-app-mt5700m ./luci-app-mt5700m_shell
-	# 第二层：at-webserver 后端
-	[ -d ./luci-app-mt5700m/mt5700webui-openwrt-server/at-webserver ] && mv -f ./luci-app-mt5700m/mt5700webui-openwrt-server/at-webserver ./at-webserver
-	# 清理仓库根残留
-	rm -rf ./luci-app-mt5700m
-	# 壳目录还原为正式包名
-	[ -d ./luci-app-mt5700m_shell ] && mv -f ./luci-app-mt5700m_shell ./luci-app-mt5700m
-fi
+	rm -rf "$TMP_SHELL"
+	mv -f "$SHELL_DIR/luci-app-mt5700m" "$TMP_SHELL"
+
+	# 目标架构 → Rust 交叉编译目标
+	case "${WRT_TARGET:-${WRT_CONFIG:-}}" in
+		x86) RUST_TARGET="x86_64-unknown-linux-musl" ;;
+	esac
+
+	# 折叠前端 + init.d（与后端二进制无关，先铺好目录）
+	mkdir -p "$TMP_SHELL/htdocs" "$TMP_SHELL/root/usr/bin" "$TMP_SHELL/root/etc/init.d"
+	cp -a "$SERVER_DIR/files/www/5700" "$TMP_SHELL/htdocs/5700"
+	cp -f "$SERVER_DIR/files/etc/init.d/at-webserver" "$TMP_SHELL/root/etc/init.d/at-webserver"
+	chmod 0755 "$TMP_SHELL/root/etc/init.d/at-webserver"
+
+	# 编译 Rust 后端（std-only，零第三方依赖，rust-lld 自包含链接）
+	if [ "${WRT_TEST:-false}" != "true" ]; then
+		if ! command -v rustup >/dev/null 2>&1; then
+			curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+				| sh -s -- -y --profile minimal --default-toolchain stable
+		fi
+		export PATH="$HOME/.cargo/bin:$PATH"
+		rustup target add "$RUST_TARGET" >/dev/null 2>&1 || true
+
+		BIN_PATH="$SERVER_DIR/target/$RUST_TARGET/release/at-webserver"
+		if ! (cd "$SERVER_DIR" && \
+			RUSTFLAGS="-C link-self-contained=yes -C linker=rust-lld" \
+			cargo build --release --locked --target "$RUST_TARGET"); then
+			echo "ERROR: luci-app-mt5700m: failed to build at-webserver ($RUST_TARGET)!" >&2
+			echo "固件将缺少 /usr/bin/at-webserver（/usr/sbin/mt5700m-at）与 /www/5700，插件不可用。" >&2
+			exit 1
+		fi
+		[ -f "$BIN_PATH" ] || { echo "ERROR: luci-app-mt5700m: at-webserver binary missing after build!" >&2; exit 1; }
+
+		cp -f "$BIN_PATH" "$TMP_SHELL/root/usr/bin/at-webserver"
+		chmod 0755 "$TMP_SHELL/root/usr/bin/at-webserver"
+	else
+		echo "luci-app-mt5700m: TEST 模式，跳过 Rust 后端编译（仅生成配置）"
+	fi
+
+	# 清理仓库根残留（含不再需要的 at-webserver 源码目录），还原正式包名
+	rm -rf "$SHELL_DIR"
+	mv -f "$TMP_SHELL" "$SHELL_DIR"
+
+	if [ -f "$SHELL_DIR/root/usr/bin/at-webserver" ] && [ -f "$SHELL_DIR/htdocs/5700/index.html" ]; then
+		echo "luci-app-mt5700m: folded www/5700 + at-webserver backend ($RUST_TARGET)"
+	else
+		echo "WARNING: luci-app-mt5700m: folded without at-webserver backend (TEST 模式)" >&2
+	fi
+}
+FOLD_MT5700M
 UPDATE_PACKAGE "luci-app-h5000m-netmode" "FAN789/luci-app-h5000m-netmode" "main"
 
 #安装 Honk 预编译 APK（避免从源码编译 Rust/eBPF 导致超过 6 小时上限）
