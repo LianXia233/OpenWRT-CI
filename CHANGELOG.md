@@ -1,4 +1,15 @@
 # 更新日志
+## [2026-09-10] 修复 QModem 包版本号非法导致的构建失败（apk Error 99）
+
+### 修复（构建）
+
+- **问题**：今日（09-10）三连发构建（OWRT-ALL #68 / H5000M-AUTO #24 / AP3000M-AUTO #18）全部在 `Compile Firmware` 步骤失败。根因：`Scripts/Packages.sh` 克隆的 QModem feed（`FUjr/QModem`）共享 `version.mk` 声明 `QMODEM_VERSION:=3.4.0-rc.3`，OpenWrt 新版 apk 打包器不接受 `-rc.N` 版本段——版本串被拼成 `3.4.0-rc.3-r1` 后，`apk mkpkg` 报 `package version is invalid`（Error 99），`sms-tool_q` 打包失败进而终止整个固件构建。三目标共享 `Config/GENERAL.txt`（`CONFIG_PACKAGE_sms-tool_q=y`），全部命中，编译脚本首败（rc=2）自动重试后仍被同一版本号拒绝。
+- **修复**：`Scripts/Packages.sh` 在克隆 QModem feed 后新增 `FIX_QMODEM_VERSION`，将 `X.Y.Z-rc.N` 改写为 apk 合法的 `X.Y.Z_rcN`（`3.4.0-rc.3` → `3.4.0_rc3`）。QModem 各包源码均内嵌 feed 仓库 `src/`，无版本化下载依赖，改写仅影响版本元数据；上游若已改为合法版本则自动跳过。
+
+### 变更文件
+
+- `Scripts/Packages.sh` — 新增 `FIX_QMODEM_VERSION`（克隆 QModem 后改写共享版本号）
+
 ## [2026-09-09] 修复 luci-app-mt5700m 集成：折叠 Rust 后端与 WebUI
 
 ### 修复（插件）
