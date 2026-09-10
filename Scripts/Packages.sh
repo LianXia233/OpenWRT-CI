@@ -79,6 +79,24 @@ UPDATE_PACKAGE "openlist2" "sbwml/luci-app-openlist2" "main"
 UPDATE_PACKAGE "partexp" "sirpdboy/luci-app-partexp" "main"
 UPDATE_PACKAGE "qbittorrent" "sbwml/luci-app-qbittorrent" "master" "" "qt6base qt6tools rblibtorrent"
 UPDATE_PACKAGE "qmodem" "FUjr/QModem" "main"
+
+# QModem 包共用 version.mk 的 QMODEM_VERSION（当前上游发布 "3.4.0-rc.3"）。
+# OpenWrt 新版 apk 打包器不接受 `-rc.N`：版本串被拼成 "3.4.0-rc.3-rN" 后，
+# apk mkpkg 报 "package version is invalid"（Error 99），阻断整个固件构建
+# （sms-tool_q 今日三连发全灭即此因）。这里在克隆后把 X.Y.Z-rc.N 改写为
+# apk 合法的 X.Y.Z_rcN；QModem 各包源码均内嵌仓库 src/，无版本化下载依赖，
+# 改写只影响包版本元数据。若上游已改为合法版本，本规则自动跳过。
+FIX_QMODEM_VERSION() {
+	local VER_FILE="./QModem/version.mk"
+	[ -f "$VER_FILE" ] || { echo "qmodem: version.mk not found, skip"; return 0; }
+	if grep -qE '^QMODEM_VERSION:=[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' "$VER_FILE"; then
+		sed -i -E 's/^(QMODEM_VERSION:=)([0-9]+\.[0-9]+\.[0-9]+)-rc\.([0-9]+)$/\1\2_rc\3/' "$VER_FILE"
+		echo "qmodem: QMODEM_VERSION sanitized to $(grep -E '^QMODEM_VERSION:=' "$VER_FILE")"
+	else
+		echo "qmodem: QMODEM_VERSION already apk-valid, no change"
+	fi
+}
+FIX_QMODEM_VERSION
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 UPDATE_PACKAGE "timecontrol" "sirpdboy/luci-app-timecontrol" "main"
 UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac sing-box luci-app-homeproxy luci-app-timewol luci-app-wolplus luci-app-wolultra"
