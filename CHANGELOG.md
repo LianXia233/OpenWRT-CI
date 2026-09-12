@@ -1,4 +1,39 @@
 # 更新日志
+## [2026-09-13] 重构 MT5700M 配置，新增独立 MT5700 配置与 MT_MODE 互斥
+
+### 变更（配置架构）
+
+- **原 MT5700M 配置迁移**：`Config/GENERAL.txt` 中的 MT5700M 段（`luci-app-mt5700m` / `luci-i18n-mt5700m-zh-cn` / `ubus-at-daemon` / `sms-tool_q`）整体迁出为 `Config/MT5700M.txt`，`Packages.sh` 的 `FOLD_MT5700M` 逻辑保留并改为仅在 `MT_MODE=MT5700M` 时执行。
+- **新增 `Config/MT5700.txt`**：方案 B，仅 `luci-app-mt5700` + 中文语言包，不含 `sms-tool_q` / `ubus-at-daemon` / `luci-app-mt5700m`。
+- **新增 `MT_MODE` 独立配置层**（全机型复用，不绑定 H5000M）：
+  - `""` / `NONE` — 不安装任何 MT 插件
+  - `MT5700` — 仅 luci-app-mt5700
+  - `MT5700M` — luci-app-mt5700m + sms-tool_q + ubus-at-daemon
+  - 其他值在 `Packages.sh` / `ApplyMTMode.sh` / `VerifyMTMode.sh` 中 `::error::` 并终止
+- **双重互斥校验**：
+  - 配置生成前：`Scripts/ApplyMTMode.sh` 叠加配置层并写入对侧包 `=n`
+  - 配置生成后、编译前：`Scripts/VerifyMTMode.sh` 检查最终 `.config`
+- **Workflow**：`WRT-CORE.yml` 增加 `MT_MODE` 输入；`WRT-BUILD.yml` 增加模式选择；`H5000M-AUTO` / `AP3000M-AUTO` / `OWRT-ALL` 默认 `MT_MODE=MT5700M`，保持原固件内容。
+
+### 真实冲突点（来自插件仓库实测，非猜测）
+
+- 同路径 init 服务：`/etc/init.d/at-webserver`
+- 同路径 UCI：`/etc/config/at-webserver`
+- 同菜单父节点：`admin/modem`
+- MT5700M 另依赖 QModem feed 的 `sms-tool_q`、`ubus-at-daemon`；MT5700 的 `LUCI_DEPENDS` 为空，单包自含 Rust 后端
+
+### 变更文件
+
+- `Config/MT5700M.txt` — 新增（由 GENERAL 迁出）
+- `Config/MT5700.txt` — 新增
+- `Config/GENERAL.txt` — 移除 MT5700M 包
+- `Scripts/ApplyMTMode.sh` — 新增
+- `Scripts/VerifyMTMode.sh` — 新增
+- `Scripts/Packages.sh` — MT 插件克隆/折叠按 MT_MODE 条件执行；QModem feed 仅 MT5700M 需要
+- `.github/workflows/WRT-CORE.yml` — 增加 MT_MODE 输入与验证步骤
+- `.github/workflows/WRT-BUILD.yml` — 增加 MT_MODE 选择
+- `.github/workflows/H5000M-AUTO.yml` / `AP3000M-AUTO.yml` / `OWRT-ALL.yml` — 传入 MT_MODE=MT5700M
+
 ## [2026-09-10] 修复 QModem 包版本号非法导致的构建失败（apk Error 99）
 
 ### 修复（构建）

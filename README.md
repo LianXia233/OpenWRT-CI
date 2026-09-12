@@ -148,6 +148,25 @@ MT5700M 是本台 CPE 的数据吞吐核心，该插件为其提供了系统级�
 ### 3. 网络模式无缝切换 (`luci-app-h5000m-netmode`)
 所有配置均包含此插件，用于应对复杂的网络接入环境（5G 蜂窝与传统有线宽带双接入），提供极简的管理体验。
 
+### 4. MT 插件模式（MT_MODE，全机型可选）
+
+固件构建支持独立的 5G 模组插件配置层，**不与机型绑定**，H5000M / AP3000M / X86 均可通过 `WRT-BUILD` 选择：
+
+| MT_MODE | 安装内容 | 明确排除 |
+| :--- | :--- | :--- |
+| `MT5700M` | `luci-app-mt5700m` + `sms-tool_q` + `ubus-at-daemon` | `luci-app-mt5700` |
+| `MT5700` | `luci-app-mt5700`（单包自含 Rust 后端） | `luci-app-mt5700m` / `sms-tool_q` / `ubus-at-daemon` |
+| 空 / `NONE` | 不安装任何 MT 插件 | 全部 |
+
+自动编译（`H5000M-AUTO` / `AP3000M-AUTO` / `OWRT-ALL`）默认 `MT_MODE=MT5700M`，保持原固件内容不变。
+
+配置层文件：
+
+* `Config/MT5700M.txt`（方案 A）
+* `Config/MT5700.txt`（方案 B）
+
+互斥由 CI 在**配置生成前**（`Scripts/ApplyMTMode.sh`）与**配置生成后、编译前**（`Scripts/VerifyMTMode.sh`）双重校验，冲突时直接失败。
+
 * **🔄 一键切换**：支持在“仅 5G 模式”、“仅有线宽带模式”及“负载均衡/故障转移模式”间快速切换，告别复杂的接口配置。
 * **⚡ 链路检测**：搭配 mwan3，实时监测链路连通状态，主链路故障时实现毫秒级无缝切换，确保网络永不掉线。
 

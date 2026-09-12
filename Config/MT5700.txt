@@ -1,0 +1,14 @@
+# MT5700 独立插件配置层（方案 B）
+# 仅在 MT_MODE=MT5700 时叠加。
+# 只使用 luci-app-mt5700（单包：LuCI 前端 + Rust 后端 at-webserver-rust）。
+# 严格禁止：luci-app-mt5700m / sms-tool_q / ubus-at-daemon。
+
+# LuCI 插件（单包自含后端，LUCI_DEPENDS 为空，不依赖 QModem 组件）
+CONFIG_PACKAGE_luci-app-mt5700=y
+CONFIG_PACKAGE_luci-i18n-mt5700-zh-cn=y
+
+# 显式排除 MT5700M 及其专用依赖（互斥，防止 make defconfig 被其他配置意外拉入）
+CONFIG_PACKAGE_luci-app-mt5700m=n
+CONFIG_PACKAGE_luci-i18n-mt5700m-zh-cn=n
+CONFIG_PACKAGE_sms-tool_q=n
+CONFIG_PACKAGE_ubus-at-daemon=n

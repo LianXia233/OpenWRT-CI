@@ -34,6 +34,15 @@ on:
         description: '手动追加插件包（多行请用换行隔开）'
         required: false
         type: string
+      MT_MODE:
+        description: 'MT 插件模式（二选一，留空则不安装任何 MT 插件）'
+        default: 'MT5700M'
+        required: true
+        type: choice
+        options:
+          - MT5700M
+          - MT5700
+          - NONE
       TEST:
         description: '仅生成配置文件，不编译固件。'
         default: 'true'
@@ -44,7 +53,7 @@ permissions: write-all
 
 jobs:
   build:
-    name: ${{inputs.CONFIG}}
+    name: ${{inputs.CONFIG}}-${{inputs.MT_MODE}}
     uses: ./.github/workflows/WRT-CORE.yml
     with:
       WRT_CONFIG: ${{inputs.CONFIG}}
@@ -59,3 +68,7 @@ jobs:
       WRT_SOURCE: ${{inputs.SOURCE}}
       WRT_PACKAGE: ${{inputs.PACKAGE}}
       WRT_TEST: ${{inputs.TEST}}
+      # NONE / 其他 → 空字符串（不安装任何 MT 插件）
+      # 注意：GHA 表达式中空字符串为 falsy，不能写成 `cond && '' || x`，
+      # 必须用显式三元链保证 NONE 时最终得到空值。
+      MT_MODE: ${{ inputs.MT_MODE == 'MT5700' && 'MT5700' || (inputs.MT_MODE == 'MT5700M' && 'MT5700M' || '') }}

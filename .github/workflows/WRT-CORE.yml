@@ -43,6 +43,15 @@ on:
       WRT_TEST:
         required: false
         type: string
+      # MT 插件模式（独立配置层，全机型复用）：
+      #   ""      —— 不安装任何 MT 插件（默认，保持普通 CI 行为）
+      #   MT5700  —— 仅 luci-app-mt5700（方案 B）
+      #   MT5700M —— luci-app-mt5700m + sms-tool_q + ubus-at-daemon（方案 A）
+      # 其他值在 ApplyMTMode / VerifyMTMode / Packages.sh 中报错并终止。
+      MT_MODE:
+        required: false
+        type: string
+        default: ""
 
 env:
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
@@ -58,6 +67,7 @@ env:
   WRT_SOURCE: ${{inputs.WRT_SOURCE}}
   WRT_PACKAGE: ${{inputs.WRT_PACKAGE}}
   WRT_TEST: ${{inputs.WRT_TEST}}
+  MT_MODE: ${{inputs.MT_MODE}}
 
 jobs:
   core:
@@ -215,7 +225,18 @@ jobs:
 
           $GITHUB_WORKSPACE/Scripts/Settings.sh
 
+          # MT 独立插件配置层：按 MT_MODE 叠加 MT5700 / MT5700M / 空（互斥）
+          # 必须在 Settings.sh 之后、make defconfig 之前执行
+          $GITHUB_WORKSPACE/Scripts/ApplyMTMode.sh
+
           make defconfig && make clean
+
+      # 配置生成后、编译前：验证 MT 模式包选择互斥（双重验证之一）
+      - name: Verify MT Mode
+        run: |
+          cd ./wrt/
+
+          $GITHUB_WORKSPACE/Scripts/VerifyMTMode.sh
 
       - name: Download Packages
         if: env.WRT_TEST != 'true'

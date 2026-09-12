@@ -65,3 +65,6 @@ jobs:
       WRT_PACKAGE: ${{inputs.PACKAGE}}
       #仅输出配置文件
       WRT_TEST: ${{inputs.TEST}}
+      # 默认保持原固件内容（原 GENERAL.txt 中的 MT5700M 全家桶）
+      # 需要 MT5700 或关闭 MT 插件时，请改用 WRT-BUILD 手动选择
+      MT_MODE: 'MT5700M'

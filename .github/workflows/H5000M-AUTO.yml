@@ -48,3 +48,5 @@ jobs:
 
       WRT_PACKAGE: ${{ inputs.PACKAGE }}
       WRT_TEST: 'false'
+      # 默认保持原固件内容（原 GENERAL.txt 中的 MT5700M 全家桶）
+      MT_MODE: 'MT5700M'
