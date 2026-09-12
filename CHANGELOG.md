@@ -1,4 +1,27 @@
 # 更新日志
+## [2026-09-13] 云编译双 MT 配置并行、工作流重命名与产物区分
+
+### 变更（云编译）
+
+- **双配置并行**：各机型 AUTO 工作流改为矩阵同时编译 `MT5700` + `MT5700M`（`fail-fast: false`），Job 名为 `机型-MT模式`。
+- **工作流重命名**：
+  - `H5000M-AUTO.yml` → `H5000M-MT-AUTO.yml`（name: `H5000M-MT-AUTO`）
+  - `AP3000M-AUTO.yml` → `AP3000M-MT-AUTO.yml`（name: `AP3000M-MT-AUTO`）
+  - `OWRT-ALL.yml` → `X86-MT-AUTO.yml`（name: `X86-MT-AUTO`）
+- **产物区分（WRT-CORE）**：
+  - 固件文件名嵌入 MT 模式：`…-<MT5700|MT5700M>-wifi-yes-….bin`
+  - 配置导出：`Config-<机型>-<MT模式>-….txt`
+  - Release Tag：`<机型>-<MT模式>-<源码>-<分支>-<日期>`
+  - Release 正文增加 `MT模式` 字段
+
+### 变更文件
+
+- `.github/workflows/H5000M-MT-AUTO.yml` — 新增（替代 H5000M-AUTO）
+- `.github/workflows/AP3000M-MT-AUTO.yml` — 新增（替代 AP3000M-AUTO）
+- `.github/workflows/X86-MT-AUTO.yml` — 新增（替代 OWRT-ALL）
+- `.github/workflows/H5000M-AUTO.yml` / `AP3000M-AUTO.yml` / `OWRT-ALL.yml` — 删除
+- `.github/workflows/WRT-CORE.yml` — WRT_MT 标签写入产物名 / Tag / 说明
+
 ## [2026-09-13] 重构 MT5700M 配置，新增独立 MT5700 配置与 MT_MODE 互斥
 
 ### 变更（配置架构）

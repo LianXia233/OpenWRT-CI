@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-# 手动编译入口（仅联发科 MediaTek 平台）
+# 手动编译入口（机型 × MT 模式 二选一；产物/Tag 嵌入 MT 模式）
 name: WRT-BUILD
 
 on:
