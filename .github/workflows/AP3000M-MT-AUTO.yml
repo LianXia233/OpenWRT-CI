@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-# 定时自动编译：Auto-Clean 清理完成后自动构建 H5000M-WIFI-YES
-# （原 MTK-AUTO，已按机型重命名为 H5000M-AUTO；AP3000M 在独立工作流 AP3000M-AUTO）
-name: H5000M-AUTO
+# 定时自动编译：Auto-Clean 清理完成后同时构建 AP3000M 的两种 MT 配置
+# （原 AP3000M-AUTO，重命名并改为 MT5700 / MT5700M 双矩阵并行）
+#   MT5700  —— 仅 luci-app-mt5700
+#   MT5700M —— luci-app-mt5700m + sms-tool_q + ubus-at-daemon
+# 产物文件名与 Release Tag 均嵌入 MT 模式，可并存区分。
+name: AP3000M-MT-AUTO
 
 on:
   # Auto-Clean 完成后自动触发
@@ -23,13 +26,15 @@ permissions: write-all
 
 jobs:
   config:
-    name: ${{ matrix.CONFIG }}
+    name: ${{ matrix.CONFIG }}-${{ matrix.MT_MODE }}
     strategy:
       fail-fast: false
       matrix:
-        CONFIG: [H5000M-WIFI-YES]
+        CONFIG: [AP3000M]
         SOURCE: [immortalwrt/immortalwrt]
         BRANCH: [master]
+        # 同时编译两种 MT 配置（严格互斥，由 Apply/VerifyMTMode 保证）
+        MT_MODE: [MT5700, MT5700M]
 
     uses: ./.github/workflows/WRT-CORE.yml
     with:
@@ -48,5 +53,4 @@ jobs:
 
       WRT_PACKAGE: ${{ inputs.PACKAGE }}
       WRT_TEST: 'false'
-      # 默认保持原固件内容（原 GENERAL.txt 中的 MT5700M 全家桶）
-      MT_MODE: 'MT5700M'
+      MT_MODE: ${{ matrix.MT_MODE }}

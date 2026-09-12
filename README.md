@@ -14,16 +14,27 @@
 
 | 工作流 | 触发方式 | 作用 |
 | :--- | :--- | :--- |
-| **WRT-BUILD** | 手动 `workflow_dispatch` | 手动编译 / 预览配置。可选配置、源码、分支，默认仅生成配置不编译（`TEST=true`） |
-| **H5000M-AUTO** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动编译 `H5000M-WIFI-YES` 并发布 Release |
-| **AP3000M-AUTO** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动编译 `AP3000M` 并发布 Release |
-| **OWRT-ALL** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动编译 `X86`（x86_64）并发布 Release |
+| **WRT-BUILD** | 手动 `workflow_dispatch` | 手动编译 / 预览配置。可选机型、源码、MT 模式（`MT5700` / `MT5700M` / `NONE`），默认仅生成配置不编译（`TEST=true`） |
+| **H5000M-MT-AUTO** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动并行编译 H5000M 的 **MT5700 + MT5700M** 双配置并分别发布 |
+| **AP3000M-MT-AUTO** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动并行编译 AP3000M 的 **MT5700 + MT5700M** 双配置并分别发布 |
+| **X86-MT-AUTO** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动并行编译 X86 的 **MT5700 + MT5700M** 双配置并分别发布 |
 | **Auto-Clean** | 每天定时 + 手动 | 清理旧 Release 与 Workflow 运行记录（保留最近 1 个 Release、30 天运行记录） |
 | **Cache-Clean** | 仅手动触发 | 清理 GitHub Actions 编译缓存（已移除每周定时清空：那会让本周第一次构建必然冷启动，配额交由 GitHub 按 LRU 自动回收） |
 
-**手动编译步骤：** 仓库页面 → `Actions` → 选择 `WRT-BUILD` → `Run workflow` → 选择配置与源码 → 如需真正编译请把 `TEST` 设为 `false`。
+**手动编译步骤：** 仓库页面 → `Actions` → 选择 `WRT-BUILD` → `Run workflow` → 选择机型与 MT 模式 → 如需真正编译请把 `TEST` 设为 `false`。
 
 **说明：** `TEST=true`（默认）只生成 `.config` 配置用于校验，不会消耗资源编译；`TEST=false` 才会完整编译并发布固件。
+
+**产物区分：** 同一机型的两种 MT 配置产物在文件名与 Release Tag 中均嵌入模式标签，例如：
+
+```text
+…-MT5700-wifi-yes-26.09.13-….bin
+…-MT5700M-wifi-yes-26.09.13-….bin
+Tag: H5000M-WIFI-YES-MT5700-…
+Tag: H5000M-WIFI-YES-MT5700M-…
+```
+
+双配置 Job 名为 `机型-MT模式`（如 `H5000M-WIFI-YES-MT5700`），在 Actions 页面可直接分辨。
 
 <br>
 
@@ -33,14 +44,16 @@
 OpenWRT-CI/
 ├── .github/workflows/        # 云编译工作流
 │   ├── WRT-CORE.yml          # 公用编译核心（被调用）
-│   ├── WRT-BUILD.yml         # 手动编译入口
-│   ├── H5000M-AUTO.yml       # 定时自动编译 H5000M-WIFI-YES
-│   ├── AP3000M-AUTO.yml      # 定时自动编译 AP3000M
-│   ├── OWRT-ALL.yml          # 定时自动编译 X86
+│   ├── WRT-BUILD.yml         # 手动编译入口（机型 × MT 模式）
+│   ├── H5000M-MT-AUTO.yml    # 自动双配置编译 H5000M（MT5700 + MT5700M）
+│   ├── AP3000M-MT-AUTO.yml   # 自动双配置编译 AP3000M（MT5700 + MT5700M）
+│   ├── X86-MT-AUTO.yml       # 自动双配置编译 X86（MT5700 + MT5700M）
 │   ├── Auto-Clean.yml        # 清理旧 Release / 运行记录
 │   └── Cache-Clean.yml       # 清理编译缓存
 ├── Config/                   # 编译配置
-│   ├── GENERAL.txt           # 全设备通用插件与内核配置
+│   ├── GENERAL.txt           # 全设备通用插件与内核配置（不含 MT 插件）
+│   ├── MT5700.txt            # MT5700 独立插件层（方案 B）
+│   ├── MT5700M.txt           # MT5700M 独立插件层（方案 A）
 │   ├── H5000M-WIFI-YES.txt   # Hiveton H5000M（带 Wi-Fi）
 │   ├── AP3000M.txt           # AirPi AP3000M（Wi-Fi）
 │   └── X86.txt               # X86_64 通用设备
@@ -48,7 +61,9 @@ OpenWRT-CI/
 │   ├── mt7981_eeprom_mt7976_dbdc.bin  # iPAiLNA EEPROM 模板（已校准）
 │   └── 99-ap3000m-eeprom            # uci-defaults 首次启动脚本
 ├── Scripts/                  # 编译前自定义脚本
-│   ├── Packages.sh           # 拉取第三方插件与主题
+│   ├── Packages.sh           # 拉取第三方插件与主题（含 MT 模式条件克隆/折叠）
+│   ├── ApplyMTMode.sh        # 按 MT_MODE 叠加配置层并写入互斥保护
+│   ├── VerifyMTMode.sh       # make defconfig 后校验 MT 包互斥
 │   ├── Handles.sh            # HomeProxy 资源预置与主题 / 组件修复
 │   └── Settings.sh           # 默认 IP / 主机名 / Wi-Fi / 主题
 ├── LICENSE
@@ -158,7 +173,7 @@ MT5700M 是本台 CPE 的数据吞吐核心，该插件为其提供了系统级�
 | `MT5700` | `luci-app-mt5700`（单包自含 Rust 后端） | `luci-app-mt5700m` / `sms-tool_q` / `ubus-at-daemon` |
 | 空 / `NONE` | 不安装任何 MT 插件 | 全部 |
 
-自动编译（`H5000M-AUTO` / `AP3000M-AUTO` / `OWRT-ALL`）默认 `MT_MODE=MT5700M`，保持原固件内容不变。
+自动编译（`H5000M-MT-AUTO` / `AP3000M-MT-AUTO` / `X86-MT-AUTO`）**同时并行编译** `MT5700` 与 `MT5700M` 两种配置；产物文件名、配置导出与 Release Tag 均嵌入 MT 模式标签，避免互相覆盖。
 
 配置层文件：
 

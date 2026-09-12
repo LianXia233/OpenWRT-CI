@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: MIT
+# Copyright (C) 2026 VIKINGYFY
+
+# 定时自动编译：Auto-Clean 清理完成后同时构建 X86 的两种 MT 配置
+# （原 OWRT-ALL，重命名并改为 MT5700 / MT5700M 双矩阵并行）
+#   MT5700  —— 仅 luci-app-mt5700
+#   MT5700M —— luci-app-mt5700m + sms-tool_q + ubus-at-daemon
+# 产物文件名与 Release Tag 均嵌入 MT 模式，可并存区分。
+name: X86-MT-AUTO
+
+on:
+  # Auto-Clean 完成后自动触发
+  workflow_run:
+    workflows: ["Auto-Clean"]
+    types:
+      - completed
+  # 手动编译
+  workflow_dispatch:
+    inputs:
+      PACKAGE:
+        description: '手动调整插件包，多个请用\n符号隔开。'
+        required: false
+        type: string
+      TEST:
+        description: '仅输出配置文件，不编译固件。'
+        default: 'false'
+        required: false
+        type: boolean
+
+permissions: write-all
+
+jobs:
+  config:
+    name: ${{ matrix.CONFIG }}-${{ matrix.MT_MODE }}
+    strategy:
+      fail-fast: false
+      matrix:
+        CONFIG: [X86]
+        SOURCE: [immortalwrt/immortalwrt]
+        BRANCH: [master]
+        # 同时编译两种 MT 配置（严格互斥，由 Apply/VerifyMTMode 保证）
+        MT_MODE: [MT5700, MT5700M]
+
+    uses: ./.github/workflows/WRT-CORE.yml
+    with:
+      WRT_CONFIG: ${{ matrix.CONFIG }}
+      WRT_THEME: aurora
+      WRT_NAME: OWRT
+      WRT_SSID: OWRT
+      WRT_WORD: 12345678
+      WRT_IP: 192.168.10.1
+      WRT_PW: 无
+      WRT_REPO: https://github.com/${{ matrix.SOURCE }}.git
+      WRT_BRANCH: ${{ matrix.BRANCH }}
+      WRT_SOURCE: ${{ matrix.SOURCE }}
+      WRT_PACKAGE: ${{ inputs.PACKAGE }}
+      WRT_TEST: ${{ inputs.TEST }}
+      MT_MODE: ${{ matrix.MT_MODE }}

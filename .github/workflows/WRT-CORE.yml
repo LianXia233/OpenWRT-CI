@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-# 云编译公用核心（被 WRT-BUILD / H5000M-AUTO / AP3000M-AUTO 调用）
+# 云编译公用核心（被 WRT-BUILD / H5000M-MT-AUTO / AP3000M-MT-AUTO / X86-MT-AUTO 调用）
 name: WRT-CORE
 
 on:
@@ -114,6 +114,13 @@ jobs:
           echo "WRT_WIFI=wifi-yes" >> $GITHUB_ENV
           echo "WRT_KVER=none" >> $GITHUB_ENV
           echo "WRT_LIST=none" >> $GITHUB_ENV
+          # MT 模式标签：用于产物文件名 / Release Tag / 配置导出，区分双配置并行编译
+          if [ -z "${MT_MODE:-}" ]; then
+            echo "WRT_MT=NONE" >> $GITHUB_ENV
+          else
+            echo "WRT_MT=$MT_MODE" >> $GITHUB_ENV
+          fi
+          echo "当前机型=${WRT_CONFIG} MT_MODE=${MT_MODE:-NONE}"
 
       - name: Clone Code
         run: |
@@ -380,7 +387,8 @@ jobs:
         run: |
           cd ./wrt/ && mkdir ./upload/
 
-          cp -f ./.config ./upload/Config-"$WRT_CONFIG"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_DATE".txt
+          # 配置导出带 MT_MODE，便于双配置并行编译后区分
+          cp -f ./.config ./upload/Config-"$WRT_CONFIG"-"$WRT_MT"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_DATE".txt
 
           if [[ $WRT_TEST != 'true' ]]; then
             echo "WRT_KVER=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^kernel - \K[\d\.]+' {} \;)" >> $GITHUB_ENV
@@ -391,7 +399,8 @@ jobs:
             for FILE in $(find ./bin/targets/ -type f -iname "*$WRT_TARGET*") ; do
               EXT=$(basename $FILE | cut -d '.' -f 2-)
               NAME=$(basename $FILE | cut -d '.' -f 1 | grep -io "\($WRT_TARGET\).*")
-              NEW_FILE="$NAME"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_WIFI"-"$WRT_DATE"."$EXT"
+              # 文件名嵌入 MT_MODE：同一机型的 MT5700 / MT5700M 产物可并存于同一 Release
+              NEW_FILE="$NAME"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_MT"-"$WRT_WIFI"-"$WRT_DATE"."$EXT"
               mv -f $FILE ./upload/$NEW_FILE
             done
 
@@ -404,7 +413,8 @@ jobs:
         if: env.WRT_TEST != 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
+          # Tag 嵌入 MT_MODE，双配置并行编译时 Tag 可读且互不覆盖
+          tag_name: ${{env.WRT_CONFIG}}-${{env.WRT_MT}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
           files: ./wrt/upload/*.*
           body: |
             这是个平台固件包，内含多个设备！
@@ -418,6 +428,7 @@ jobs:
             提交：${{env.WRT_HASH}}
 
             配置：${{env.WRT_CONFIG}}
+            MT模式：${{env.WRT_MT}}
             平台：${{env.WRT_TARGET}}
 
             登录地址：${{env.WRT_IP}}
