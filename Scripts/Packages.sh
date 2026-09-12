@@ -78,25 +78,45 @@ UPDATE_PACKAGE "netwizard" "sirpdboy/luci-app-netwizard" "main"
 UPDATE_PACKAGE "openlist2" "sbwml/luci-app-openlist2" "main"
 UPDATE_PACKAGE "partexp" "sirpdboy/luci-app-partexp" "main"
 UPDATE_PACKAGE "qbittorrent" "sbwml/luci-app-qbittorrent" "master" "" "qt6base qt6tools rblibtorrent"
-UPDATE_PACKAGE "qmodem" "FUjr/QModem" "main"
 
-# QModem 包共用 version.mk 的 QMODEM_VERSION（当前上游发布 "3.4.0-rc.3"）。
-# OpenWrt 新版 apk 打包器不接受 `-rc.N`：版本串被拼成 "3.4.0-rc.3-rN" 后，
-# apk mkpkg 报 "package version is invalid"（Error 99），阻断整个固件构建
-# （sms-tool_q 今日三连发全灭即此因）。这里在克隆后把 X.Y.Z-rc.N 改写为
-# apk 合法的 X.Y.Z_rcN；QModem 各包源码均内嵌仓库 src/，无版本化下载依赖，
-# 改写只影响包版本元数据。若上游已改为合法版本，本规则自动跳过。
-FIX_QMODEM_VERSION() {
-	local VER_FILE="./QModem/version.mk"
-	[ -f "$VER_FILE" ] || { echo "qmodem: version.mk not found, skip"; return 0; }
-	if grep -qE '^QMODEM_VERSION:=[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' "$VER_FILE"; then
-		sed -i -E 's/^(QMODEM_VERSION:=)([0-9]+\.[0-9]+\.[0-9]+)-rc\.([0-9]+)$/\1\2_rc\3/' "$VER_FILE"
-		echo "qmodem: QMODEM_VERSION sanitized to $(grep -E '^QMODEM_VERSION:=' "$VER_FILE")"
-	else
-		echo "qmodem: QMODEM_VERSION already apk-valid, no change"
-	fi
-}
-FIX_QMODEM_VERSION
+# ===== MT 模式（MT_MODE）：独立插件配置层 =====
+# 允许值：空 / MT5700 / MT5700M；非法值直接终止。
+# 空  —— 不克隆、不折叠任何 MT 插件
+# MT5700  —— 仅 luci-app-mt5700（单包自含 Rust 后端）
+# MT5700M —— luci-app-mt5700m（需 FOLD）+ QModem feed（sms-tool_q / ubus-at-daemon）
+MT_MODE="${MT_MODE:-}"
+echo " "
+echo "===== MT_MODE=${MT_MODE:-（空）} ====="
+case "$MT_MODE" in
+	""|MT5700|MT5700M) ;;
+	*)
+		echo "::error::非法 MT_MODE='$MT_MODE'（仅允许空 / MT5700 / MT5700M），终止 CI"
+		exit 1
+		;;
+esac
+
+# QModem feed 仅 MT5700M 需要（提供 sms-tool_q / ubus-at-daemon）
+if [ "$MT_MODE" = "MT5700M" ]; then
+	UPDATE_PACKAGE "qmodem" "FUjr/QModem" "main"
+
+	# QModem 包共用 version.mk 的 QMODEM_VERSION（当前上游发布 "3.4.0-rc.3"）。
+	# OpenWrt 新版 apk 打包器不接受 `-rc.N`：版本串被拼成 "3.4.0-rc.3-rN" 后，
+	# apk mkpkg 报 "package version is invalid"（Error 99），阻断整个固件构建
+	# （sms-tool_q 今日三连发全灭即此因）。这里在克隆后把 X.Y.Z-rc.N 改写为
+	# apk 合法的 X.Y.Z_rcN；QModem 各包源码均内嵌仓库 src/，无版本化下载依赖，
+	# 改写只影响包版本元数据。若上游已改为合法版本，本规则自动跳过。
+	FIX_QMODEM_VERSION() {
+		local VER_FILE="./QModem/version.mk"
+		[ -f "$VER_FILE" ] || { echo "qmodem: version.mk not found, skip"; return 0; }
+		if grep -qE '^QMODEM_VERSION:=[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' "$VER_FILE"; then
+			sed -i -E 's/^(QMODEM_VERSION:=)([0-9]+\.[0-9]+\.[0-9]+)-rc\.([0-9]+)$/\1\2_rc\3/' "$VER_FILE"
+			echo "qmodem: QMODEM_VERSION sanitized to $(grep -E '^QMODEM_VERSION:=' "$VER_FILE")"
+		else
+			echo "qmodem: QMODEM_VERSION already apk-valid, no change"
+		fi
+	}
+	FIX_QMODEM_VERSION
+fi
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 UPDATE_PACKAGE "timecontrol" "sirpdboy/luci-app-timecontrol" "main"
 UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac sing-box luci-app-homeproxy luci-app-timewol luci-app-wolplus luci-app-wolultra"
@@ -105,6 +125,8 @@ UPDATE_PACKAGE "vnt" "lmq8267/luci-app-vnt" "main"
 # FAN789 插件及其他专用硬件插件
 UPDATE_PACKAGE "luci-app-h5000m-fancontrol" "FAN789/luci-app-h5000m-fancontrol" "main"
 UPDATE_PACKAGE "luci-app-airpi-fancontrol" "LianXia233/luci-app-airpi3000m-fancontrol" "main" "all" "luci-app-airpi-fancontrol kmod-airpi-gpio-fan"
+
+# ===== MT5700M（方案 A）：luci-app-mt5700m monorepo 折叠 =====
 # luci-app-mt5700m 是两层 monorepo：仓库根没有 Makefile，真正可编译的包是
 #   luci-app-mt5700m/luci-app-mt5700m            (LuCI 壳，含 Makefile)
 #   mt5700webui-openwrt-server/at-webserver/     (Rust AT 后端源码，无 OpenWrt Makefile)
@@ -118,7 +140,6 @@ UPDATE_PACKAGE "luci-app-airpi-fancontrol" "LianXia233/luci-app-airpi3000m-fanco
 #      编译 Rust 后端：mediatek → aarch64-unknown-linux-musl，x86 → x86_64-unknown-linux-musl；
 #   3. 把 www/5700、二进制、init.d 折叠进壳目录。
 # 注意：不能用 UPDATE_PACKAGE 的 "all" —— 壳目录与仓库根同名，cp -rf 会复制进自身。
-UPDATE_PACKAGE "luci-app-mt5700m" "LianXia233/luci-app-mt5700m" "main"
 FOLD_MT5700M() {
 	local SHELL_DIR="./luci-app-mt5700m"
 	local SERVER_DIR="./luci-app-mt5700m/mt5700webui-openwrt-server/at-webserver"
@@ -180,7 +201,66 @@ FOLD_MT5700M() {
 		echo "WARNING: luci-app-mt5700m: folded without at-webserver backend (TEST 模式)" >&2
 	fi
 }
-FOLD_MT5700M
+
+# ===== MT5700（方案 B）：luci-app-mt5700 单包（Rust 后端由包内 src/Makefile 编译）=====
+# 该包 Makefile 的 LUCI_DEPENDS 为空，不依赖 sms-tool_q / ubus-at-daemon。
+# 包内 src/Makefile 会在 OpenWrt 包编译阶段调用宿主 cargo 交叉编译 at-webserver-rust，
+# 因此这里需要预先装好 rustup + 目标 target，并把 cargo PATH / RUSTFLAGS
+# 写入 GITHUB_ENV，供后续 Compile Firmware 步骤使用。
+# 链接器必须用 rust-lld（自包含 musl），否则 rustc 会驱动宿主 cc，交叉编译失败。
+SETUP_RUST_FOR_MT5700() {
+	local RUST_TARGET="aarch64-unknown-linux-musl"
+	case "${WRT_TARGET:-${WRT_CONFIG:-}}" in
+		x86) RUST_TARGET="x86_64-unknown-linux-musl" ;;
+	esac
+
+	if [ "${WRT_TEST:-false}" = "true" ]; then
+		echo "luci-app-mt5700: TEST 模式，跳过 rustup 安装（仅生成配置）"
+		return 0
+	fi
+
+	if ! command -v rustup >/dev/null 2>&1; then
+		curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+			| sh -s -- -y --profile minimal --default-toolchain stable
+	fi
+	export PATH="$HOME/.cargo/bin:$PATH"
+	rustup target add "$RUST_TARGET" >/dev/null 2>&1 || true
+	echo "luci-app-mt5700: rustup ready, target=$RUST_TARGET"
+
+	# 让后续 GitHub Actions 步骤（尤其 Compile Firmware）能找到 cargo，
+	# 并带上与 MT5700M FOLD 相同的 rust-lld 交叉链接参数。
+	# PATH 只能通过 GITHUB_PATH 追加；不要写入 GITHUB_ENV 的 PATH（会整段覆盖）。
+	if [ -n "${GITHUB_PATH:-}" ]; then
+		echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+	fi
+	if [ -n "${GITHUB_ENV:-}" ]; then
+		echo "CARGO_HOME=$HOME/.cargo" >> "$GITHUB_ENV"
+		echo "RUSTUP_HOME=$HOME/.rustup" >> "$GITHUB_ENV"
+		echo "RUSTFLAGS=-C link-self-contained=yes -C linker=rust-lld" >> "$GITHUB_ENV"
+	fi
+}
+
+case "$MT_MODE" in
+	MT5700M)
+		echo "MT_MODE=MT5700M：克隆并折叠 luci-app-mt5700m"
+		UPDATE_PACKAGE "luci-app-mt5700m" "LianXia233/luci-app-mt5700m" "main"
+		FOLD_MT5700M
+		# 防污染：若 feeds/工作区意外出现 luci-app-mt5700，主动移除
+		rm -rf ./luci-app-mt5700
+		;;
+	MT5700)
+		echo "MT_MODE=MT5700：克隆 luci-app-mt5700（不安装 mt5700m / sms-tool_q / ubus-at-daemon）"
+		UPDATE_PACKAGE "luci-app-mt5700" "LianXia233/luci-app-mt5700" "main"
+		SETUP_RUST_FOR_MT5700
+		# 防污染：若工作区意外出现 mt5700m 相关目录，主动移除
+		rm -rf ./luci-app-mt5700m ./luci-app-mt5700m_shell
+		;;
+	*)
+		echo "MT_MODE 为空：跳过所有 MT 插件克隆"
+		rm -rf ./luci-app-mt5700 ./luci-app-mt5700m ./luci-app-mt5700m_shell
+		;;
+esac
+
 UPDATE_PACKAGE "luci-app-h5000m-netmode" "FAN789/luci-app-h5000m-netmode" "main"
 
 #安装 Honk 预编译 APK（避免从源码编译 Rust/eBPF 导致超过 6 小时上限）
