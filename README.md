@@ -124,7 +124,7 @@ OpenWRT-CI/
 > * 🔗 **主页链接**：[https://github.com/FAN789](https://github.com/FAN789)
 > * 📦 **5G 模组控制**：[luci-app-mt5700m](https://github.com/LianXia233/luci-app-mt5700m)
 > * ❄️ **智能风扇温控**：[luci-app-h5000m-fancontrol](https://github.com/FAN789/luci-app-h5000m-fancontrol)
-> * 🔀 **网络模式切换**：[luci-app-h5000m-netmode](https://github.com/FAN789/luci-app-h5000m-netmode)
+> * 🔀 **网络模式切换**：[luci-app-h5000m-netmode](https://github.com/LianXia233/luci-app-h5000m-netmode)
 
 ---
 
