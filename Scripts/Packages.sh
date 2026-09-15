@@ -121,23 +121,68 @@ UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 UPDATE_PACKAGE "timecontrol" "sirpdboy/luci-app-timecontrol" "main"
 UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac sing-box luci-app-homeproxy luci-app-timewol luci-app-wolplus luci-app-wolultra"
 
-# luci-app-homeproxy（viking feed）20260914-r2 起新增
-# LUCI_EXTRA_DEPENDS:=sing-box (>=1.15.0)，而同一 feed 的 sing-box 仅有
-# 1.15.0_alpha3 预发布版：apk 版本比较中 _alpha3 属 pre-release 后缀，
-# 小于正式版 1.15.0，依赖不可满足 → package/install Error 3，
-# 构建在 world 阶段整体失败（2026-09-15 H5000M / X86 / AP3000M 全灭即此因）。
-# 这里在克隆后移除 EXTRA_DEPENDS 的版本下限（基础依赖 +sing-box 保留），
-# 上游改为无版本约束或发布可用的正式版 sing-box 后，本规则自动跳过。
+# luci-app-homeproxy（viking feed）20260914-r2 起把 LUCI_EXTRA_DEPENDS 提升为
+#   sing-box (>=1.15.0)
+# 但同一 feed 的 sing-box 仅有 1.15.0_alpha3；apk 版本比较中 `_alpha3` 属
+# pre-release 后缀（_alpha 排在「无后缀」之前），故 1.15.0_alpha3 不满足 >=1.15.0：
+#   ERROR: unable to select packages:
+#     sing-box-1.15.0_alpha3-r1:
+#       breaks: luci-app-homeproxy-20260914-r2[sing-box>=1.15.0]
+# 构建在 world 阶段的 package/install 整体失败（2026-09-15 三机型全灭即此因）。
+#
+# 不能用「删掉版本约束」的写法：OpenWrt 的 apk 打包器 include/package-pack.mk
+# 要求 EXTRA_DEPENDS 每一项都必须是「包名 + 空格 + 版本约束」，去掉约束会直接报
+#   *** "Extra dependencies must have version constraints. sing-box seems to be unversioned."
+#
+# 因此这里把约束下限对齐为同一 feed 中 sing-box 的实际 PKG_VERSION（动态读取，
+# 上游升版/降版均自洽）：约束合法，且一定被实际构建出的版本满足。
+# 若上游要求高于 feed 实际版本，本规则以降级方式放行——以「可构建」优先，
+# sing-box 实际能力由 feed 版本决定。上游发布正式版 1.15.0 后，规则自动改写为
+# 相同下限，无需人工介入（此依赖也不会再阻塞构建）。
 FIX_HOMEPROXY_SINGBOX() {
-	local MAKEFILE
-	MAKEFILE=$(find . -maxdepth 3 -type f -path "*luci-app-homeproxy/Makefile" 2>/dev/null | head -1)
-	[ -n "$MAKEFILE" ] || { echo "homeproxy: Makefile not found, skip"; return 0; }
-	if grep -qE '^LUCI_EXTRA_DEPENDS:=sing-box \(>=[0-9][0-9.]*\)' "$MAKEFILE"; then
-		sed -i -E 's/^(LUCI_EXTRA_DEPENDS:=sing-box) \(>=[0-9][0-9.]*\)/\1/' "$MAKEFILE"
-		echo "homeproxy: sing-box version constraint removed from LUCI_EXTRA_DEPENDS ($MAKEFILE)"
-	else
-		echo "homeproxy: no version-constrained sing-box EXTRA_DEPENDS, no change"
+	local HP_MK SBOX_MK SBOX_VER CUR_VER CUR_MAIN SBOX_MAIN NEEDS_ADJUST
+	HP_MK=$(find . -maxdepth 3 -type f -path "*luci-app-homeproxy/Makefile" 2>/dev/null | head -1)
+	[ -n "$HP_MK" ] || { echo "homeproxy: Makefile not found, skip"; return 0; }
+
+	if ! grep -qE '^LUCI_EXTRA_DEPENDS:=sing-box \(>=' "$HP_MK"; then
+		echo "homeproxy: no '>= sing-box' EXTRA_DEPENDS constraint, no change"
+		return 0
 	fi
+
+	# 约束下限取同一 feed 内 sing-box 的实际版本
+	SBOX_MK=$(find . -maxdepth 3 -type f -path "*/sing-box/Makefile" 2>/dev/null | head -1)
+	if [ -n "$SBOX_MK" ]; then
+		SBOX_VER=$(grep -m1 -oP '^PKG_VERSION:=\K.*' "$SBOX_MK" | tr -d '[:space:]')
+	fi
+	# 版本串白名单：只允许数字/字母/点/下划线/连字符，避免脏数据进入 sed 表达式
+	case "$SBOX_VER" in
+		""|*[!0-9A-Za-z._-]*) SBOX_VER="1.15.0_alpha3" ;;
+	esac
+
+	CUR_VER=$(grep -m1 -oP '^LUCI_EXTRA_DEPENDS:=sing-box \(>=\K[^)]*' "$HP_MK")
+	CUR_MAIN=${CUR_VER%%[!0-9.]*}
+	SBOX_MAIN=${SBOX_VER%%[!0-9.]*}
+
+	# 判定「约束下限在 apk 语义下高于 feed 实际版本」——只有这种情况才需要下调，
+	# 其余一律不动，避免把已满足的约束收紧、或把语义写反。
+	NEEDS_ADJUST=""
+	if [ "$CUR_MAIN" = "$SBOX_MAIN" ]; then
+		# 主版本段相同：feed 版本带 pre-release 后缀（_alpha/_beta/_rc 等）而约束
+		# 要求正式版时，apk 判定为不满足（pre-release < 正式版）。
+		case "$SBOX_VER" in
+			*_*) case "$CUR_VER" in *_*) ;; *) NEEDS_ADJUST=1 ;; esac ;;
+		esac
+	elif [ "$(printf '%s\n%s\n' "$CUR_MAIN" "$SBOX_MAIN" | sort -V | tail -1)" = "$CUR_MAIN" ]; then
+		NEEDS_ADJUST=1
+	fi
+
+	if [ -z "$NEEDS_ADJUST" ]; then
+		echo "homeproxy: constraint (>= $CUR_VER) already satisfiable by feed sing-box $SBOX_VER, no change"
+		return 0
+	fi
+
+	sed -i -E "s/^(LUCI_EXTRA_DEPENDS:=sing-box \(>=)[^)]*(\))/\1${SBOX_VER}\2/" "$HP_MK"
+	echo "homeproxy: sing-box constraint (>= ${CUR_VER}) -> (>= ${SBOX_VER}) to match feed version"
 }
 FIX_HOMEPROXY_SINGBOX
 UPDATE_PACKAGE "vnt" "lmq8267/luci-app-vnt" "main"
