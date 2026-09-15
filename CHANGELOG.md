@@ -1,4 +1,31 @@
 # 更新日志
+## [2026-09-15] 修复 luci-app-homeproxy sing-box 版本约束导致的依赖解析失败
+
+### 故障现象
+
+- 2026-09-15 07:43 定时触发的 `H5000M-MT-AUTO`（两个 job）与 `X86-MT-AUTO`（两个 job）全部在 `package/install` 阶段失败（Error 3），`make world` 整体终止；`AP3000M-MT-AUTO` 同配置预计同样失败。
+- 错误签名：
+  ```
+  ERROR: unable to select packages:
+    sing-box-1.15.0_alpha3-r1:
+      breaks: luci-app-homeproxy-20260914-r2[sing-box>=1.15.0]
+      satisfies: world[sing-box]
+  ```
+
+### 根因
+
+- 上游 `VIKINGYFY/packages` 的 `luci-app-homeproxy` 升级到 `20260914-r2`，新增 `LUCI_EXTRA_DEPENDS:=sing-box (>=1.15.0)`；
+- 同一 feed 的 `sing-box` 仅有 `1.15.0_alpha3` 预发布版，apk 版本比较规则中 `_alpha3` 属 pre-release 后缀，小于正式版 `1.15.0`，依赖不可满足；
+- `Config/GENERAL.txt` 对全机型启用 homeproxy，因此三个机型工作流全部受影响。上一日（09-13）编译成功是因为当时上游还是无版本约束的旧版。
+
+### 修复
+
+- `Scripts/Packages.sh` — 新增 `FIX_HOMEPROXY_SINGBOX`（模式与 `FIX_QMODEM_VERSION` 一致）：在克隆 viking feed 后定位 `luci-app-homeproxy/Makefile`，把 `LUCI_EXTRA_DEPENDS:=sing-box (>=X.Y.Z)` 改写为无版本约束的 `LUCI_EXTRA_DEPENDS:=sing-box`（基础依赖 `+sing-box` 保留，含 1.15.0_alpha3 在内的已构建 sing-box 均可满足）；函数幂等，上游改为无版本约束或 sing-box 发布可用正式版后自动跳过。已用上游真实 Makefile 实测改写生效并通过 `bash -n` 语法检查。
+
+### 变更文件
+
+- `Scripts/Packages.sh` — 新增 `FIX_HOMEPROXY_SINGBOX` 修复函数并在 `UPDATE_PACKAGE "viking"` 之后调用
+
 ## [2026-09-13] 云编译双 MT 配置并行、工作流重命名与产物区分
 
 ### 变更（云编译）

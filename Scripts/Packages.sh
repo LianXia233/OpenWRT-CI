@@ -120,6 +120,26 @@ fi
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 UPDATE_PACKAGE "timecontrol" "sirpdboy/luci-app-timecontrol" "main"
 UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac sing-box luci-app-homeproxy luci-app-timewol luci-app-wolplus luci-app-wolultra"
+
+# luci-app-homeproxy（viking feed）20260914-r2 起新增
+# LUCI_EXTRA_DEPENDS:=sing-box (>=1.15.0)，而同一 feed 的 sing-box 仅有
+# 1.15.0_alpha3 预发布版：apk 版本比较中 _alpha3 属 pre-release 后缀，
+# 小于正式版 1.15.0，依赖不可满足 → package/install Error 3，
+# 构建在 world 阶段整体失败（2026-09-15 H5000M / X86 / AP3000M 全灭即此因）。
+# 这里在克隆后移除 EXTRA_DEPENDS 的版本下限（基础依赖 +sing-box 保留），
+# 上游改为无版本约束或发布可用的正式版 sing-box 后，本规则自动跳过。
+FIX_HOMEPROXY_SINGBOX() {
+	local MAKEFILE
+	MAKEFILE=$(find . -maxdepth 3 -type f -path "*luci-app-homeproxy/Makefile" 2>/dev/null | head -1)
+	[ -n "$MAKEFILE" ] || { echo "homeproxy: Makefile not found, skip"; return 0; }
+	if grep -qE '^LUCI_EXTRA_DEPENDS:=sing-box \(>=[0-9][0-9.]*\)' "$MAKEFILE"; then
+		sed -i -E 's/^(LUCI_EXTRA_DEPENDS:=sing-box) \(>=[0-9][0-9.]*\)/\1/' "$MAKEFILE"
+		echo "homeproxy: sing-box version constraint removed from LUCI_EXTRA_DEPENDS ($MAKEFILE)"
+	else
+		echo "homeproxy: no version-constrained sing-box EXTRA_DEPENDS, no change"
+	fi
+}
+FIX_HOMEPROXY_SINGBOX
 UPDATE_PACKAGE "vnt" "lmq8267/luci-app-vnt" "main"
 
 # FAN789 插件及其他专用硬件插件
