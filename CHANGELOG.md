@@ -1,10 +1,10 @@
 # 更新日志
-## [2026-09-15] 修复 luci-app-homeproxy sing-box 版本约束导致的依赖解析失败
+## [2026-09-15] 修复 luci-app-homeproxy 的 sing-box 版本约束导致的构建失败
 
 ### 故障现象
 
-- 2026-09-15 07:43 定时触发的 `H5000M-MT-AUTO`（两个 job）与 `X86-MT-AUTO`（两个 job）全部在 `package/install` 阶段失败（Error 3），`make world` 整体终止；`AP3000M-MT-AUTO` 同配置预计同样失败。
-- 错误签名：
+- 2026-09-15 定时触发的 `H5000M-MT-AUTO`、`X86-MT-AUTO`、`AP3000M-MT-AUTO` 全部失败，`Compile Firmware` 步骤终止，`make world` 整体中断。09-13 同样配置构建成功。
+- 第一层错误签名（`package/install` 阶段，Error 3）：
   ```
   ERROR: unable to select packages:
     sing-box-1.15.0_alpha3-r1:
@@ -14,13 +14,30 @@
 
 ### 根因
 
-- 上游 `VIKINGYFY/packages` 的 `luci-app-homeproxy` 升级到 `20260914-r2`，新增 `LUCI_EXTRA_DEPENDS:=sing-box (>=1.15.0)`；
-- 同一 feed 的 `sing-box` 仅有 `1.15.0_alpha3` 预发布版，apk 版本比较规则中 `_alpha3` 属 pre-release 后缀，小于正式版 `1.15.0`，依赖不可满足；
-- `Config/GENERAL.txt` 对全机型启用 homeproxy，因此三个机型工作流全部受影响。上一日（09-13）编译成功是因为当时上游还是无版本约束的旧版。
+1. 上游 `VIKINGYFY/packages` 的 `luci-app-homeproxy` 升级到 `20260914-r2`，新增 `LUCI_EXTRA_DEPENDS:=sing-box (>=1.15.0)`。
+2. 同一 feed 的 `sing-box` 为 `1.15.0_alpha3`。apk 版本比较规则中 `_alpha3` 属 pre-release 后缀，排在「无后缀」之前，故 `1.15.0_alpha3 < 1.15.0`，依赖不可满足。
+3. 上游 `SagerNet/sing-box` 当前最新稳定版是 v1.14.1，1.15.0 系列仍为 alpha（alpha.4 于 2026-09-15 发布），**不存在**可升级到的 1.15.0 正式版，因此只能调整约束而非升级 sing-box。
+4. `Config/GENERAL.txt` 对全机型启用 homeproxy，故三个机型工作流同时受影响。
+
+### 关键约束（决定修复方式）
+
+- 首次尝试「删掉版本约束」不可行：OpenWrt 的 apk 打包器 `include/package-pack.mk` 要求 `EXTRA_DEPENDS` 每一项必须是「包名 + 空格 + 版本约束」，无约束会直接报错并终止：
+  ```
+  luci.mk:398: *** "Extra dependencies must have version constraints. sing-box seems to be unversioned.".  Stop.
+  ```
 
 ### 修复
 
-- `Scripts/Packages.sh` — 新增 `FIX_HOMEPROXY_SINGBOX`（模式与 `FIX_QMODEM_VERSION` 一致）：在克隆 viking feed 后定位 `luci-app-homeproxy/Makefile`，把 `LUCI_EXTRA_DEPENDS:=sing-box (>=X.Y.Z)` 改写为无版本约束的 `LUCI_EXTRA_DEPENDS:=sing-box`（基础依赖 `+sing-box` 保留，含 1.15.0_alpha3 在内的已构建 sing-box 均可满足）；函数幂等，上游改为无版本约束或 sing-box 发布可用正式版后自动跳过。已用上游真实 Makefile 实测改写生效并通过 `bash -n` 语法检查。
+- `Scripts/Packages.sh` — 新增 `FIX_HOMEPROXY_SINGBOX`（模式与既有 `FIX_QMODEM_VERSION` 一致），在克隆 viking feed 之后执行：
+  1. 读取同一 feed 内 `sing-box/Makefile` 的实际 `PKG_VERSION`；
+  2. 仅当约束下限在 apk 语义下**高于**该实际版本时才改写 `LUCI_EXTRA_DEPENDS` 的 sing-box 版本下限（主版本段相同但 feed 为 pre-release、或 feed 主版本段更高时不动，避免收紧已满足的约束或写反语义）；
+  3. 版本串做字符白名单校验（`[0-9A-Za-z._-]`），防止脏数据进入 sed 表达式；
+  4. 幂等，上游发布 1.15.0 正式版或调整约束后自动跳过。
+
+### 验证
+
+- 用上游真实 `luci-app-homeproxy/Makefile` 与真实 `sing-box` 版本，模拟 CI 目录结构实测 6 种边界场景：需下调（改写）、约束已满足（不动）、约束等于 feed 版本（不动）、feed 为正式版（不动）、无约束（跳过）、feed 版本更高（不动）——行为均符合预期。
+- `bash -n` 语法检查通过；首轮修复后重跑构建，`unable to select packages` 已消失，失败点前移至后续的 `luci.mk` 校验，据此完成第二轮修正。
 
 ### 变更文件
 
