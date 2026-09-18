@@ -1,4 +1,32 @@
 # 更新日志
+## [2026-09-18] 加固 Compile Firmware 失败注解：优先上报 apk 安装期根因
+
+### 问题
+
+`WRT-CORE.yml` 的失败诊断正则原先只匹配：
+
+```
+^(ERROR: |make(\[N\])?: \*\*\* ).*(failed to build|Error N|too big)
+```
+
+apk 安装期错误行（`ERROR: <pkg>-<ver>: trying to overwrite ...`、`ERROR: unable to select packages:`、`package version is invalid` 等）**不含**上述关键字，因此 `##[error]` 注解里只剩 make 级联行，真实根因不可见——X86-MT-AUTO #10/#11 即此情形。
+
+### 变更
+
+`Compile Firmware` 失败诊断改为**根因优先**分层提取，再以 `::error::` 写入 Annotations：
+
+1. **apk/opkg 安装期根因**：`trying to overwrite` / `unable to select packages` / `package version is invalid` / `breaks:` / `conflicts with` / `installed .* is newer`
+2. **包编译失败 / 镜像过大**（保留原关键字）
+3. **make 级联**（`*** ... Error N / Stop`）
+4. 以上皆无时，放宽到任意 `ERROR:` 行
+
+层内 `sort -u` 去重，层间用 `awk '!seen[$0]++'` 保留首次出现顺序；上下文输出同步纳入 apk 关键字。用当日真实失败日志样例回放：旧正则只打出 `failed to build` + make 级联；新逻辑首行即为 `trying to overwrite` 冲突包。
+
+### 变更文件
+
+- `.github/workflows/WRT-CORE.yml` — Compile Firmware 失败注解分层提取
+- `CHANGELOG.md` — 文档同步
+
 ## [2026-09-18] 修复 MT5700M 构建失败：QMI WWAN 驱动争抢 rootfs 同名 `.ko`
 
 ### 现象
