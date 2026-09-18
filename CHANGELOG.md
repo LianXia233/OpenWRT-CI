@@ -1,4 +1,41 @@
 # 更新日志
+## [2026-09-18] H5000M / AP3000M 源码切换至 VIKINGYFY/immortalwrt（owrt 分支）
+
+### 变更
+
+- `H5000M-MT-AUTO` / `AP3000M-MT-AUTO` 编译矩阵的 `SOURCE` 由 `immortalwrt/immortalwrt` 切换为 [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt)，`BRANCH` 由 `master` 调整为 `owrt`。
+- 分支可用性已核对：该仓库仅有 `main` / `owrt` / `test` 三个分支，**无 `master`**；`owrt` 当前指向 `4e21fd0`。
+- 影响面严格限定为上述两个机型的自动编译。`X86-MT-AUTO`（`immortalwrt/immortalwrt` + `master`）、手动入口 `WRT-BUILD` 的默认值、`Config/` 与 `Scripts/` 均保持不动。
+
+### 上游兼容性核对（实测）
+
+- 内核：两仓库 `target/linux/mediatek/Makefile` 均为 `KERNEL_PATCHVER:=6.18`，`kernel-6.18` 均为 `6.18.44`，且 `LINUX_KERNEL_HASH-6.18.44` 完全相同。
+- `mt76`：两仓库 `PKG_SOURCE_URL` 均为 `openwrt/mt76`，`PKG_SOURCE_DATE` 均为 `2026-09-01`。
+- 结论：本次切换当下不引入内核或无线驱动层面的差异，`Scripts/` 中既有补丁与修复的适用性风险较低；但 `owrt` 为分支形态，后续可能独立演进，需在首次构建后复核。
+
+### 连带修复：Auto-Clean 的机型键提取
+
+- **问题**：`Auto-Clean` 的 `keep_latest_per_device` 模式原按 Tag 中的字面量 `-immortalwrt-` 切分以取得机型名。源码段随本次切换变为 `VIKINGYFY` 后该切分失配，`a[1]` 退化为整条 Tag，使每个 Release 都被视为独立机型——**勾选「保留每机型最新」时不会删除任何 Release**，两个机型的旧 Release 会持续堆积。
+- **修复**：改为按 Tag 末尾固定的日期后缀（`YY.MM.DD-HH.MM.SS`，即 `WRT-CORE` 生成的 `WRT_DATE`）定位，再去掉末尾「源码-分支」两段，从而不再依赖源码组织名。日期段不匹配的 Tag 退化为整条作键，语义上只会多保留、不会误删。
+- **验证**：以 10 条真实形态 Tag（含切换前的 `immortalwrt/master`、切换后的 `VIKINGYFY/owrt`，以及早期无 MT 段的 `H5000M-WIFI-YES-immortalwrt-master`）实测——旧逻辑保留 9 条（回归确认），新逻辑保留 7 条，每个「机型-MT模式」恰保留 1 条，且新旧源码的 Tag 能被正确归入同一机型键。
+
+### 连带影响（命名与缓存）
+
+- `WRT-CORE` 以 `WRT_SOURCE` 的组织名生成 `WRT_INFO`，故 Release Tag、固件文件名、导出的配置文件名与 Actions 缓存键中的源码段由 `immortalwrt` 变为 `VIKINGYFY`：
+  - `H5000M-WIFI-YES-MT5700-immortalwrt-master-…` → `H5000M-WIFI-YES-MT5700-VIKINGYFY-owrt-…`
+- 缓存键同时包含分支名，`owrt` 与既有 `master` 缓存不共享，**切换后首次构建为冷启动**，耗时将高于稳态。
+
+### 文档
+
+- `README.md`：副标题、「支持的编译配置」新增源码对照说明、鸣谢源码上游、H5000M「固件底包」条目均改为按机型分别标注源码；AP3000M 说明中「ImmortalWrt 主线 mt76 开源驱动」改为「ImmortalWrt 系 mt76 开源驱动」（该机型已不取主线）。
+
+### 变更文件
+
+- `.github/workflows/H5000M-MT-AUTO.yml` — `SOURCE` / `BRANCH` 矩阵
+- `.github/workflows/AP3000M-MT-AUTO.yml` — `SOURCE` / `BRANCH` 矩阵
+- `.github/workflows/Auto-Clean.yml` — `keep_latest` 机型键提取逻辑
+- `README.md`、`CHANGELOG.md` — 文档同步
+
 ## [2026-09-15] 修复 luci-app-homeproxy 的 sing-box 版本约束导致的构建失败
 
 ### 故障现象
