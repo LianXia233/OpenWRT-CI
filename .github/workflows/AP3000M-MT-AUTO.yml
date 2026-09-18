@@ -31,8 +31,9 @@ jobs:
       fail-fast: false
       matrix:
         CONFIG: [AP3000M]
-        SOURCE: [immortalwrt/immortalwrt]
-        BRANCH: [master]
+        # 本机型源码取自 VIKINGYFY/immortalwrt 的 owrt 分支（该仓库无 master 分支）
+        SOURCE: [VIKINGYFY/immortalwrt]
+        BRANCH: [owrt]
         # 同时编译两种 MT 配置（严格互斥，由 Apply/VerifyMTMode 保证）
         MT_MODE: [MT5700, MT5700M]
 

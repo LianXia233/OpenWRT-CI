@@ -2,7 +2,7 @@
 
 # 🚀 H5000M / AP3000M / X86_64 定制固件说明书
 
-*基于 ImmortalWrt 主线源码，为 Hiveton H5000M 5G CPE、Airpi AP3000M 与 X86_64 设备提供的定制化编译配置*
+*基于 ImmortalWrt 源码，为 Hiveton H5000M 5G CPE、Airpi AP3000M 与 X86_64 设备提供的定制化编译配置（H5000M / AP3000M 取自 [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支，X86_64 取自 ImmortalWrt 主线 `master`）*
 
 </div>
 
@@ -80,9 +80,11 @@ OpenWRT-CI/
 | `AP3000M` | MediaTek Filogic | Airpi AP3000M (MT7981B) | ✅ 开启 |
 | `X86` | x86_64 | 标准 X86_64 设备 | 不适用 |
 
+> **源码对照**：`H5000M-WIFI-YES` 与 `AP3000M` 的自动编译取自 [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支；`X86`（`X86-MT-AUTO`）取自 [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) 的 `master` 分支。手动入口 `WRT-BUILD` 的默认值仍为 `immortalwrt/immortalwrt` + `master`，可在下拉框中按需切换为 `VIKINGYFY/immortalwrt`。
+>
 > `X86` 配置生成 64 位 x86 镜像，包含 ISO、EFI、GRUB 与 VMDK 格式，可用于支持 x86_64 的标准 BIOS 或 UEFI 设备。32 位 x86 设备不适用该配置。
 >
-> **AP3000M 特殊说明**：AP3000M (MT7981B, eMMC 存储无 SPI-NOR) 使用 ImmortalWrt 主线 mt76 开源驱动。设备出厂时 `mmcblk0p2` factory 分区为空，导致 NVMEM 框架读取 EEPROM 失败、Wi-Fi 无法初始化。本项目内置闭源固件备份的 iPAiLNA EEPROM 模板（已校准，Tx-Power 28-29dBm），编译时通过 `Handles.sh` 注入 `files/` 目录，首次启动时由 `99-ap3000m-eeprom` 脚本自动从 eth0 读取设备 MAC、写入 factory 分区并修正 radio1 为 5GHz 模式。
+> **AP3000M 特殊说明**：AP3000M (MT7981B, eMMC 存储无 SPI-NOR) 使用 ImmortalWrt 系 mt76 开源驱动。设备出厂时 `mmcblk0p2` factory 分区为空，导致 NVMEM 框架读取 EEPROM 失败、Wi-Fi 无法初始化。本项目内置闭源固件备份的 iPAiLNA EEPROM 模板（已校准，Tx-Power 28-29dBm），编译时通过 `Handles.sh` 注入 `files/` 目录，首次启动时由 `99-ap3000m-eeprom` 脚本自动从 eth0 读取设备 MAC、写入 factory 分区并修正 radio1 为 5GHz 模式。
 
 <br>
 
@@ -108,10 +110,11 @@ OpenWRT-CI/
 
 本固件的高效自动化编译、底层系统的稳定性以及对特定 5G 模组的完美适配，离不开开源社区开发者的无私奉献。在此特别感谢以下作者及其开源项目：
 
-> **🐧 源码上游：[ImmortalWrt](https://github.com/immortalwrt/immortalwrt/)**
+> **🐧 源码上游：[ImmortalWrt](https://github.com/immortalwrt/immortalwrt/) / [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt)**
 >
-> 感谢 ImmortalWrt 团队提供的最新主线源码。其卓越的路由性能和丰富的本地化特性，为固件的开发提供了无比坚实的底层源码基础。
-> * 🔗 **项目链接**：[immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt/)
+> 感谢 ImmortalWrt 团队提供的源码。其卓越的路由性能和丰富的本地化特性，为固件的开发提供了无比坚实的底层源码基础。
+> * 🔗 **ImmortalWrt 主线（X86 机型）**：[immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt/)（`master`）
+> * 🔗 **H5000M / AP3000M 机型**：[VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt)（`owrt`）
 
 > **👤 基础底包、插件优化与编译框架：[VIKINGYFY](https://github.com/VIKINGYFY)**
 >
@@ -134,7 +137,7 @@ OpenWRT-CI/
 
 | 核心特征 | 详情描述 |
 | :--- | :--- |
-| 🏗️ **固件底包** | **基于 ImmortalWrt 主线最新源码构建**。内核层面已开启硬件加解密优化（`kmod-cryptodev`, `kmod-tls`），为科学分流和安全组网提供底层加速。 |
+| 🏗️ **固件底包** | **基于 [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支构建**。内核层面已开启硬件加解密优化（`kmod-cryptodev`, `kmod-tls`），为科学分流和安全组网提供底层加速。 |
 | 🖥️ **基础架构** | 采用 **联发科 (MediaTek) Filogic** 平台 (如 MT7986 系列)，具备强大的网络数据转发能力与 Wi-Fi 7 性能。 |
 | 📶 **核心模组** | 深度集成 **MT5700M 5G 模组**，支持直接插卡上网，实现 5G 高速蜂窝接入。 |
 | ❄️ **散热设计** | 针对 5G 模组高负载下的发热特性，设备配备了**主动散热风扇**，专为高负载网络转化设计，确保极限性能下不降频。 |

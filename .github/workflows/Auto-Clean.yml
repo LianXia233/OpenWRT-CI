@@ -49,12 +49,24 @@ jobs:
           TOTAL=$(wc -l < "${ALL}")
           echo "Total non-draft releases: ${TOTAL}"
 
-          # 2. 若开启 keep_latest，计算每个机型需保留的最新 Release id（机型名 = tag 中 -immortalwrt- 之前的部分）
+          # 2. 若开启 keep_latest，计算每个机型需保留的最新 Release id
+          #    机型键 = Tag 去掉末尾「源码-分支-日期」三段（Tag 形如 <配置>-<MT模式>-<源码>-<分支>-<日期>）。
+          #    日期段格式固定为 YY.MM.DD-HH.MM.SS（WRT-CORE 生成的 WRT_DATE），据此定位后缀，
+          #    因此不再依赖源码组织名（immortalwrt / VIKINGYFY 等），源码切换后仍能正确归组；
+          #    日期段不匹配（非本流水线产物）时退化为整条 Tag 作键，只会多保留、不会误删。
           KEEP_IDS=""
           if [ "${KEEP_LATEST}" = "true" ]; then
-            # ALL 已按 published_at 降序排列，awk 保留每个机型首次出现的（即最新）Release id
-            KEEP_IDS=$(awk -F'\t' '{split($2,a,"-immortalwrt-"); print a[1]"\t"$1}' "${ALL}" \
-              | awk -F'\t' '!seen[$1]++{print $2}')
+            # ALL 已按 published_at 降序排列，awk 保留每个机型键首次出现的（即最新）Release id
+            KEEP_IDS=$(awk -F'\t' '
+              {
+                t = $2
+                drop = sub(/-[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]-[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9]$/, "", t) ? 2 : 0
+                n = split(t, p, "-")
+                if (n - drop < 1) { print t "\t" $1; next }
+                k = p[1]
+                for (i = 2; i <= n - drop; i++) k = k "-" p[i]
+                print k "\t" $1
+              }' "${ALL}" | awk -F'\t' '!seen[$1]++{print $2}')
             echo "Keep-latest mode: keeping $(echo "${KEEP_IDS}" | wc -w | tr -d ' ') release(s)."
           fi
 
