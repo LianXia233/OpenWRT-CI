@@ -354,16 +354,48 @@ jobs:
 
           if [ "$RC" -ne 0 ]; then
             echo "::group::编译失败诊断"
-            grep -E "^(ERROR: |make(\\[[0-9]+\\])?: \*\*\* ).*(failed to build|Error [0-9]|too big)" build.log \
-              | sort -u | head -n 10 | while IFS= read -r LINE; do echo "::error::$LINE"; done
 
-            if ! grep -qE "^(ERROR: |make(\\[[0-9]+\\])?: \*\*\* )" build.log; then
+            # 注解提取按「根因优先」分层：旧正则要求 ERROR 行同时含
+            # failed to build / Error N / too big，漏掉 apk 安装期冲突与依赖失败
+            #（如 trying to overwrite / unable to select packages / package version
+            # is invalid），注解里只剩 make 级联行，真实原因不可见。
+            # 分层顺序：apk 根因 → 包编译失败 → make 级联 → ERROR 兜底。
+            # awk '!seen[$0]++' 保留首次出现顺序，层内 sort -u 去重。
+            ANN=$(mktemp)
+            : > "$ANN"
+
+            # 第 1 层：apk/opkg 安装期根因（文件归属冲突、依赖解析、版本非法）
+            grep -E "ERROR: .*(trying to overwrite|unable to select packages|package version is invalid|breaks:|conflicts with|installed .* is newer)" build.log \
+              | sort -u | head -n 6 >> "$ANN" || true
+
+            # 第 2 层：包编译失败 / 镜像过大（兼容旧关键字）
+            grep -E "^(ERROR: |make(\\[[0-9]+\\])?: \*\*\* ).*(failed to build|Error [0-9]|too big)" build.log \
+              | sort -u | head -n 4 >> "$ANN" || true
+            grep -E "^ERROR: .*(failed to build|too big)" build.log \
+              | sort -u | head -n 4 >> "$ANN" || true
+
+            # 第 3 层：make 级联（根因缺失时的兜底）
+            grep -E "^make(\\[[0-9]+\\])?: \*\*\* .*(Error [0-9]|Stop)" build.log \
+              | sort -u | head -n 4 >> "$ANN" || true
+
+            # 第 4 层：仍无命中时，放宽到任意 ERROR: 行
+            if [ ! -s "$ANN" ]; then
+              grep -E "^ERROR: " build.log | sort -u | head -n 8 >> "$ANN" || true
+            fi
+
+            if [ ! -s "$ANN" ]; then
               echo "::error::未匹配到包级错误行，输出日志末尾 30 行"
               tail -n 30 build.log
             else
-              echo "--- 编译错误上下文（C/C++ / 链接 / 镜像）---"
-              grep -nE "error:|Error [0-9]+|collect2:|undefined reference|too big" build.log | head -n 25
+              awk '!seen[$0]++' "$ANN" | head -n 12 | while IFS= read -r LINE; do
+                [ -n "$LINE" ] && echo "::error::$LINE"
+              done
+              echo "--- 编译错误上下文（C/C++ / 链接 / apk 安装）---"
+              grep -nE "error:|Error [0-9]+|collect2:|undefined reference|too big|trying to overwrite|unable to select packages|package version is invalid|breaks:" build.log \
+                | head -n 30
             fi
+
+            rm -f "$ANN"
             echo "::endgroup::"
           fi
 
