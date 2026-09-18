@@ -1,4 +1,69 @@
 # 更新日志
+## [2026-09-18] 修复 MT5700M 构建失败：QMI WWAN 驱动争抢 rootfs 同名 `.ko`
+
+### 现象
+
+`H5000M-MT-AUTO` / `AP3000M-MT-AUTO` / `X86-MT-AUTO` 三个工作流在同一轮（Run #10）中**全部失败**，且失败面严格限定为 `MT5700M` 变体——三个 `MT5700` 变体均编译成功。报错步骤均为第 16 步 `Compile Firmware`，其后的 `Machine Information` / `Package Firmware` / `Release Firmware` 因失败被跳过。
+
+### 根因
+
+`apk` 装包阶段的 rootfs 文件归属冲突。三个 Job 日志中出现完全相同的两行：
+
+```
+ERROR: kmod-usb-net-qmi-wwan-fibocom-6.18.44.1.0.5-r5: trying to overwrite
+       lib/modules/6.18.44/qmi_wwan_f.ko owned by kmod-qmi_wwan_f-6.18.44.1.0-r5.
+ERROR: kmod-usb-net-qmi-wwan-quectel-6.18.44.1.2.9-r3: trying to overwrite
+       lib/modules/6.18.44/qmi_wwan_q.ko owned by kmod-qmi_wwan_q-6.18.44.1.5-r1.
+```
+
+汇总行为 `2 errors; 177.7 MiB in 437 packages`（H5000M 436 / X86 572）——即全部包已安装完毕，仅因 2 个文件归属冲突返回非零，向上冒泡为 `package/install` → `.package_install` → `world` 失败，整包构建中断。
+
+冲突双方：
+
+| 提供方 | 包（版本） | 产出模块 |
+| :--- | :--- | :--- |
+| packages feed（`immortalwrt/packages` 的 `kernel/fibocom-qmi-wwan`） | `kmod-usb-net-qmi-wwan-fibocom`（1.0.5） | `qmi_wwan_f.ko` |
+| QModem feed（`FUjr/QModem` 的 `driver/fibocom_QMI_WWAN`） | `kmod-qmi_wwan_f`（1.0） | `qmi_wwan_f.ko` |
+| packages feed（`kernel/quectel-qmi-wwan`） | `kmod-usb-net-qmi-wwan-quectel`（1.2.9） | `qmi_wwan_q.ko` |
+| QModem feed（`driver/quectel_QMI_WWAN`） | `kmod-qmi_wwan_q`（1.5） | `qmi_wwan_q.ko` |
+
+**为什么只有 `MT5700M` 失败**：QModem feed 仅在 `MT_MODE=MT5700M` 时克隆（`Scripts/Packages.sh`），而该 feed 的 `qmodem` 主包经 Kconfig 选择项 `Qualcomm QMI WWAN Driver Selection`（缺省 `Vendor QMI driver`）拉入自带的三个 vendor 驱动；packages 侧两个驱动则由 `Config/GENERAL.txt` 第 128-130 行对**全机型**显式启用。两者在 `MT5700M` 模式下必然共存，遂冲突。该问题属配置层，与机型无关，也与本日源码切换无关。
+
+### 修复
+
+`MT5700M` 模式由 QModem 侧驱动接管，关闭 packages 侧同名驱动：
+
+* `Config/MT5700M.txt` — 追加 `CONFIG_PACKAGE_kmod-usb-net-qmi-wwan-fibocom=n` 与 `CONFIG_PACKAGE_kmod-usb-net-qmi-wwan-quectel=n`。
+* `Scripts/ApplyMTMode.sh` — 在 `MT5700M` 分支的互斥保护中追加同两项（双保险，覆盖机型配置 / `PRIVATE.txt` / `WRT_PACKAGE` 可能引入的 `=y`）。
+* `Scripts/VerifyMTMode.sh` — 新增 QMI WWAN 驱动归属校验，并修复既有缺陷（两处「反向依赖探测」只打印 `::error::` 却未置 `FAIL=1`，导致该类冲突不会真正中止编译）。
+
+`MT5700` 与空模式不克隆 QModem feed，仍由 packages 侧驱动提供，行为不变。
+
+### 生效依据（三项均已核对）
+
+1. **写入时机**：`ApplyMTMode.sh` 于 `WRT-CORE` 的 `Custom Settings` 阶段、在 `Config/$WRT_CONFIG.txt` 与 `GENERAL.txt` 拼接进 `.config` **之后** 追加 `Config/MT5700M.txt`，后写覆盖先写，故 `=n` 生效。
+2. **无反向依赖**：packages 侧两包仅有向下依赖（`+kmod-usb-net +kmod-usb-wdm`），无 `PROVIDES` / `CONFLICTS`；`immortalwrt/packages` 全库唯一的反向引用者是 `net/quectel-cm`，而 `quectel-cm` 已在 `Config/GENERAL.txt` 第 47 行被禁用，故 `make defconfig` 不会将其拉回。
+3. **功能不丢失**：关闭 packages 侧后，同名 `qmi_wwan_f.ko` / `qmi_wwan_q.ko` 由 QModem 侧的 `kmod-qmi_wwan_f` / `kmod-qmi_wwan_q` 提供，`MT5700M` 模组驱动能力保留。
+
+### 验证
+
+以构造的 `.config` 在本机回放两个脚本：
+
+* `VerifyMTMode.sh` 6 个场景全部通过——含 `MT5700M` 修复后正确配置（rc=0）、`MT5700M` 下 packages 侧被拉回（rc=1，成功拦截）、`MT5700M` 缺 QModem 侧驱动（rc=1）、`MT5700` 与空模式的 packages 侧正向校验（rc=0）。
+* `ApplyMTMode.sh` 10 项断言全部通过——`MT5700M` 下两包最终生效值为 `n`、互斥项行号位于 `Config/MT5700M.txt` 内容之后、`MT5700` 与空模式不被改写。
+* 两个脚本均通过 `bash -n` 语法检查。
+
+### 附带发现（未处理）
+
+`WRT-CORE.yml` 的 `Compile Firmware` 诊断分支仅匹配 `^(ERROR: |make(\[N\])?: \*\*\* ).*(failed to build|Error N|too big)`，而本次 apk 冲突行以 `ERROR: ` 开头但中间含 `-<版本>:`，三个 Job 的 `##[error]` 注解中**只有 make 级联行、没有冲突行**，导致真实原因未在注解中体现。此外首轮 `make -j` 失败时未输出任何安装阶段日志（`Installing` 行数为 0），真实原因仅在 `V=s` 重试段暴露。该诊断盲区建议后续单独加固。
+
+### 变更文件
+
+- `Config/MT5700M.txt` — 追加 packages 侧 QMI WWAN 驱动互斥项
+- `Scripts/ApplyMTMode.sh` — `MT5700M` 分支追加驱动互斥兜底
+- `Scripts/VerifyMTMode.sh` — 新增驱动归属校验；修复 `FAIL=1` 缺失
+- `README.md`、`CHANGELOG.md` — 文档同步
+
 ## [2026-09-18] H5000M / AP3000M 源码切换至 VIKINGYFY/immortalwrt（owrt 分支）
 
 ### 变更

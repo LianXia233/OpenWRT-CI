@@ -74,6 +74,18 @@ case "$MODE" in
 		cat "$CFG_DIR/MT5700M.txt" >> ./.config
 		echo "互斥保护：强制禁用 MT5700 侧包"
 		write_disable luci-app-mt5700 luci-i18n-mt5700-zh-cn
+		# 驱动互斥兜底（详见 Config/MT5700M.txt 同名段落）：
+		# MT5700M 的 QMI WWAN 驱动由 QModem feed 的 qmodem 主包经 vendor choice 拉入
+		# （kmod-qmi_wwan_f / kmod-qmi_wwan_q / kmod-qmi_wwan_s，分别产出
+		#  qmi_wwan_f.ko / qmi_wwan_q.ko / qmi_wwan_s.ko）。而机型配置 + GENERAL.txt
+		# 会启用 feeds/packages 侧产出同名 .ko 的驱动，二者装进同一 rootfs 即争抢
+		# 文件归属，apk 拒绝覆盖，package/install 以非零退出、整包构建中断。
+		# 这里在 Config/MT5700M.txt 之后再次写入，覆盖机型配置 / PRIVATE.txt /
+		# WRT_PACKAGE 可能引入的 =y。
+		echo "驱动互斥保护：强制禁用 packages feed 侧 QMI WWAN vendor 驱动"
+		write_disable \
+			kmod-usb-net-qmi-wwan-fibocom \
+			kmod-usb-net-qmi-wwan-quectel
 		;;
 	"" )
 		echo "空模式：显式禁用全部 MT 相关包（防止被其他配置层拉入）"

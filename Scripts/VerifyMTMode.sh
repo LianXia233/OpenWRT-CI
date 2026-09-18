@@ -6,6 +6,10 @@
 #   - MT5700：必须存在 luci-app-mt5700；必须不存在 mt5700m / sms-tool_q / ubus-at-daemon
 #   - MT5700M：必须存在 mt5700m / sms-tool_q / ubus-at-daemon；必须不存在 luci-app-mt5700
 #   - 空模式：上述四类包全部不得被选中
+#   - QMI WWAN 驱动归属（防 rootfs 同名 .ko 覆盖冲突）：
+#       MT5700M —— 必须存在 QModem 侧 kmod-qmi_wwan_f / kmod-qmi_wwan_q，
+#                  且必须不存在 packages 侧 kmod-usb-net-qmi-wwan-fibocom / -quectel；
+#       MT5700 与空模式 —— QModem feed 不参与，packages 侧两个驱动必须存在。
 #
 # 在 OpenWrt 源码根目录执行。发现违规时 ::error:: 并 exit 1。
 
@@ -47,7 +51,10 @@ report_pkg() {
 
 echo "::notice::MT_MODE=${MODE:-（空）}"
 echo "最终 .config 包状态："
-for p in luci-app-mt5700 luci-app-mt5700m sms-tool_q ubus-at-daemon; do
+for p in \
+	luci-app-mt5700 luci-app-mt5700m sms-tool_q ubus-at-daemon \
+	kmod-qmi_wwan_f kmod-qmi_wwan_q \
+	kmod-usb-net-qmi-wwan-fibocom kmod-usb-net-qmi-wwan-quectel; do
 	report_pkg "$p"
 done
 
@@ -75,9 +82,13 @@ case "$MODE" in
 		check_must_not luci-app-mt5700m
 		check_must_not sms-tool_q
 		check_must_not ubus-at-daemon
+		# QMI WWAN 驱动归属：MT5700 不克隆 QModem feed，驱动由 packages feed 提供
+		check_must kmod-usb-net-qmi-wwan-fibocom
+		check_must kmod-usb-net-qmi-wwan-quectel
 		# 反向依赖探测：mt5700m 不应被任何包以 =y 拉入
 		if grep -qE '^CONFIG_PACKAGE_luci-app-mt5700m=[ym]' "$DOT_CONFIG"; then
 			echo "::error::检测到 MT5700 与 MT5700M 软件包冲突"
+			FAIL=1
 		fi
 		;;
 	MT5700M )
@@ -85,8 +96,16 @@ case "$MODE" in
 		check_must sms-tool_q
 		check_must ubus-at-daemon
 		check_must_not luci-app-mt5700
+		# QMI WWAN 驱动互斥：MT5700M 用 QModem 侧驱动，packages 侧同名 .ko 驱动必须关闭，
+		# 否则二者在 rootfs 内争抢 qmi_wwan_f.ko / qmi_wwan_q.ko，apk 拒绝覆盖，
+		# package/install 失败并中断整包构建。
+		check_must kmod-qmi_wwan_f
+		check_must kmod-qmi_wwan_q
+		check_must_not kmod-usb-net-qmi-wwan-fibocom
+		check_must_not kmod-usb-net-qmi-wwan-quectel
 		if grep -qE '^CONFIG_PACKAGE_luci-app-mt5700=[ym]' "$DOT_CONFIG"; then
 			echo "::error::检测到 MT5700M 与 MT5700 软件包冲突"
+			FAIL=1
 		fi
 		;;
 	"" )
@@ -94,6 +113,9 @@ case "$MODE" in
 		check_must_not luci-app-mt5700m
 		check_must_not sms-tool_q
 		check_must_not ubus-at-daemon
+		# 空模式不克隆 QModem feed，QMI WWAN 驱动由 packages feed 提供
+		check_must kmod-usb-net-qmi-wwan-fibocom
+		check_must kmod-usb-net-qmi-wwan-quectel
 		;;
 	* )
 		echo "::error::非法 MT_MODE='$MODE'（仅允许空 / MT5700 / MT5700M）"
