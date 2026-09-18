@@ -19,3 +19,35 @@ CONFIG_PACKAGE_sms-tool_q=y
 # 显式排除 MT5700（互斥，防止 make defconfig 被其他配置意外拉入）
 CONFIG_PACKAGE_luci-app-mt5700=n
 CONFIG_PACKAGE_luci-i18n-mt5700-zh-cn=n
+
+# QMI WWAN vendor 驱动互斥（仅 MT5700M 生效，防止 rootfs 文件覆盖冲突）
+#
+# 冲突成因：MT5700M 模式的模组驱动由 QModem feed 提供，其中
+#   driver/fibocom_QMI_WWAN  -> kmod-qmi_wwan_f（产出 qmi_wwan_f.ko）
+#   driver/quectel_QMI_WWAN  -> kmod-qmi_wwan_q（产出 qmi_wwan_q.ko）
+#   driver/simcom_QMI_WWAN   -> kmod-qmi_wwan_s（产出 qmi_wwan_s.ko）
+# 三者由 QModem 的 qmodem 主包经 Kconfig choice 拉入，该 choice 缺省即选
+# 「Vendor QMI driver」，故只要 qmodem 被选中就必然安装这三个模块。
+# 而 Config/GENERAL.txt 第 128-130 行为全机型启用了 feeds/packages 的同名驱动
+#   （immortalwrt/packages: kernel/fibocom-qmi-wwan -> kmod-usb-net-qmi-wwan-fibocom
+#    产出 lib/modules/<kver>/qmi_wwan_f.ko；
+#    immortalwrt/packages: kernel/quectel-qmi-wwan -> kmod-usb-net-qmi-wwan-quectel
+#    产出 lib/modules/<kver>/qmi_wwan_q.ko）。
+# 二者安装进同一 rootfs 后争抢同名 .ko，apk 拒绝覆盖并以非零退出：
+#   ERROR: kmod-usb-net-qmi-wwan-fibocom-…: trying to overwrite
+#          lib/modules/…/qmi_wwan_f.ko owned by kmod-qmi_wwan_f-…
+# 该错误向上冒泡为 package/install -> .package_install -> world 失败，整包构建中断。
+#
+# 生效依据（三条均已实测核对）：
+#   1. 写入时机：Scripts/ApplyMTMode.sh 于 WRT-CORE「Custom Settings」阶段、
+#      即 General.txt 拼接进 .config 之后追加本文件，后写覆盖先写，=n 生效。
+#   2. 无反向依赖：两个 packages 侧包仅有向下依赖（+kmod-usb-net +kmod-usb-wdm），
+#      无 PROVIDES / CONFLICTS；全仓库唯一的反向引用者是
+#      immortalwrt/packages 的 net/quectel-cm，而 quectel-cm 已在
+#      Config/GENERAL.txt 第 47 行被显式禁用，故 make defconfig 不会将其拉回。
+#   3. 功能不丢失：关闭 packages 侧后，同名 qmi_wwan_f.ko / qmi_wwan_q.ko 由
+#      QModem 侧 kmod-qmi_wwan_f / kmod-qmi_wwan_q 提供，MT5700M 模组驱动能力保留。
+# 注意：仅在本层（MT_MODE=MT5700M）关闭；MT5700 与普通模式下不克隆 QModem feed，
+# 仍由 GENERAL.txt 的 =y 启用 packages 侧驱动，行为不变。
+CONFIG_PACKAGE_kmod-usb-net-qmi-wwan-fibocom=n
+CONFIG_PACKAGE_kmod-usb-net-qmi-wwan-quectel=n

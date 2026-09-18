@@ -185,6 +185,19 @@ MT5700M 是本台 CPE 的数据吞吐核心，该插件为其提供了系统级�
 
 互斥由 CI 在**配置生成前**（`Scripts/ApplyMTMode.sh`）与**配置生成后、编译前**（`Scripts/VerifyMTMode.sh`）双重校验，冲突时直接失败。
 
+#### QMI WWAN 驱动归属（防止 rootfs 同名 `.ko` 覆盖冲突）
+
+三种 MT 模式的蜂窝驱动来源不同，而同名内核模块 `.ko` 在同一 rootfs 内**只能由一方提供**：
+
+| MT_MODE | QMI WWAN 驱动来源 | 相关包名 |
+| :--- | :--- | :--- |
+| `MT5700M` | QModem feed（`FUjr/QModem`） | `kmod-qmi_wwan_f` / `kmod-qmi_wwan_q` / `kmod-qmi_wwan_s` |
+| `MT5700`、空 / `NONE` | packages feed（`immortalwrt/packages`） | `kmod-usb-net-qmi-wwan-fibocom` / `kmod-usb-net-qmi-wwan-quectel` |
+
+`MT5700M` 模式需要 QModem feed 提供 `sms-tool_q` / `ubus-at-daemon`，而该 feed 的 `qmodem` 主包会经 Kconfig 选择项（缺省即 `Vendor QMI driver`）拉入自带的三个 vendor 驱动。若不同时关闭 packages 侧的 `kmod-usb-net-qmi-wwan-fibocom` / `-quectel`，双方将争抢 `qmi_wwan_f.ko` 与 `qmi_wwan_q.ko` 的归属，`apk` 拒绝覆盖并返回非零，`package/install` 随之失败、整包构建中断。
+
+因此 `Config/MT5700M.txt` 与 `Scripts/ApplyMTMode.sh` 在 `MT5700M` 模式下均将其显式置为 `n`（双保险），并由 `Scripts/VerifyMTMode.sh` 在 `make defconfig` 之后复核：`MT5700M` 要求两包**未被选中**、QModem 侧驱动**已被选中**；`MT5700` 与空模式则要求 packages 侧两包**已被选中**。任一条不符即中止编译，不再静默失败。
+
 * **🔄 一键切换**：支持在“仅 5G 模式”、“仅有线宽带模式”及“负载均衡/故障转移模式”间快速切换，告别复杂的接口配置。
 * **⚡ 链路检测**：搭配 mwan3，实时监测链路连通状态，主链路故障时实现毫秒级无缝切换，确保网络永不掉线。
 
