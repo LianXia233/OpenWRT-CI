@@ -2,217 +2,199 @@
 
 # 🚀 H5000M / AP3000M / X86_64 定制固件说明书
 
-*基于 ImmortalWrt 源码，为 Hiveton H5000M 5G CPE、Airpi AP3000M 与 X86_64 设备提供的定制化编译配置（H5000M / AP3000M 取自 [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支，X86_64 取自 ImmortalWrt 主线 `master`）*
+**基于 ImmortalWrt 深度定制 · 专为 5G CPE、Wi-Fi 路由器与软路由量身打造**
+
+[![Source: VIKINGYFY](https://img.shields.io/badge/Source-VIKINGYFY%2Fimmortalwrt-blue?logo=openwrt&logoColor=white)](#)
+[![Source: Master](https://img.shields.io/badge/Source-immortalwrt%2Fmaster-brightgreen?logo=openwrt&logoColor=white)](#)
+[![Platform: Filogic](https://img.shields.io/badge/Platform-MediaTek%20Filogic-orange)](#)
+[![Platform: x86_64](https://img.shields.io/badge/Platform-x86__64-informational)](#)
+[![Workflow: CI](https://img.shields.io/badge/Build-GitHub%20Actions-success?logo=githubactions&logoColor=white)](#)
+
+*适配 Hiveton H5000M 5G CPE（MT7986 + MT5700M）、AirPi AP3000M（MT7981B）与通用 X86_64 架构设备*
+
+---
 
 </div>
 
-<br>
+## 📌 支持机型与底层架构
 
-## 🚀 快速开始（云编译）
+| 目标配置 | 硬件平台 / SoC | 适配机型 | 源码分支 | Wi-Fi 支持 | 镜像格式 |
+| :--- | :--- | :--- | :--- | :---: | :--- |
+| `H5000M-WIFI-YES` | MediaTek Filogic (MT7986) | Hiveton H5000M 5G CPE | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) (`owrt`) | ✅ 开启 | Sysupgrade / Factory |
+| `AP3000M` | MediaTek Filogic (MT7981B) | AirPi AP3000M | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) (`owrt`) | ✅ 开启 | Sysupgrade / Factory |
+| `X86` | 标准 x86_64 处理器 | 通用 64 位 PC / 工控机 / 软路由 | [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) (`master`) | — | ISO / EFI / GRUB / VMDK |
 
-本项目使用 GitHub Actions 自动编译固件，无需本地搭建环境。所有工作流位于 `.github/workflows/`：
+> [!TIP]
+> **源码拉取说明**：自动化编译工作流中，`H5000M-WIFI-YES` 与 `AP3000M` 固定拉取 `VIKINGYFY/immortalwrt` 的 `owrt` 分支；`X86-MT-AUTO` 拉取 `immortalwrt/immortalwrt` 的 `master` 分支。手动触发 `WRT-BUILD` 时，可通过界面下拉框自由切换源码上游与分支。
 
-| 工作流 | 触发方式 | 作用 |
+> [!IMPORTANT]
+> **AP3000M EEPROM 缺失自动修复机制**：
+> AP3000M 采用 eMMC 存储架构，出厂时 `mmcblk0p2` factory 分区为空，会导致 mt76 开源驱动无法加载校验参数，Wi-Fi 彻底瘫痪。
+> 本固件已内置校准版 iPAiLNA EEPROM 模板（发射功率达 28~29 dBm），并在编译时通过 `Handles.sh` 注入文件系统；路由器**首次启动**时将由 `99-ap3000m-eeprom` 脚本自动提取 `eth0` 真实 MAC、写入 factory 分区并将 radio1 修正为 5GHz 频段。
+
+---
+
+## ⚙️ 固件默认参数
+
+系统刷入完成后的默认出厂网络参数如下（可在各编译工作流的 `env` 变量中预先调整，编译期由 `Scripts/Settings.sh` 自动写入）：
+
+| 配置项 | 默认出厂值 | 说明 |
 | :--- | :--- | :--- |
-| **WRT-BUILD** | 手动 `workflow_dispatch` | 手动编译 / 预览配置。可选机型、源码、MT 模式（`MT5700` / `MT5700M` / `NONE`），默认仅生成配置不编译（`TEST=true`） |
-| **H5000M-MT-AUTO** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动并行编译 H5000M 的 **MT5700 + MT5700M** 双配置并分别发布 |
-| **AP3000M-MT-AUTO** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动并行编译 AP3000M 的 **MT5700 + MT5700M** 双配置并分别发布 |
-| **X86-MT-AUTO** | 每天随 `Auto-Clean` 完成后自动触发，亦可手动 | 自动并行编译 X86 的 **MT5700 + MT5700M** 双配置并分别发布 |
-| **Auto-Clean** | 每天定时 + 手动 | 清理旧 Release 与 Workflow 运行记录（保留最近 1 个 Release、30 天运行记录） |
-| **Cache-Clean** | 仅手动触发 | 清理 GitHub Actions 编译缓存（已移除每周定时清空：那会让本周第一次构建必然冷启动，配额交由 GitHub 按 LRU 自动回收） |
+| **后台管理地址** | `192.168.10.1` | Web 管理界面默认 IP |
+| **主机名 (Hostname)** | `OWRT` | 系统网络标识 |
+| **Wi-Fi SSID** | `OWRT` | 2.4G 与 5G 频段共用此名称 |
+| **Wi-Fi 密码** | `12345678` | 默认无线接入密钥 |
+| **无线加密方式** | `WPA-PSK / WPA2-PSK Mixed Mode` | 兼顾设备兼容性与安全性 |
+| **频宽设置** | **2.4G**: `40MHz` \| **5G**: `160MHz` | 跑满满血无线吞吐 |
+| **国家码 / 时区** | `CN` / `CST-8` (`Asia/Shanghai`) | 避免时钟同步异常 |
 
-**手动编译步骤：** 仓库页面 → `Actions` → 选择 `WRT-BUILD` → `Run workflow` → 选择机型与 MT 模式 → 如需真正编译请把 `TEST` 设为 `false`。
+---
 
-**说明：** `TEST=true`（默认）只生成 `.config` 配置用于校验，不会消耗资源编译；`TEST=false` 才会完整编译并发布固件。
+## 🧩 核心专属功能与模组生态
 
-**产物区分：** 同一机型的两种 MT 配置产物在文件名与 Release Tag 中均嵌入模式标签，例如：
+### 1. 5G 模组驱动与控制 (`luci-app-mt5700m` / `luci-app-mt5700`)
+针对 CPE 的数据通信核心提供完整的系统级交互能力：
+- 📊 **运行状态大屏**：实时呈现 5G 信号质量（RSRP/RSRQ/SINR）、SA/NSA 制式、当前驻留频段、运营商标识及 IMEI/IMSI。
+- 🔌 **全协议拨号**：支持 QMI、NCM 等高速拨号通道，满足不同场景下的低延迟高吞吐联网需求。
+- ⚙️ **在线 AT 交互**：后台集成 `ubus-at-daemon`，无需串口即可直接在 LuCI 界面下发 AT 指令，轻松锁频、锁小区。
+- ✉️ **短信收发平台**：集成 `sms-tool_q`，可在网页端直接查收流量卡余额、套餐提醒及验证码短信。
+
+### 2. 硬件级智能风扇温控 (`luci-app-h5000m-fancontrol`)
+*（仅编入 Hiveton H5000M 固件）*
+- 🌡️ **双温区采集**：底层同时轮询 CPU 核心与 MT5700M 模组温感数据。
+- 🌀 **PWM 阶梯变速**：根据设定的阶梯温度阈值动态调整风扇占空比，兼顾低负载静音与极端工况下的高效散热。
+
+### 3. 多网络智能切换 (`luci-app-h5000m-netmode`)
+*（全机型通用）*
+- 🔄 **接入模式切换**：支持“仅 5G 蜂窝”、“仅 WAN 有线”及“双链路负载均衡 / 主备故障转移”一键调度。
+- ⚡ **毫秒级容灾切换**：联动 `mwan3` 状态探针，当检测到主链路中断时瞬间切流，确保业务持续在线。
+
+---
+
+## 🛡️ MT 插件模式矩阵与驱动冲突防护
+
+为满足不同用户的插件偏好，固件引入了独立的 `MT_MODE` 配置层，**不与硬件机型强绑定**：
+
+| MT_MODE | 编入插件包 | 依赖组件 | 明确排除内容 | 驱动来源 |
+| :--- | :--- | :--- | :--- | :--- |
+| **`MT5700M`** *(方案 A)* | `luci-app-mt5700m` | `sms-tool_q`<br>`ubus-at-daemon` | `luci-app-mt5700` | QModem feed (`FUjr/QModem`) |
+| **`MT5700`** *(方案 B)* | `luci-app-mt5700` | 单包内置 Rust 后端 | `luci-app-mt5700m`<br>`sms-tool_q`<br>`ubus-at-daemon` | packages feed (`immortalwrt/packages`) |
+| **`NONE` / 留空** | *(不安装 MT 插件)* | — | 全量 MT 模组应用 | packages feed (`immortalwrt/packages`) |
+
+> [!WARNING]
+> **QMI WWAN 驱动同名文件冲突防踩坑机制**：
+>
+> 两个方案包含相同命名的内核模块：
+> - **QModem feed** 提供：`kmod-qmi_wwan_f` / `kmod-qmi_wwan_q` / `kmod-qmi_wwan_s`
+> - **官方 packages feed** 提供：`kmod-usb-net-qmi-wwan-fibocom` / `kmod-usb-net-qmi-wwan-quectel`
+>
+> 双方均会向 rootfs 写入 `qmi_wwan_f.ko` 和 `qmi_wwan_q.ko`。若配置不当导致双方并存，`apk` 会触发文件所有权冲突拦截并中断构建。
+> 
+> **本项目通过双重校验彻底杜绝冲突**：
+> 1. **配置前置注入**：`ApplyMTMode.sh` 在 `MT5700M` 模式下将 packages 侧的互斥包显式置为 `=n`。
+> 2. **编译前置拦截**：`VerifyMTMode.sh` 在 `make defconfig` 之后执行严格语义检查，凡发现两类驱动同时选中或均未选中，将立即抛错中止 CI，防止产出脏固件。
+
+---
+
+## 🛠️ 底层系统能力集成
+
+- 🚀 **硬件加解密引擎加速**：内核级编译 `kmod-cryptodev` 与 `kmod-tls`，让 OpenClash、HomeProxy 等代理服务及 VPN 隧道完全跑在内核硬件加速通道上。
+- 💾 **轻量级高可用 NAS**：原生集成 NVMe 驱动（`kmod-nvme`）、BTRFS 现代文件系统与 Samba4 服务，让高速固态硬盘满速共享。
+- 🌐 **零配置组网体系**：预置 Tailscale 与 EasyTier，方便在无公网 IP 环境下轻松穿透打通远程内网。
+
+---
+
+## 🚀 自动化云编译使用指南
+
+所有编译任务均由 GitHub Actions 驱动，无需在本地配置交叉编译工具链。
+
+### 1. 工作流矩阵
+
+| 工作流名称 | 触发机制 | 核心职责 |
+| :--- | :--- | :--- |
+| **`WRT-BUILD`** | 手动 `workflow_dispatch` | 自定义按需编译。可自选机型、上游源码、MT 模式；默认 `TEST=true`（仅跑语法检查与配置验证） |
+| **`H5000M-MT-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 并行编译 H5000M 的 **MT5700 + MT5700M** 双配置并自动发版 |
+| **`AP3000M-MT-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 并行编译 AP3000M 的 **MT5700 + MT5700M** 双配置并自动发版 |
+| **`X86-MT-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 并行编译 X86 的 **MT5700 + MT5700M** 双配置并自动发版 |
+| **`Auto-Clean`** | 每日定时调度 / 手动 | 保持仓库整洁：保留最近 1 个 Release 及 30 天以内的构建日志 |
+| **`Cache-Clean`** | 手动触发 | 主动清理 actions/cache 编译缓存（不设定时清空，避免缓存频繁冷启动） |
+
+### 2. 手动编译快速指引
+
+1. 进入仓库页面，点击 **`Actions`** 选项卡。
+2. 在左侧列表选择 **`WRT-BUILD`**，点击右侧 **`Run workflow`**。
+3. 按需选择：
+   - **Target Device**：`H5000M-WIFI-YES` / `AP3000M` / `X86`
+   - **MT Mode**：`MT5700M` / `MT5700` / `NONE`
+   - **TEST**：若要正式输出固件，**务必将 `TEST` 改为 `false`**（设为 `true` 仅导出校验用 `.config`）。
+
+### 3. 产物命名与 Release 规范
+
+自动工作流会将模式标签与生成日期直接融入产物名与 Release Tag，便于区分：
 
 ```text
-…-MT5700-wifi-yes-26.09.13-….bin
-…-MT5700M-wifi-yes-26.09.13-….bin
-Tag: H5000M-WIFI-YES-MT5700-…
-Tag: H5000M-WIFI-YES-MT5700M-…
-```
+# 固件文件名规范示例
+immortalwrt-mediatek-filogic-hiveton_h5000m-MT5700-wifi-yes-26.09.13-sysupgrade.bin
+immortalwrt-mediatek-filogic-hiveton_h5000m-MT5700M-wifi-yes-26.09.13-sysupgrade.bin
 
-双配置 Job 名为 `机型-MT模式`（如 `H5000M-WIFI-YES-MT5700`），在 Actions 页面可直接分辨。
-
-<br>
-
-## 📂 项目结构
+# Release Tag 规范
+H5000M-WIFI-YES-MT5700-2026.09.13
+H5000M-WIFI-YES-MT5700M-2026.09.13
 
 ```
+
+---
+
+## 📂 项目结构全景
+
+```text
 OpenWRT-CI/
-├── .github/workflows/        # 云编译工作流
-│   ├── WRT-CORE.yml          # 公用编译核心（被调用）
-│   ├── WRT-BUILD.yml         # 手动编译入口（机型 × MT 模式）
-│   ├── H5000M-MT-AUTO.yml    # 自动双配置编译 H5000M（MT5700 + MT5700M）
-│   ├── AP3000M-MT-AUTO.yml   # 自动双配置编译 AP3000M（MT5700 + MT5700M）
-│   ├── X86-MT-AUTO.yml       # 自动双配置编译 X86（MT5700 + MT5700M）
-│   ├── Auto-Clean.yml        # 清理旧 Release / 运行记录
-│   └── Cache-Clean.yml       # 清理编译缓存
-├── Config/                   # 编译配置
-│   ├── GENERAL.txt           # 全设备通用插件与内核配置（不含 MT 插件）
-│   ├── MT5700.txt            # MT5700 独立插件层（方案 B）
-│   ├── MT5700M.txt           # MT5700M 独立插件层（方案 A）
-│   ├── H5000M-WIFI-YES.txt   # Hiveton H5000M（带 Wi-Fi）
-│   ├── AP3000M.txt           # AirPi AP3000M（Wi-Fi）
-│   └── X86.txt               # X86_64 通用设备
-├── AP3000M-EEPROM/           # AP3000M EEPROM 自动初始化
-│   ├── mt7981_eeprom_mt7976_dbdc.bin  # iPAiLNA EEPROM 模板（已校准）
-│   └── 99-ap3000m-eeprom            # uci-defaults 首次启动脚本
-├── Scripts/                  # 编译前自定义脚本
-│   ├── Packages.sh           # 拉取第三方插件与主题（含 MT 模式条件克隆/折叠）
-│   ├── ApplyMTMode.sh        # 按 MT_MODE 叠加配置层并写入互斥保护
-│   ├── VerifyMTMode.sh       # make defconfig 后校验 MT 包互斥
-│   ├── Handles.sh            # HomeProxy 资源预置与主题 / 组件修复
-│   └── Settings.sh           # 默认 IP / 主机名 / Wi-Fi / 主题
+├── .github/workflows/        # CI/CD 云编译自动化编排
+│   ├── WRT-CORE.yml          # 公共编译底层流水线模板（被各任务调用）
+│   ├── WRT-BUILD.yml         # 手动编译入口（支持机型与 MT 模式矩阵选择）
+│   ├── H5000M-MT-AUTO.yml    # H5000M 双配置定时自动化发布
+│   ├── AP3000M-MT-AUTO.yml   # AP3000M 双配置定时自动化发布
+│   ├── X86-MT-AUTO.yml       # X86 双配置定时自动化发布
+│   ├── Auto-Clean.yml        # 自动化历史制品与任务日志清理
+│   └── Cache-Clean.yml       # 手动编译缓存回收
+├── Config/                   # 模块化编译配置文件层
+│   ├── GENERAL.txt           # 全设备通用内核参数与功能插件（不含 MT 驱动）
+│   ├── MT5700.txt            # MT5700 方案独立包配置（方案 B）
+│   ├── MT5700M.txt           # MT5700M 方案独立包配置（方案 A）
+│   ├── H5000M-WIFI-YES.txt   # Hiveton H5000M 专属硬件板级定义
+│   ├── AP3000M.txt           # AirPi AP3000M 专属硬件板级定义
+│   └── X86.txt               # X86_64 架构板级定义
+├── AP3000M-EEPROM/           # AP3000M 自动化射频恢复套件
+│   ├── mt7981_eeprom_mt7976_dbdc.bin # 提取自闭源固件的标准校准 EEPROM
+│   └── 99-ap3000m-eeprom     # 首次启动写入 factory 分区的初始化脚本
+├── Scripts/                  # 编译流水线钩子脚本
+│   ├── Packages.sh           # 第三方 Feed 拉取与版本锁定
+│   ├── ApplyMTMode.sh        # 根据选定模式组装配置层并注入互斥开关
+│   ├── VerifyMTMode.sh       # defconfig 后期校验，严查同名 .ko 驱动冲突
+│   ├── Handles.sh            # 静态资源预置、主题适配与组件补丁
+│   └── Settings.sh           # 默认 IP、主机名、Wi-Fi 射频参数编译期写入
 ├── LICENSE
 └── README.md
+
 ```
 
-<br>
-
-## 🎯 支持的编译配置
-
-| 配置 | 目标平台 | 设备 | Wi-Fi |
-| :--- | :--- | :--- | :--- |
-| `H5000M-WIFI-YES` | MediaTek Filogic | Hiveton H5000M | ✅ 开启 |
-| `AP3000M` | MediaTek Filogic | Airpi AP3000M (MT7981B) | ✅ 开启 |
-| `X86` | x86_64 | 标准 X86_64 设备 | 不适用 |
-
-> **源码对照**：`H5000M-WIFI-YES` 与 `AP3000M` 的自动编译取自 [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支；`X86`（`X86-MT-AUTO`）取自 [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) 的 `master` 分支。手动入口 `WRT-BUILD` 的默认值仍为 `immortalwrt/immortalwrt` + `master`，可在下拉框中按需切换为 `VIKINGYFY/immortalwrt`。
->
-> `X86` 配置生成 64 位 x86 镜像，包含 ISO、EFI、GRUB 与 VMDK 格式，可用于支持 x86_64 的标准 BIOS 或 UEFI 设备。32 位 x86 设备不适用该配置。
->
-> **AP3000M 特殊说明**：AP3000M (MT7981B, eMMC 存储无 SPI-NOR) 使用 ImmortalWrt 系 mt76 开源驱动。设备出厂时 `mmcblk0p2` factory 分区为空，导致 NVMEM 框架读取 EEPROM 失败、Wi-Fi 无法初始化。本项目内置闭源固件备份的 iPAiLNA EEPROM 模板（已校准，Tx-Power 28-29dBm），编译时通过 `Handles.sh` 注入 `files/` 目录，首次启动时由 `99-ap3000m-eeprom` 脚本自动从 eth0 读取设备 MAC、写入 factory 分区并修正 radio1 为 5GHz 模式。
-
-<br>
-
-## ⚙️ 默认配置
-
-固件刷入后默认配置如下（可通过各工作流 `env` 中的 `WRT_*` 变量调整，由 `Scripts/Settings.sh` 在编译时写入）：
-
-| 项目 | 默认值 |
-| :--- | :--- |
-| Wi-Fi SSID（2.4G / 5G） | `OWRT` |
-| Wi-Fi 密码 | `12345678` |
-| 加密方式 | WPA-PSK / WPA2-PSK Mixed Mode |
-| 管理地址 | `192.168.10.1` |
-| 主机名 | `OWRT` |
-| 国家码 | `CN` |
-| 2.4G 频宽 | 40MHz |
-| 5G 频宽 | 160MHz |
-| 时区 | `CST-8`（`Asia/Shanghai`） |
-
-<br>
-
-## 💖 鸣谢与致敬
-
-本固件的高效自动化编译、底层系统的稳定性以及对特定 5G 模组的完美适配，离不开开源社区开发者的无私奉献。在此特别感谢以下作者及其开源项目：
-
-> **🐧 源码上游：[ImmortalWrt](https://github.com/immortalwrt/immortalwrt/) / [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt)**
->
-> 感谢 ImmortalWrt 团队提供的源码。其卓越的路由性能和丰富的本地化特性，为固件的开发提供了无比坚实的底层源码基础。
-> * 🔗 **ImmortalWrt 主线（X86 机型）**：[immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt/)（`master`）
-> * 🔗 **H5000M / AP3000M 机型**：[VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt)（`owrt`）
-
-> **👤 基础底包、插件优化与编译框架：[VIKINGYFY](https://github.com/VIKINGYFY)**
->
-> 感谢作者提供的 OpenWRT-CI 项目。作者不仅打造了高效的云端自动化编译框架，更为本项目提供了稳定可靠的**基础底包固件配置**、**深度的插件细节优化**，以及**大量优质实用的额外插件支持**，极大降低了固件定制门槛并全面提升了路由器的整体体验和可玩性。
-> * 🔗 **项目链接**：[OpenWRT-CI](https://github.com/VIKINGYFY/OpenWRT-CI)
-
-> **👤 CPE 核心插件支持：[FAN789](https://github.com/FAN789)**
->
-> 感谢作者为 Hiveton H5000M 及 MT5700M 模组开发的系列核心控制插件，赋予了该设备真正的 5G CPE 灵魂。
-> * 🔗 **主页链接**：[https://github.com/FAN789](https://github.com/FAN789)
-> * 📦 **5G 模组控制**：[luci-app-mt5700m](https://github.com/LianXia233/luci-app-mt5700m)
-> * ❄️ **智能风扇温控**：[luci-app-h5000m-fancontrol](https://github.com/FAN789/luci-app-h5000m-fancontrol)
-> * 🔀 **网络模式切换**：[luci-app-h5000m-netmode](https://github.com/LianXia233/luci-app-h5000m-netmode)
-
 ---
 
-## 📡 一、 硬件平台与固件底层概述
+## 💖 致敬与鸣谢
 
-**Hiveton H5000M** 是一款高性能的 5G CPE（Customer Premises Equipment）路由器，致力于将高速的 5G 移动网络转化为稳定可靠的局域网 Wi-Fi 或有线网络。
+固件的稳定性与特定模组的良好体验离不开开源社区开发者的贡献，特别鸣谢以下项目与维护者：
 
-| 核心特征 | 详情描述 |
-| :--- | :--- |
-| 🏗️ **固件底包** | **基于 [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 的 `owrt` 分支构建**。内核层面已开启硬件加解密优化（`kmod-cryptodev`, `kmod-tls`），为科学分流和安全组网提供底层加速。 |
-| 🖥️ **基础架构** | 采用 **联发科 (MediaTek) Filogic** 平台 (如 MT7986 系列)，具备强大的网络数据转发能力与 Wi-Fi 7 性能。 |
-| 📶 **核心模组** | 深度集成 **MT5700M 5G 模组**，支持直接插卡上网，实现 5G 高速蜂窝接入。 |
-| ❄️ **散热设计** | 针对 5G 模组高负载下的发热特性，设备配备了**主动散热风扇**，专为高负载网络转化设计，确保极限性能下不降频。 |
+* 🐧 **底包源码提供**：
+* [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt/?utm_source=gemini)（X86 主线源码基石）
+* [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt?utm_source=gemini)（为 H5000M / AP3000M 提供出色的板级适配与优化）
 
----
 
-## 🧩 二、 核心专属插件详解
+* 👤 **编译框架与底包优化**：
+* [VIKINGYFY / OpenWRT-CI](https://github.com/VIKINGYFY/OpenWRT-CI?utm_source=gemini)（稳定强大的云编译框架与大量实用插件优化）
 
-固件包含网络模式切换与 MT5700M 模组控制等全设备通用插件；风扇温控仅编入 H5000M 固件。以下是三大核心插件的功能说明：
 
-### 1. MT5700M 5G 模组支持 (`luci-app-mt5700m`)
-MT5700M 是本台 CPE 的数据吞吐核心，该插件为其提供了系统级驱动支持与直观的图形化管理界面 (LuCI)。
-
-* **📊 状态监控**：在后台实时呈现 5G 信号强度、SA/NSA 网络制式、当前频段、运营商及 IMEI/IMSI 等关键状态。
-* **🔌 连接管理**：兼容 QMI/NCM 等多种拨号协议，实现高速稳定的蜂窝联网。
-* **⚙️ AT 指令交互**：内置 `ubus-at-daemon`，支持通过 Web 界面向模组发送 AT 指令，便于进行高级网络调试或频段锁定。
-* **✉️ 短信功能**：集成 `sms-tool_q`，支持通过路由器后台接收与发送运营商短信，方便接收流量提醒。
-
-### 2. 硬件级风扇温控 (`luci-app-h5000m-fancontrol`)
-仅 Hiveton H5000M 固件包含此插件。5G 高速传输伴随显著发热，该插件确保设备在满负荷运作下的温控稳定。
-
-* **🌡️ 智能监测**：实时读取 CPU 和 MT5700M 模组的双路温度传感器数据。
-* **🌀 多档调速**：根据设定的温度阈值（如阈值 A、B、C），自动调节风扇的 PWM 转速百分比，兼顾低负载静音与高负载散热。
-* **🛠️ 自定义配置**：用户可自由调整启动温度、目标温度，打造个性化的散热策略。
-
-### 3. 网络模式无缝切换 (`luci-app-h5000m-netmode`)
-所有配置均包含此插件，用于应对复杂的网络接入环境（5G 蜂窝与传统有线宽带双接入），提供极简的管理体验。
-
-### 4. MT 插件模式（MT_MODE，全机型可选）
-
-固件构建支持独立的 5G 模组插件配置层，**不与机型绑定**，H5000M / AP3000M / X86 均可通过 `WRT-BUILD` 选择：
-
-| MT_MODE | 安装内容 | 明确排除 |
-| :--- | :--- | :--- |
-| `MT5700M` | `luci-app-mt5700m` + `sms-tool_q` + `ubus-at-daemon` | `luci-app-mt5700` |
-| `MT5700` | `luci-app-mt5700`（单包自含 Rust 后端） | `luci-app-mt5700m` / `sms-tool_q` / `ubus-at-daemon` |
-| 空 / `NONE` | 不安装任何 MT 插件 | 全部 |
-
-自动编译（`H5000M-MT-AUTO` / `AP3000M-MT-AUTO` / `X86-MT-AUTO`）**同时并行编译** `MT5700` 与 `MT5700M` 两种配置；产物文件名、配置导出与 Release Tag 均嵌入 MT 模式标签，避免互相覆盖。
-
-配置层文件：
-
-* `Config/MT5700M.txt`（方案 A）
-* `Config/MT5700.txt`（方案 B）
-
-互斥由 CI 在**配置生成前**（`Scripts/ApplyMTMode.sh`）与**配置生成后、编译前**（`Scripts/VerifyMTMode.sh`）双重校验，冲突时直接失败。
-
-#### QMI WWAN 驱动归属（防止 rootfs 同名 `.ko` 覆盖冲突）
-
-三种 MT 模式的蜂窝驱动来源不同，而同名内核模块 `.ko` 在同一 rootfs 内**只能由一方提供**：
-
-| MT_MODE | QMI WWAN 驱动来源 | 相关包名 |
-| :--- | :--- | :--- |
-| `MT5700M` | QModem feed（`FUjr/QModem`） | `kmod-qmi_wwan_f` / `kmod-qmi_wwan_q` / `kmod-qmi_wwan_s` |
-| `MT5700`、空 / `NONE` | packages feed（`immortalwrt/packages`） | `kmod-usb-net-qmi-wwan-fibocom` / `kmod-usb-net-qmi-wwan-quectel` |
-
-`MT5700M` 模式需要 QModem feed 提供 `sms-tool_q` / `ubus-at-daemon`，而该 feed 的 `qmodem` 主包会经 Kconfig 选择项（缺省即 `Vendor QMI driver`）拉入自带的三个 vendor 驱动。若不同时关闭 packages 侧的 `kmod-usb-net-qmi-wwan-fibocom` / `-quectel`，双方将争抢 `qmi_wwan_f.ko` 与 `qmi_wwan_q.ko` 的归属，`apk` 拒绝覆盖并返回非零，`package/install` 随之失败、整包构建中断。
-
-因此 `Config/MT5700M.txt` 与 `Scripts/ApplyMTMode.sh` 在 `MT5700M` 模式下均将其显式置为 `n`（双保险），并由 `Scripts/VerifyMTMode.sh` 在 `make defconfig` 之后复核：`MT5700M` 要求两包**未被选中**、QModem 侧驱动**已被选中**；`MT5700` 与空模式则要求 packages 侧两包**已被选中**。任一条不符即中止编译，不再静默失败。
-
-* **🔄 一键切换**：支持在“仅 5G 模式”、“仅有线宽带模式”及“负载均衡/故障转移模式”间快速切换，告别复杂的接口配置。
-* **⚡ 链路检测**：搭配 mwan3，实时监测链路连通状态，主链路故障时实现毫秒级无缝切换，确保网络永不掉线。
-
----
-
-## 🛠️ 三、 固件底层组件与扩展支持
-
-得益于 ImmortalWrt 优秀的底包基础，Hiveton H5000M 不仅具备卓越的基础路由性能，还将扩展性推向极致：
-
-* **内核级加解密加速**：开启 `kmod-cryptodev` 与 `kmod-tls`，大幅提升代理工具（如 HomeProxy、OpenClash）和加密隧道的吞吐量，降低 CPU 占用。
-* **USB 驱动栈扩展**：包含 `kmod-usb-core`, `kmod-usb3` 及 `kmod-usb-net-qmi-wwan` 等丰富驱动，确保系统准确识别各类移动通信模组。
-* **轻量级 NAS 存储**：支持 NVMe 固态硬盘（`kmod-nvme`）挂载，结合 BTRFS 文件系统与 Samba4 共享，轻松打造家庭数据中心。
-* **安全异地组网**：内置 EasyTier、Tailscale 等主流 SD-WAN 工具，轻松实现内网设备的远程安全访问。
-
-<br>
-
-> 📅 *文档更新日期：2026年8月*
-> 💡 *本说明文档由项目编译配置与社区开源信息整合生成。*
+* 👤 **5G CPE 核心插件支持**：
+* [FAN789](https://github.com/FAN789?utm_source=gemini)（为 H5000M 与 MT5700 系列模组赋予了完善的控制能力）
+* [luci-app-mt5700m](https://github.com/LianXia233/luci-app-mt5700m?utm_source=gemini)（5G 蜂窝监控与管理）
+* [luci-app-h5000m-fancontrol](https://github.com/FAN789/luci-app-h5000m-fancontrol?utm_source=gemini)（硬件级智能风扇温控）
+* [luci-app-h5000m-netmode](https://github.com/LianXia233/luci-app-h5000m-netmode?utm_source=gemini)（智能网络模式无缝调度）
