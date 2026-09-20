@@ -1,4 +1,54 @@
 # 更新日志
+## [2026-09-20] 修复 MT5700M 变体全灭：QModem 侧 QMI 驱动改为显式选中
+
+### 问题
+
+2026-09-20 定时构建中，H5000M / AP3000M / X86 三个机型的 **MT5700M** 变体全部在
+`Verify MT Mode` 阶段中止（H5000M run 35474153836、AP3000M run 35474153897、
+X86 run 35474153834），MT5700 变体不受影响：
+
+```
+[未选中] kmod-qmi_wwan_f
+[未选中] kmod-qmi_wwan_q
+::error::MT_MODE=MT5700M 要求必须选中 kmod-qmi_wwan_f，但最终 .config 中未选中
+::error::MT_MODE=MT5700M 要求必须选中 kmod-qmi_wwan_q，但最终 .config 中未选中
+```
+
+上一次成功构建（run 35454224762，2026-09-19T16:12Z）到本次失败之间，本仓库只改过
+`README.md`，因此不是本地配置漂移，而是**上游漂移**：FUjr/QModem 在 2026-09-19
+调整了 luci 打包（c49654e / 5213e28）。
+
+### 根因
+
+`kmod-qmi_wwan_f` / `kmod-qmi_wwan_q` 由 QModem 的 `driver/` 目录提供，但上游把它们
+挂在 `application/qmodem/Makefile` 的**条件依赖**上：
+
+```
++PACKAGE_qmodem_INCLUDE_vendor-qmi-wwan:kmod-qmi_wwan_q \
++PACKAGE_qmodem_INCLUDE_vendor-qmi-wwan:kmod-qmi_wwan_f \
+```
+
+即只有 `qmodem` 主包被选中、且其 `Package/qmodem/config` 里的 choice 取到
+`vendor-qmi-wwan` 时才会被拉入。而本仓库里没有任何包选中 `qmodem`：
+`luci-app-mt5700m` 的 `LUCI_DEPENDS` 只有 `luci-base` / `ubus-at-daemon` / `sms-tool_q`，
+`GENERAL.txt` 又显式关掉了 `luci-app-qmodem` / `luci-app-qmodem-next`。此前能编过，
+是因为上游存在把 `qmodem` 顺带拉进来的隐式路径；上游 09-19 的打包调整切断了它。
+
+`VerifyMTMode.sh` 的拦截行为是正确的：若不拦截，MT5700M 固件会缺 `qmi_wwan_f.ko` /
+`qmi_wwan_q.ko`（模组驱动），属于脏固件。
+
+### 变更
+
+- `Config/MT5700M.txt`：新增 QModem 侧 `kmod-qmi_wwan_f` / `kmod-qmi_wwan_q` 的显式 `=y`，
+  并写明成因、以及「为什么不改成选中 qmodem 主包」。packages 侧同名驱动的 `=n` 保留不变
+- `README.md`：QMI WWAN 冲突防踩坑机制补第 3 条「驱动归属显式化」
+- `CHANGELOG.md`：本条
+
+### 影响面
+
+- 仅 MT5700M 配置层；MT5700 与空模式不受影响（两者走 packages 侧驱动，`=n` 不生效）
+- 不再依赖上游 vendor 驱动的隐式默认值：上游再调整打包也不会让 MT5700M 变体停摆
+
 ## [2026-09-18] 加固 Compile Firmware 失败注解：优先上报 apk 安装期根因
 
 ### 问题
