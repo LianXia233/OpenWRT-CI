@@ -93,6 +93,7 @@
 > **本项目通过双重校验彻底杜绝冲突**：
 > 1. **配置前置注入**：`ApplyMTMode.sh` 在 `MT5700M` 模式下将 packages 侧的互斥包显式置为 `=n`。
 > 2. **编译前置拦截**：`VerifyMTMode.sh` 在 `make defconfig` 之后执行严格语义检查，凡发现两类驱动同时选中或均未选中，将立即抛错中止 CI，防止产出脏固件。
+> 3. **驱动归属显式化**：`Config/MT5700M.txt` 直接写出 QModem 侧 `kmod-qmi_wwan_f` / `kmod-qmi_wwan_q` 的 `=y`，不再依赖「上游 qmodem 主包的隐式默认值会顺带把它们拉进来」。上游 2026-09-19 调整 luci 打包后该隐式路径失效，MT5700M 变体因此在 `Verify MT Mode` 阶段全灭（见 CHANGELOG 2026-09-20）。显式选中后，上游再改打包也不会让 MT5700M 停摆。
 
 ---
 
