@@ -86,9 +86,14 @@ jobs:
     timeout-minutes: 345
     steps:
       - name: 检出仓库代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
+          # v7 起默认拒绝在 pull_request_target / workflow_run 下检出 fork PR 代码。
+          # 本仓库是 fork，且定时编译靠 workflow_run 串联（自动清理 → 编译），
+          # 上游清理若跑在 fork PR 分支上，下游检出会被拒导致构建失败；
+          # 此处显式授权以保留原有行为（本流水线只信任本仓库自身的工作流）。
+          allow-unsafe-pr-checkout: true
 
       - name: 初始化编译环境
         env:
@@ -532,7 +537,7 @@ jobs:
 
       - name: 发布固件到 Release
         if: env.WRT_TEST != 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           # Tag 嵌入 MT_MODE，双配置并行编译时 Tag 可读且互不覆盖
           tag_name: ${{env.WRT_CONFIG}}-${{env.WRT_MT}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
