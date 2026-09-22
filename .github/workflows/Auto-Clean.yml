@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-name: Auto-Clean
+name: 自动清理
 
 on:
   # 自动清理：每天 UTC 21:00（北京时间次日 05:00）
@@ -21,7 +21,7 @@ jobs:
   auto_clean:
     runs-on: ubuntu-latest
     steps:
-      - name: Clear Releases (delete all files / keep latest optional)
+      - name: 清理 Releases（可选保留每机型最新一个）
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -95,7 +95,7 @@ jobs:
             echo "=== Done: deleted ${DELETED} release(s), Releases 已清空 ==="
           fi
 
-      - name: Clean old workflow runs (keep 30 days)
+      - name: 清理 30 天前的工作流运行记录
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
