@@ -2,7 +2,7 @@
 # Copyright (C) 2026 VIKINGYFY
 
 # 云编译公用核心（被 WRT-BUILD / H5000M-MT-AUTO / AP3000M-MT-AUTO / X86-MT-AUTO 调用）
-name: WRT-CORE
+name: 固件编译核心（公共）
 
 on:
   workflow_call:
@@ -79,18 +79,18 @@ env:
 
 jobs:
   core:
-    name: ${{inputs.WRT_SOURCE}}
+    name: 编译核心 · ${{inputs.WRT_SOURCE}}
     runs-on: ubuntu-latest
     # 略低于平台 6h 硬上限：被硬上限杀掉时 runner 直接终止，
     # 缓存的 post 保存步骤会被整段跳过，下次必然冷编译。
     timeout-minutes: 345
     steps:
-      - name: Checkout Projects
+      - name: 检出仓库代码
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Initialization Environment
+      - name: 初始化编译环境
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
@@ -113,7 +113,7 @@ jobs:
           sudo chown $USER:$USER /mnt/build_wrt
           sudo ln -s /mnt/build_wrt $GITHUB_WORKSPACE/wrt
 
-      - name: Initialization Values
+      - name: 初始化构建变量
         run: |
           echo "WRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
           echo "WRT_MARK=${GITHUB_REPOSITORY%%/*}" >> $GITHUB_ENV
@@ -137,7 +137,7 @@ jobs:
           fi
           echo "当前机型=${WRT_CONFIG} MT_MODE=${MT_MODE:-NONE} 变体=${WRT_VARIANT:-（无）}"
 
-      - name: Clone Code
+      - name: 拉取 OpenWrt 源码
         run: |
           git clone --depth=1 --single-branch --branch $WRT_BRANCH $WRT_REPO ./wrt/
 
@@ -149,7 +149,7 @@ jobs:
             sed -i '/.cn\//d; /tencent/d; /aliyun/d' "$PROJECT_MIRRORS_FILE"
           fi
 
-      - name: Check Scripts
+      - name: 脚本格式规整（CRLF → LF）
         run: |
           find ./ -maxdepth 3 -type f -iregex ".*\(txt\|sh\)$" -exec dos2unix {} \; -exec chmod +x {} \;
 
@@ -162,14 +162,14 @@ jobs:
       #     mediatek/filogic，可共用同一份工具链，避免每天白编译一次。
       #   - key 不再把 commit hash 放在唯一位置上，配合 restore-keys 做前缀回退，
       #     上游一有新提交也能命中上次的工具链。
-      #   - save-always：失败/超时/取消也要保存，否则会陷入
-      #     「超时 → 无缓存 → 再超时」的死循环。
-      - name: Check Caches (Toolchain & ccache)
-        id: check-cache
+      #   - 保存不再依赖 save-always（官方已标记弃用且行为不符合预期），改为下方
+      #     独立的 actions/cache/save@v6 步骤，并带 always()：失败/超时取消时
+      #     同样写入，避免陷入「超时 → 无缓存 → 再超时」的死循环。
+      - name: 恢复缓存（工具链 & ccache）
+        id: cache-tc-restore
         if: env.WRT_TEST != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v6
         with:
-          save-always: true
           key: wrt-tc-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
           restore-keys: |
             wrt-tc-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-
@@ -182,18 +182,18 @@ jobs:
       #   下载的源码包与机型无关。原 key 带 WRT_CONFIG，H5000M / AP3000M / X86
       #   各存一份 2.1GB，三份就是 6.3GB，直接把 10GB 配额撑爆触发 LRU 淘汰，
       #   结果是所有缓存一起失效。共享后每个源码分支只存一份。
-      - name: Check Caches (Download)
+      - name: 恢复缓存（下载源码包）
+        id: cache-dl-restore
         if: env.WRT_TEST != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v6
         with:
-          save-always: true
           key: wrt-dl-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
           restore-keys: |
             wrt-dl-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-
           path: |
             ./wrt/dl
 
-      - name: Update Caches
+      - name: 修正缓存时间戳
         if: env.WRT_TEST != 'true'
         run: |
           if [ -d "./wrt/staging_dir" ]; then
@@ -217,14 +217,14 @@ jobs:
       # feeds 缓存已移除：实测 `feeds update -a` 仅约 1 分钟，
       # 而缓存键绑定 commit hash 几乎必然 miss，多出的两次上传/下载是净亏损。
 
-      - name: Update Feeds
+      - name: 更新 feeds 软件源
         run: |
           cd ./wrt/
 
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Custom Packages
+      - name: 导入自定义插件
         run: |
           cd ./wrt/package/
 
@@ -240,7 +240,7 @@ jobs:
       # 连同其依赖解析一起丢弃；之后再 clone 也已错过选包时机，表现为
       # 「三个 job 全绿，固件里却没有 luci-app-fm350」。
       # 早于 Download Packages 则让包参与 make download 预取，避免编译期再联网。
-      - name: Custom Packages (FM350)
+      - name: 导入 luci-app-fm350（FM350 变体）
         if: contains(env.WRT_CONFIG, 'FM350')
         run: |
           cd ./wrt/package/
@@ -259,7 +259,7 @@ jobs:
           rustup target list --installed | grep -qx "$RUST_TARGET"
           rustc --version
 
-      - name: Custom Settings
+      - name: 生成配置并执行 defconfig
         run: |
           cd ./wrt/
 
@@ -282,7 +282,7 @@ jobs:
           make defconfig && make clean
 
       # 配置生成后、编译前：验证 MT 模式包选择互斥（双重验证之一）
-      - name: Verify MT Mode
+      - name: 校验 MT 插件模式互斥
         run: |
           cd ./wrt/
 
@@ -291,7 +291,7 @@ jobs:
       # 防回归：包已就位 且 .config 已选中，缺任一都会变成
       # 「编译全绿、固件里却少一个 luci-app-fm350」这种最难查的失败。
       # 放在下载与编译之前，失配立刻红，不用等一两个小时才从产物里发现。
-      - name: Verify FM350 Package
+      - name: 校验 luci-app-fm350 已选中
         if: contains(env.WRT_CONFIG, 'FM350')
         run: |
           cd ./wrt/
@@ -309,7 +309,7 @@ jobs:
 
           echo "luci-app-fm350 已就位且已被 .config 选中"
 
-      - name: Download Packages
+      - name: 预下载源码包
         if: env.WRT_TEST != 'true'
         run: |
           cd ./wrt/
@@ -317,12 +317,23 @@ jobs:
           # 只在并行下载失败时才做串行兜底，不再每次都跑两遍全量校验
           make download -j$(nproc) || make download -j1
 
+      # 与上面「恢复缓存（下载源码包）」配对：dl 目录在预下载后即定型，
+      # 立即保存可让同分支的后续机型直接命中；always() 保证下载失败时把已抓到的
+      # 部分也存下来，下次不必从零开始。
+      - name: 保存缓存（下载源码包）
+        if: always() && env.WRT_TEST != 'true' && steps.cache-dl-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          key: wrt-dl-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
+          path: |
+            ./wrt/dl
+
       # 关键改动 3：AP3000M 跳过 rust/host 源码构建
       #   luci-app-airpi-fancontrol 的守护进程 airpi-fanctl 是 Rust 写的，
       #   默认路径会让 OpenWrt 从源码构建整套 rust/host（rustc + cargo + LLVM），
       #   约 1.5~3 小时。这里用 runner 自带的 rustup 配合已构建好的 aarch64 musl
       #   交叉链接器直接 cargo，再通过 AIRPI_PREBUILT=1 交给包 Makefile。
-      - name: Prebuild AirPi Rust Binary (AP3000M)
+      - name: 预编译 AirPi Rust 后端（AP3000M）
         if: contains(env.WRT_CONFIG, 'AP3000M') && env.WRT_TEST != 'true'
         run: |
           cd ./wrt/
@@ -388,7 +399,7 @@ jobs:
             rm -rf "$PREBUILT_DIR"
           fi
 
-      - name: Compile Firmware
+      - name: 编译固件
         if: env.WRT_TEST != 'true'
         run: |
           cd ./wrt/
@@ -467,7 +478,20 @@ jobs:
 
           exit "$RC"
 
-      - name: Machine Information
+      # 与上面「恢复缓存（工具链 & ccache）」配对。位置必须在「整理并打包固件」
+      # 之前：该步骤内的 make clean 会清空 staging_dir，届时已无内容可缓存。
+      # always() 让编译失败/超时被取消时也能保住工具链，避免每次冷启动。
+      - name: 保存缓存（工具链 & ccache）
+        if: always() && env.WRT_TEST != 'true' && steps.cache-tc-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          key: wrt-tc-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
+          path: |
+            ./wrt/.ccache
+            ./wrt/staging_dir/host*
+            ./wrt/staging_dir/tool*
+
+      - name: 输出构建机信息
         run: |
           cd ./wrt/
 
@@ -479,7 +503,7 @@ jobs:
           du -h --max-depth=1
           echo "======================="
 
-      - name: Package Firmware
+      - name: 整理并打包固件
         run: |
           cd ./wrt/ && mkdir ./upload/
 
@@ -506,7 +530,7 @@ jobs:
             make clean -j$(nproc)
           fi
 
-      - name: Release Firmware
+      - name: 发布固件到 Release
         if: env.WRT_TEST != 'true'
         uses: softprops/action-gh-release@v2
         with:
