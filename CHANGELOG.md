@@ -1,4 +1,49 @@
 # 更新日志
+## [2026-09-23] 新增 FM350 变体：三机型各一份独立配置 + 统一编译入口
+
+### 背景
+
+Fibocom FM350-GL 模组需要 `luci-app-fm350`（LuCI 界面 + Rust 后端 `fm350d`）。
+现有机型配置（`H5000M-WIFI-YES` / `AP3000M` / `X86`）不做任何改动，改为各新增
+一份 FM350 变体配置。
+
+### 设计要点
+
+1. **只新增、不改现有配置**：三份 `<机型>-FM350.txt` 的板级部分与母配置逐行
+   一致，仅在末尾追加 `luci-app-fm350` 及其依赖（`luci-base` / `rpcd` /
+   `rpcd-mod-ucode` / `kmod-usb-net-rndis` / `kmod-usb-serial-option`）。
+   母配置零改动，两条构建路径互不干扰。
+2. **配置名必须保留机型前缀**：`WRT-CORE.yml` 中 AP3000M 的 EEPROM 注入与
+   AirPi Rust 后端预编译两步靠 `contains(env.WRT_CONFIG, 'AP3000M')` 命中。
+   若按「就叫 FM350」命名，这两步会被静默跳过 —— AP3000M 的 factory 分区
+   出厂为空，不注入 EEPROM 则 mt76 起不来、Wi-Fi 彻底瘫痪。
+3. **产物文件名追加 `-FM350`**：固件名由镜像原名拼出，**不含机型配置名**，
+   普通版与 FM350 版的文件名会完全一致，下载到本地无法区分。因此在
+   `WRT-CORE.yml` 增加可选入参 `WRT_VARIANT`（默认空），仅 FM350 变体传入
+   `FM350` 并追加到文件名末尾；现有三机型不传该参数，产物名逐字节不变。
+4. **不污染通用 Feed 入口**：`luci-app-fm350` 的拉取独立为
+   `Scripts/Packages-FM350.sh`，由带 `contains(env.WRT_CONFIG, 'FM350')`
+   条件的步骤调用，`Scripts/Packages.sh` 一行未改。
+5. **Rust 构建不触发 `rust/host`**：`fm350d` 由包内 Makefile 直接调 cargo
+   交叉编译为 musl 静态二进制，只需 runner 侧存在对应 target 的标准库，
+   不会像 `rust/host` 源码构建那样耗 1.5~3 小时并顶到 345 分钟超时。
+6. **依赖逐项显式写出**：`luci-app-fm350` 的 Makefile 只用
+   `rules.mk` / `package.mk`，不使用 `feeds/luci/luci.mk`；菜单走
+   `/usr/share/luci/menu.d/*.json` 注册，无 Lua 控制器与 `.ut` 模板；
+   文案为中文硬编码，不存在 `luci-i18n-fm350-zh-cn` 包。
+
+### 变更
+
+- 新增 `Config/H5000M-WIFI-YES-FM350.txt` / `Config/AP3000M-FM350.txt` / `Config/X86-FM350.txt`
+- 新增 `Scripts/Packages-FM350.sh`（FM350 变体专用源码拉取，幂等 + CRLF 断言）
+- 新增 `.github/workflows/FM350-AUTO.yml`（一份 workflow 覆盖三机型；矩阵用
+  `include` 逐项绑定各自源码上游，H5000M / AP3000M 取 `owrt`，X86 取 `master`）
+- `.github/workflows/WRT-CORE.yml`：新增可选入参 `WRT_VARIANT` 与产物文件名后缀；
+  新增带条件的 `Custom Packages (FM350)` 步骤（拉包 + 按 `WRT_TARGET` 选 Rust target）
+- `.github/workflows/WRT-BUILD.yml`：Target Device 下拉新增三个 FM350 配置项
+- `README.md`：机型表、功能小节 4、工作流矩阵、手动指引、产物命名、项目结构、鸣谢
+- `CHANGELOG.md`：本条
+
 ## [2026-09-20] 修复 MT5700M 变体全灭：QModem 侧 QMI 驱动改为显式选中
 
 ### 问题

@@ -12,6 +12,8 @@
 
 *适配 Hiveton H5000M 5G CPE（MT7986 + MT5700M）、AirPi AP3000M（MT7981B）与通用 X86_64 架构设备*
 
+*每个机型另有 **FM350 变体**：板级定义与母配置一致，额外编入 Fibocom FM350-GL 模组管理 `luci-app-fm350`*
+
 ---
 
 </div>
@@ -23,6 +25,12 @@
 | `H5000M-WIFI-YES` | MediaTek Filogic (MT7986) | Hiveton H5000M 5G CPE | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) (`owrt`) | ✅ 开启 | Sysupgrade / Factory |
 | `AP3000M` | MediaTek Filogic (MT7981B) | AirPi AP3000M | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) (`owrt`) | ✅ 开启 | Sysupgrade / Factory |
 | `X86` | 标准 x86_64 处理器 | 通用 64 位 PC / 工控机 / 软路由 | [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) (`master`) | — | ISO / EFI / GRUB / VMDK |
+| `H5000M-WIFI-YES-FM350` | MediaTek Filogic (MT7986) | Hiveton H5000M + Fibocom FM350-GL | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) (`owrt`) | ✅ 开启 | Sysupgrade / Factory |
+| `AP3000M-FM350` | MediaTek Filogic (MT7981B) | AirPi AP3000M + Fibocom FM350-GL | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) (`owrt`) | ✅ 开启 | Sysupgrade / Factory |
+| `X86-FM350` | 标准 x86_64 处理器 | 通用 64 位 PC / 工控机 + Fibocom FM350-GL | [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) (`master`) | — | ISO / EFI / GRUB / VMDK |
+
+> [!NOTE]
+> **FM350 变体说明**：三份 `<机型>-FM350.txt` 均为**新增文件**，板级部分与母配置逐行一致，仅在末尾追加 `luci-app-fm350` 及其依赖；母配置未做任何改动。配置名保留机型前缀是硬性要求：`WRT-CORE.yml` 中 AP3000M 的 EEPROM 注入与 AirPi Rust 后端预编译两步靠 `contains(env.WRT_CONFIG, 'AP3000M')` 命中，改名会让它们静默失配（factory 分区为空 → mt76 起不来 → Wi-Fi 瘫痪）。
 
 > [!TIP]
 > **源码拉取说明**：自动化编译工作流中，`H5000M-WIFI-YES` 与 `AP3000M` 固定拉取 `VIKINGYFY/immortalwrt` 的 `owrt` 分支；`X86-MT-AUTO` 拉取 `immortalwrt/immortalwrt` 的 `master` 分支。手动触发 `WRT-BUILD` 时，可通过界面下拉框自由切换源码上游与分支。
@@ -68,6 +76,17 @@
 *（全机型通用）*
 - 🔄 **接入模式切换**：支持“仅 5G 蜂窝”、“仅 WAN 有线”及“双链路负载均衡 / 主备故障转移”一键调度。
 - ⚡ **毫秒级容灾切换**：联动 `mwan3` 状态探针，当检测到主链路中断时瞬间切流，确保业务持续在线。
+
+### 4. Fibocom FM350-GL 模组管理 (`luci-app-fm350`)
+*（仅编入 `<机型>-FM350` 变体）*
+
+- 📡 **状态与拨号**：LuCI 界面呈现驻留频段、信号质量与连接状态，支持 APN 配置、连接与断开、拨号管理。
+- 🔧 **在线 AT 与锁频**：后端守护 `fm350d` 独占 AT 端口，可下发 AT 指令，支持锁频段与锁小区。
+- 📨 **短信收发**：网页端直接查收与发送短信，便于读取流量卡余额与验证码。
+- ⚙️ **Rust 后端**：守护进程为 Rust 编写，编译期由 cargo 交叉编译为 musl 静态二进制（`/usr/sbin/fm350d`），不走 OpenWrt 的 `rust/host` 源码构建，构建耗时可控。
+
+> [!NOTE]
+> FM350 走 **RNDIS** 数据通道，与 MT5700M 方案的 QMI vendor 驱动（`kmod-qmi_wwan_f` / `kmod-qmi_wwan_q`）不争抢同名 `.ko`，两者无 rootfs 文件冲突。FM350 变体的 `MT_MODE` 一律留空（不装 MT 插件）。
 
 ---
 
@@ -117,6 +136,7 @@
 | **`H5000M-MT-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 并行编译 H5000M 的 **MT5700 + MT5700M** 双配置并自动发版 |
 | **`AP3000M-MT-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 并行编译 AP3000M 的 **MT5700 + MT5700M** 双配置并自动发版 |
 | **`X86-MT-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 并行编译 X86 的 **MT5700 + MT5700M** 双配置并自动发版 |
+| **`FM350-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 一份 workflow 覆盖全部机型的 **FM350 变体**（H5000M / AP3000M / X86）并自动发版 |
 | **`Auto-Clean`** | 每日定时调度 / 手动 | 保持仓库整洁：保留最近 1 个 Release 及 30 天以内的构建日志 |
 | **`Cache-Clean`** | 手动触发 | 主动清理 actions/cache 编译缓存（不设定时清空，避免缓存频繁冷启动） |
 
@@ -125,7 +145,7 @@
 1. 进入仓库页面，点击 **`Actions`** 选项卡。
 2. 在左侧列表选择 **`WRT-BUILD`**，点击右侧 **`Run workflow`**。
 3. 按需选择：
-   - **Target Device**：`H5000M-WIFI-YES` / `AP3000M` / `X86`
+   - **Target Device**：`H5000M-WIFI-YES` / `AP3000M` / `X86` / `H5000M-WIFI-YES-FM350` / `AP3000M-FM350` / `X86-FM350`
    - **MT Mode**：`MT5700M` / `MT5700` / `NONE`
    - **TEST**：若要正式输出固件，**务必将 `TEST` 改为 `false`**（设为 `true` 仅导出校验用 `.config`）。
 
@@ -142,7 +162,16 @@ immortalwrt-mediatek-filogic-hiveton_h5000m-MT5700M-wifi-yes-26.09.13-sysupgrade
 H5000M-WIFI-YES-MT5700-2026.09.13
 H5000M-WIFI-YES-MT5700M-2026.09.13
 
+# FM350 变体：文件名末尾追加 -FM350
+...-hiveton_h5000m-NONE-wifi-yes-26.09.23-FM350-sysupgrade.bin
+
+# FM350 变体 Release Tag（配置名本身已含 FM350）
+AP3000M-FM350-NONE-VIKINGYFY-owrt-26.09.23
+
 ```
+
+> [!TIP]
+> **为什么要加 `-FM350` 后缀**：固件文件名由镜像原名拼出，**不含机型配置名**，普通版与 FM350 版的文件名会完全一样，下载到本地后无法区分。因此在 `WRT-CORE.yml` 增加可选入参 `WRT_VARIANT`，仅 FM350 变体传入 `FM350`，追加到文件名末尾；现有机型不传该参数，产物名逐字节不变。
 
 ---
 
@@ -156,6 +185,7 @@ OpenWRT-CI/
 │   ├── H5000M-MT-AUTO.yml    # H5000M 双配置定时自动化发布
 │   ├── AP3000M-MT-AUTO.yml   # AP3000M 双配置定时自动化发布
 │   ├── X86-MT-AUTO.yml       # X86 双配置定时自动化发布
+│   └── FM350-AUTO.yml        # FM350 变体统一入口（覆盖全部机型）
 │   ├── Auto-Clean.yml        # 自动化历史制品与任务日志清理
 │   └── Cache-Clean.yml       # 手动编译缓存回收
 ├── Config/                   # 模块化编译配置文件层
@@ -164,12 +194,16 @@ OpenWRT-CI/
 │   ├── MT5700M.txt           # MT5700M 方案独立包配置（方案 A）
 │   ├── H5000M-WIFI-YES.txt   # Hiveton H5000M 专属硬件板级定义
 │   ├── AP3000M.txt           # AirPi AP3000M 专属硬件板级定义
-│   └── X86.txt               # X86_64 架构板级定义
+│   ├── X86.txt               # X86_64 架构板级定义
+│   ├── H5000M-WIFI-YES-FM350.txt # H5000M 板级定义 + luci-app-fm350
+│   ├── AP3000M-FM350.txt     # AP3000M 板级定义 + luci-app-fm350
+│   └── X86-FM350.txt         # X86_64 板级定义 + luci-app-fm350
 ├── AP3000M-EEPROM/           # AP3000M 自动化射频恢复套件
 │   ├── mt7981_eeprom_mt7976_dbdc.bin # 提取自闭源固件的标准校准 EEPROM
 │   └── 99-ap3000m-eeprom     # 首次启动写入 factory 分区的初始化脚本
 ├── Scripts/                  # 编译流水线钩子脚本
 │   ├── Packages.sh           # 第三方 Feed 拉取与版本锁定
+│   ├── Packages-FM350.sh     # FM350 变体专用：拉取 luci-app-fm350 源码
 │   ├── ApplyMTMode.sh        # 根据选定模式组装配置层并注入互斥开关
 │   ├── VerifyMTMode.sh       # defconfig 后期校验，严查同名 .ko 驱动冲突
 │   ├── Handles.sh            # 静态资源预置、主题适配与组件补丁
@@ -199,3 +233,4 @@ OpenWRT-CI/
 * [luci-app-mt5700m](https://github.com/LianXia233/luci-app-mt5700m?utm_source=gemini)（5G 蜂窝监控与管理）
 * [luci-app-h5000m-fancontrol](https://github.com/FAN789/luci-app-h5000m-fancontrol?utm_source=gemini)（硬件级智能风扇温控）
 * [luci-app-h5000m-netmode](https://github.com/LianXia233/luci-app-h5000m-netmode?utm_source=gemini)（智能网络模式无缝调度）
+* [luci-app-fm350](https://github.com/LianXia233/luci-app-fm350)（Fibocom FM350-GL 模组管理，LuCI 界面 + Rust 后端）
