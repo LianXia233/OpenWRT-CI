@@ -231,6 +231,34 @@ jobs:
           $GITHUB_WORKSPACE/Scripts/Packages.sh
           $GITHUB_WORKSPACE/Scripts/Handles.sh
 
+      # FM350 变体专属：拉取 luci-app-fm350 源码 + 准备 Rust 交叉编译目标。
+      # 条件为 contains FM350，H5000M / AP3000M / X86 三套既有构建不执行本步骤。
+      #
+      # 位置必须在 Custom Settings（cat 配置 + make defconfig）与 Download Packages
+      # 之前：make defconfig 只认 package/ 树里此刻已经存在的 Makefile，包还没就位时
+      # 配置里的 CONFIG_PACKAGE_luci-app-fm350=y 只是一条孤立符号，会被 defconfig
+      # 连同其依赖解析一起丢弃；之后再 clone 也已错过选包时机，表现为
+      # 「三个 job 全绿，固件里却没有 luci-app-fm350」。
+      # 早于 Download Packages 则让包参与 make download 预取，避免编译期再联网。
+      - name: Custom Packages (FM350)
+        if: contains(env.WRT_CONFIG, 'FM350')
+        run: |
+          cd ./wrt/package/
+
+          $GITHUB_WORKSPACE/Scripts/Packages-FM350.sh
+
+          # fm350d 由包内 Makefile 直接调 cargo 交叉编译，不走 OpenWrt 的
+          # rust/host 源码构建（那套要 1.5~3 小时），因此只需 runner 侧
+          # 存在对应 target 的标准库。架构取自配置里解析出的 WRT_TARGET。
+          case "$WRT_TARGET" in
+            x86) RUST_TARGET=x86_64-unknown-linux-musl ;;
+            *)   RUST_TARGET=aarch64-unknown-linux-musl ;;
+          esac
+          echo "Rust target: $RUST_TARGET"
+          rustup target add "$RUST_TARGET"
+          rustup target list --installed | grep -qx "$RUST_TARGET"
+          rustc --version
+
       - name: Custom Settings
         run: |
           cd ./wrt/
@@ -260,6 +288,27 @@ jobs:
 
           $GITHUB_WORKSPACE/Scripts/VerifyMTMode.sh
 
+      # 防回归：包已就位 且 .config 已选中，缺任一都会变成
+      # 「编译全绿、固件里却少一个 luci-app-fm350」这种最难查的失败。
+      # 放在下载与编译之前，失配立刻红，不用等一两个小时才从产物里发现。
+      - name: Verify FM350 Package
+        if: contains(env.WRT_CONFIG, 'FM350')
+        run: |
+          cd ./wrt/
+
+          if [ ! -d ./package/luci-app-fm350 ]; then
+            echo "::error::package/luci-app-fm350 不存在：Packages-FM350.sh 未执行或 clone 失败"
+            exit 1
+          fi
+
+          if ! grep -qx 'CONFIG_PACKAGE_luci-app-fm350=y' ./.config; then
+            echo "::error::.config 未选中 luci-app-fm350：包是否在 make defconfig 之前就位？"
+            grep -i 'fm350' ./.config || echo "（.config 中无任何 fm350 相关行）"
+            exit 1
+          fi
+
+          echo "luci-app-fm350 已就位且已被 .config 选中"
+
       - name: Download Packages
         if: env.WRT_TEST != 'true'
         run: |
@@ -267,27 +316,6 @@ jobs:
 
           # 只在并行下载失败时才做串行兜底，不再每次都跑两遍全量校验
           make download -j$(nproc) || make download -j1
-
-      # FM350 变体专属：拉取 luci-app-fm350 源码 + 准备 Rust 交叉编译目标。
-      # 条件为 contains FM350，H5000M / AP3000M / X86 三套既有构建不执行本步骤。
-      - name: Custom Packages (FM350)
-        if: contains(env.WRT_CONFIG, 'FM350')
-        run: |
-          cd ./wrt/package/
-
-          $GITHUB_WORKSPACE/Scripts/Packages-FM350.sh
-
-          # fm350d 由包内 Makefile 直接调 cargo 交叉编译，不走 OpenWrt 的
-          # rust/host 源码构建（那套要 1.5~3 小时），因此只需 runner 侧
-          # 存在对应 target 的标准库。架构取自配置里解析出的 WRT_TARGET。
-          case "$WRT_TARGET" in
-            x86) RUST_TARGET=x86_64-unknown-linux-musl ;;
-            *)   RUST_TARGET=aarch64-unknown-linux-musl ;;
-          esac
-          echo "Rust target: $RUST_TARGET"
-          rustup target add "$RUST_TARGET"
-          rustup target list --installed | grep -qx "$RUST_TARGET"
-          rustc --version
 
       # 关键改动 3：AP3000M 跳过 rust/host 源码构建
       #   luci-app-airpi-fancontrol 的守护进程 airpi-fanctl 是 Rust 写的，
