@@ -52,6 +52,13 @@ on:
         required: false
         type: string
         default: ""
+      # 变体标签（可选，默认空）：用于在同一机型的不同配置变体之间区分产物文件名。
+      # 例如 AP3000M-FM350 传 "FM350"，固件名末尾追加 "-FM350"。
+      # 留空时产物命名与历史完全一致（H5000M / AP3000M / X86 不受影响）。
+      WRT_VARIANT:
+        required: false
+        type: string
+        default: ""
 
 env:
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
@@ -68,6 +75,7 @@ env:
   WRT_PACKAGE: ${{inputs.WRT_PACKAGE}}
   WRT_TEST: ${{inputs.WRT_TEST}}
   MT_MODE: ${{inputs.MT_MODE}}
+  WRT_VARIANT: ${{inputs.WRT_VARIANT}}
 
 jobs:
   core:
@@ -120,7 +128,14 @@ jobs:
           else
             echo "WRT_MT=$MT_MODE" >> $GITHUB_ENV
           fi
-          echo "当前机型=${WRT_CONFIG} MT_MODE=${MT_MODE:-NONE}"
+          # 变体标签：非空时生成 "-<变体>" 片段，留空为空字符串，
+          # 保证未使用变体的机型产物文件名逐字节不变。
+          if [ -n "${WRT_VARIANT:-}" ]; then
+            echo "WRT_VARIANT_TAG=-${WRT_VARIANT}" >> $GITHUB_ENV
+          else
+            echo "WRT_VARIANT_TAG=" >> $GITHUB_ENV
+          fi
+          echo "当前机型=${WRT_CONFIG} MT_MODE=${MT_MODE:-NONE} 变体=${WRT_VARIANT:-（无）}"
 
       - name: Clone Code
         run: |
@@ -252,6 +267,27 @@ jobs:
 
           # 只在并行下载失败时才做串行兜底，不再每次都跑两遍全量校验
           make download -j$(nproc) || make download -j1
+
+      # FM350 变体专属：拉取 luci-app-fm350 源码 + 准备 Rust 交叉编译目标。
+      # 条件为 contains FM350，H5000M / AP3000M / X86 三套既有构建不执行本步骤。
+      - name: Custom Packages (FM350)
+        if: contains(env.WRT_CONFIG, 'FM350')
+        run: |
+          cd ./wrt/package/
+
+          $GITHUB_WORKSPACE/Scripts/Packages-FM350.sh
+
+          # fm350d 由包内 Makefile 直接调 cargo 交叉编译，不走 OpenWrt 的
+          # rust/host 源码构建（那套要 1.5~3 小时），因此只需 runner 侧
+          # 存在对应 target 的标准库。架构取自配置里解析出的 WRT_TARGET。
+          case "$WRT_TARGET" in
+            x86) RUST_TARGET=x86_64-unknown-linux-musl ;;
+            *)   RUST_TARGET=aarch64-unknown-linux-musl ;;
+          esac
+          echo "Rust target: $RUST_TARGET"
+          rustup target add "$RUST_TARGET"
+          rustup target list --installed | grep -qx "$RUST_TARGET"
+          rustc --version
 
       # 关键改动 3：AP3000M 跳过 rust/host 源码构建
       #   luci-app-airpi-fancontrol 的守护进程 airpi-fanctl 是 Rust 写的，
@@ -432,7 +468,8 @@ jobs:
               EXT=$(basename $FILE | cut -d '.' -f 2-)
               NAME=$(basename $FILE | cut -d '.' -f 1 | grep -io "\($WRT_TARGET\).*")
               # 文件名嵌入 MT_MODE：同一机型的 MT5700 / MT5700M 产物可并存于同一 Release
-              NEW_FILE="$NAME"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_MT"-"$WRT_WIFI"-"$WRT_DATE"."$EXT"
+              # 变体标签追在日期之后：留空时不产生多余连字符
+              NEW_FILE="$NAME"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_MT"-"$WRT_WIFI"-"$WRT_DATE""$WRT_VARIANT_TAG"."$EXT"
               mv -f $FILE ./upload/$NEW_FILE
             done
 

@@ -14,8 +14,11 @@ on:
         type: choice
         options:
           - H5000M-WIFI-YES
+          - H5000M-WIFI-YES-FM350
           - AP3000M
+          - AP3000M-FM350
           - X86
+          - X86-FM350
       SOURCE:
         description: '源码仓库'
         default: 'immortalwrt/immortalwrt'
@@ -72,3 +75,6 @@ jobs:
       # 注意：GHA 表达式中空字符串为 falsy，不能写成 `cond && '' || x`，
       # 必须用显式三元链保证 NONE 时最终得到空值。
       MT_MODE: ${{ inputs.MT_MODE == 'MT5700' && 'MT5700' || (inputs.MT_MODE == 'MT5700M' && 'MT5700M' || '') }}
+      # 变体标签：FM350 配置用于产物文件名区分（固件名本身不含机型名，
+      # 不加这个后缀，下载到本地后分不出是普通版还是 FM350 版）
+      WRT_VARIANT: ${{ endsWith(inputs.CONFIG, 'FM350') && 'FM350' || '' }}

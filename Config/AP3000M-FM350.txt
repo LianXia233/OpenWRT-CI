@@ -1,0 +1,60 @@
+# AirPi AP3000M 独立配置（含 Fibocom FM350-GL 5G 模组管理）
+#
+# 本文件为新增文件：板级部分与 Config/AP3000M.txt 逐行一致，仅在末尾追加
+# luci-app-fm350 及其依赖。原配置未做任何改动，两份配置互不干扰。
+#
+# 命名必须保留 "AP3000M" 子串：WRT-CORE.yml 有两处步骤靠它命中
+#   - EEPROM 注入（factory 出厂为空，不注入则 mt76 起不来、Wi-Fi 瘫痪）
+#   - AirPi Rust 后端预编译（跳过会触发 rust/host 源码构建，超时）
+# 两处都是 contains(env.WRT_CONFIG, 'AP3000M')，改名会让它们静默失配。
+
+# 设备平台
+CONFIG_TARGET_mediatek=y
+CONFIG_TARGET_mediatek_filogic=y
+
+# 仅编译 AirPi AP3000M
+CONFIG_TARGET_MULTI_PROFILE=n
+CONFIG_TARGET_ALL_PROFILES=n
+CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_airpi_ap3000m=y
+
+# 内核调整
+CONFIG_PACKAGE_kmod-cryptodev=y
+CONFIG_PACKAGE_kmod-tls=y
+
+# AP3000M 专用硬件 (风扇控制)
+CONFIG_PACKAGE_luci-app-airpi-fancontrol=y
+CONFIG_PACKAGE_kmod-airpi-gpio-fan=y
+CONFIG_PACKAGE_luci-compat=y
+CONFIG_PACKAGE_luci-lua-runtime=y
+CONFIG_PACKAGE_kmod-hwmon-pwmfan=y
+
+# ===== Fibocom FM350-GL 模组：luci-app-fm350 =====
+#
+# 包来源：https://github.com/LianXia233/luci-app-fm350（分支 main，版本 1.0.2-r1）
+# 构成：LuCI JS 界面 + Rust 后端守护 fm350d（/usr/sbin/fm350d）+ rpcd ucode 插件。
+#
+# 四条打包特性决定了这里该写什么、不该写什么：
+#   1. 上游 Makefile 只 include rules.mk / package.mk，不使用 feeds/luci/luci.mk，
+#      因此不依赖 LuCI feed 的编译框架，源码树与 SDK 都能构建。
+#   2. 菜单通过 /usr/share/luci/menu.d/*.json 注册，无 Lua 控制器、无 .ut 模板。
+#   3. 界面文案为中文硬编码，不使用 .lmo 翻译文件 —— 因此不存在
+#      luci-i18n-fm350-zh-cn 这个包，写了就是一条无人认领的无效配置。
+#   4. 后端 fm350d 由 cargo 交叉编译产出（musl 静态链接），不是独立软件包，
+#      不能写 CONFIG_PACKAGE_fm350d=y。
+CONFIG_PACKAGE_luci-app-fm350=y
+
+# Makefile DEPENDS 逐项显式选中。
+# 理由：依赖若只靠 DEPENDS 隐式解析，上游一旦调整打包、或某个依赖在别的配置层
+# 被置 =n，make defconfig 之后会静默缺包 —— 界面能装但功能不全，比直接编不过更难查。
+# kmod-usb-net-rndis / kmod-usb-serial-option 在 Config/GENERAL.txt 中已是 =y，
+# 这里重复声明只为自解释；后写覆盖先写，结果一致。
+CONFIG_PACKAGE_luci-base=y
+CONFIG_PACKAGE_rpcd=y
+CONFIG_PACKAGE_rpcd-mod-ucode=y
+CONFIG_PACKAGE_kmod-usb-net-rndis=y
+CONFIG_PACKAGE_kmod-usb-serial-option=y
+
+# FM350 走 RNDIS 数据通道，与 MT5700M 方案的 QMI vendor 驱动
+# （kmod-qmi_wwan_f / kmod-qmi_wwan_q）不争抢同名 .ko，无 rootfs 文件冲突。
+# MT 相关包一律交给 MT_MODE 决定：Scripts/ApplyMTMode.sh 在本层之后执行，
+# 会用 =n 覆盖本文件可能写入的任何 MT 包，故本文件不声明任何 MT 包。
