@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-name: Cache-Clean
+name: 缓存清理
 
 on:
   # 不再每周定时全量清空：
@@ -19,8 +19,8 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Projects
+      - name: 检出仓库代码
         uses: actions/checkout@v4
 
-      - name: Cache Clean
+      - name: 清理 Actions 缓存
         run: gh cache delete --all
