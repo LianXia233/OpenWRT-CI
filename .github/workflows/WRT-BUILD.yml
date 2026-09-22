@@ -2,7 +2,7 @@
 # Copyright (C) 2026 VIKINGYFY
 
 # 手动编译入口（机型 × MT 模式 二选一；产物/Tag 嵌入 MT 模式）
-name: WRT-BUILD
+name: 手动编译固件
 
 on:
   workflow_dispatch:
@@ -56,7 +56,7 @@ permissions: write-all
 
 jobs:
   build:
-    name: ${{inputs.CONFIG}}-${{inputs.MT_MODE}}
+    name: ${{inputs.CONFIG}}（MT 模式：${{inputs.MT_MODE}}）
     uses: ./.github/workflows/WRT-CORE.yml
     with:
       WRT_CONFIG: ${{inputs.CONFIG}}
