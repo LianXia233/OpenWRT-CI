@@ -14,12 +14,12 @@
 #
 # 配置名保留机型前缀：WRT-CORE.yml 的 AP3000M 专属步骤（EEPROM 注入、
 # AirPi Rust 后端预编译）靠 contains 子串匹配，改名会让它们静默失配。
-name: FM350-AUTO
+name: FM350 变体定时编译
 
 on:
   # Auto-Clean 完成后自动触发
   workflow_run:
-    workflows: ["Auto-Clean"]
+    workflows: ["自动清理"]
     types:
       - completed
   # 也可手动触发
@@ -39,7 +39,7 @@ permissions: write-all
 
 jobs:
   config:
-    name: ${{ matrix.CONFIG }}
+    name: ${{ matrix.CONFIG }}（FM350 变体）
     strategy:
       fail-fast: false
       matrix:
