@@ -6,12 +6,12 @@
 #   MT5700  —— 仅 luci-app-mt5700
 #   MT5700M —— luci-app-mt5700m + sms-tool_q + ubus-at-daemon
 # 产物文件名与 Release Tag 均嵌入 MT 模式，可并存区分。
-name: X86-MT-AUTO
+name: X86 定时编译（MT 双配置）
 
 on:
   # Auto-Clean 完成后自动触发
   workflow_run:
-    workflows: ["Auto-Clean"]
+    workflows: ["自动清理"]
     types:
       - completed
   # 手动编译
@@ -31,7 +31,7 @@ permissions: write-all
 
 jobs:
   config:
-    name: ${{ matrix.CONFIG }}-${{ matrix.MT_MODE }}
+    name: ${{ matrix.CONFIG }}（${{ matrix.MT_MODE }} 方案）
     strategy:
       fail-fast: false
       matrix:
