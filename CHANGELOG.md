@@ -1,4 +1,34 @@
 # 更新日志
+## [2026-09-25] 修复定时构建失败：sing-box 过时补丁导致编译中断
+
+### 背景
+
+2026-09-24 北京时间 23:47 触发的四个定时构建（X86 / H5000M / AP3000M / FM350 变体）
+同时 `failure`，首个失败步骤均为「编译固件」。日志根因为：
+
+```
+Applying .../package/packages/sing-box/patches/100-fix-dns-tcp-close.patch using plaintext:
+Patch failed!  Please fix .../sing-box/patches/100-fix-dns-tcp-close.patch!
+make[3]: *** [Makefile:182: .../.prepared_...] Error 1
+ERROR: package/packages/sing-box failed to build (build variant: full).
+```
+
+该补丁是 VIKINGYFY/packages 中针对旧版 sing-box 的反向移植（引入上游从未合入的
+`HandleStreamDNSConnection`）。feed 把 sing-box 升到 `1.15.0_alpha8` 后，补丁上下文
+已与上游源码（仍是 `HandleStreamDNSRequest`）不匹配，OpenWrt 在 `Build/Prepare` 阶段
+应用补丁失败、整个固件编译中断。上游 immortalwrt/packages 的 sing-box 根本不携带该补丁
+也能正常构建，故判定为可安全移除的过时补丁。
+
+### 变更
+
+- `Scripts/Packages.sh`：在克隆 viking feed 之后新增 `FIX_SINGBOX_STALE_PATCH`，
+  仅当 `100-fix-dns-tcp-close.patch` 内容含旧版标记 `HandleStreamDNSConnection` 时
+  移除它；若 VIKINGYFY 后续刷新该补丁为新版，规则因标记不匹配自动跳过，不误删。
+- viking feed 中仅 sing-box 含 `patches/` 目录，移除后四机型构建阻塞点解除。
+- 取舍说明：移除后 sing-box 回退到上游默认 DNS 处理逻辑（与 immortalwrt/packages 一致）；
+  若该 DNS TCP 关闭修复仍被需要，应向上游 VIKINGYFY/packages 提交适配新源码的补丁，
+  而非在 CI 侧长期打补丁。
+
 ## [2026-09-23] 新增 FM350 变体：三机型各一份独立配置 + 统一编译入口
 
 ### 背景
