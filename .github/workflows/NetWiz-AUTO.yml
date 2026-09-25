@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: MIT
+# Copyright (C) 2026 VIKINGYFY
+
+# NetWiz 变体统一编译入口：一份 workflow 覆盖全部机型的 NetWiz 配置
+#
+# 与 XXX-MT-AUTO 系列的关系：
+#   - 配置层改用 Config/<机型>-NETWIZ.txt（母配置板级定义 + luci-app-netwiz 段）
+#   - MT_MODE 留空：NetWiz 是网络配置向导，与 MT5700 / MT5700M 插件无耦合
+#   - 传 WRT_VARIANT=NetWiz，产物文件名末尾追加 "-NetWiz" 以便与母配置区分
+#
+# 矩阵用 include 而非笛卡尔积：三个机型的 NetWiz 配置虽同名后缀，但源码上游不同
+# （H5000M / AP3000M 取 VIKINGYFY/immortalwrt 的 owrt 分支，X86 取
+# immortalwrt/immortalwrt 的 master 分支），必须逐项绑定，不能交叉组合。
+#
+# 配置名保留机型前缀：WRT-CORE.yml 的 AP3000M 专属步骤（EEPROM 注入、
+# AirPi Rust 后端预编译）靠 contains 子串匹配，改名会让它们静默失配。
+name: NetWiz 变体定时编译
+
+on:
+  # Auto-Clean 完成后自动触发
+  workflow_run:
+    workflows: ["自动清理"]
+    types:
+      - completed
+  # 也可手动触发
+  workflow_dispatch:
+    inputs:
+      PACKAGE:
+        description: '手动追加插件包（多行请用换行隔开）'
+        required: false
+        type: string
+      TEST:
+        description: '仅输出配置文件，不编译固件。'
+        default: 'false'
+        required: false
+        type: boolean
+
+permissions: write-all
+
+jobs:
+  config:
+    name: ${{ matrix.CONFIG }}（NetWiz 变体）
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - CONFIG: H5000M-WIFI-YES-NETWIZ
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: owrt
+          - CONFIG: AP3000M-NETWIZ
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: owrt
+          - CONFIG: X86-NETWIZ
+            SOURCE: immortalwrt/immortalwrt
+            BRANCH: master
+
+    uses: ./.github/workflows/WRT-CORE.yml
+    with:
+      WRT_CONFIG: ${{ matrix.CONFIG }}
+
+      WRT_THEME: aurora
+      WRT_NAME: OWRT
+      WRT_SSID: OWRT
+      WRT_WORD: 12345678
+      WRT_IP: 192.168.10.1
+      WRT_PW: 无
+
+      WRT_REPO: https://github.com/${{ matrix.SOURCE }}.git
+      WRT_BRANCH: ${{ matrix.BRANCH }}
+      WRT_SOURCE: ${{ matrix.SOURCE }}
+
+      WRT_PACKAGE: ${{ inputs.PACKAGE }}
+      WRT_TEST: ${{ inputs.TEST }}
+      # NetWiz 变体不装 MT 插件
+      MT_MODE: ''
+      # 产物文件名区分标记
+      WRT_VARIANT: NetWiz
