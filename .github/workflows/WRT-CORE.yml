@@ -140,7 +140,25 @@ jobs:
           else
             echo "WRT_VARIANT_TAG=" >> $GITHUB_ENV
           fi
-          echo "当前机型=${WRT_CONFIG} MT_MODE=${MT_MODE:-NONE} 变体=${WRT_VARIANT:-（无）}"
+          # Release 归组（Tag = <组名>-<YY.MM.DD>）：让 Releases 页面按变体归类，
+          # 同组同一天的全部机型产物汇聚到同一个 Release 里：
+          #   FM350 / NetWiz 变体 → 各自成组（NetWiz 不与 MT 模式交叉，独立一组）
+          #   无变体但选了 MT 模式 → 按 MT5700 / MT5700M 成组
+          #   其余（无变体且未选 MT 模式）→ BASE 组
+          # Tag 日期只到天（TZ=UTC-8）：三个机型的定时 job 由同一次 Auto-Clean
+          # 触发、在同一天内执行，天级时间戳必然一致，因此跨 workflow 也能
+          # 共享同一 Tag —— softprops/action-gh-release 对已存在的 Tag 会把
+          # 产物追加进既有 Release，而不是另开一个。
+          if [ -n "${WRT_VARIANT:-}" ]; then
+            WRT_TAG_GROUP="$WRT_VARIANT"
+          elif [ -n "${MT_MODE:-}" ]; then
+            WRT_TAG_GROUP="$MT_MODE"
+          else
+            WRT_TAG_GROUP="BASE"
+          fi
+          echo "WRT_TAG_GROUP=$WRT_TAG_GROUP" >> $GITHUB_ENV
+          echo "WRT_RELEASE_TAG=$(TZ=UTC-8 date +"%y.%m.%d" | sed "s/^/${WRT_TAG_GROUP}-/")" >> $GITHUB_ENV
+          echo "当前机型=${WRT_CONFIG} MT_MODE=${MT_MODE:-NONE} 变体=${WRT_VARIANT:-（无）} 归组=${WRT_TAG_GROUP} Tag=${WRT_RELEASE_TAG}"
 
       - name: 拉取 OpenWrt 源码
         run: |
@@ -593,13 +611,15 @@ jobs:
         if: env.WRT_TEST != 'true'
         uses: softprops/action-gh-release@v3
         with:
-          # Tag 嵌入 MT_MODE，双配置并行编译时 Tag 可读且互不覆盖
-          tag_name: ${{env.WRT_CONFIG}}-${{env.WRT_MT}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
+          # Tag 按变体归组：<组名>-<YY.MM.DD>。同组同一天的多个机型 job
+          # 共享同一 Tag，产物追加进同一个 Release，Releases 页面即按
+          # MT5700 / MT5700M / FM350 / NetWiz / BASE 天然归类。
+          tag_name: ${{env.WRT_RELEASE_TAG}}
           files: ./wrt/upload/*.*
           body: |
-            这是个平台固件包，内含多个设备！
-            请注意选择你需要的设备固件！
-            不要问，刷就完事了！
+            本 Release 按变体归组：同一天内全部机型的该变体固件汇聚于此，请按设备型号选择对应文件！
+
+            文件名格式：<镜像名>-<源码>-<分支>-<MT模式>-<wifi>-<日期时间>-<变体>.<扩展名>
 
             全系带开源硬件加速，别问了！
 
@@ -609,6 +629,7 @@ jobs:
 
             配置：${{env.WRT_CONFIG}}
             MT模式：${{env.WRT_MT}}
+            归组：${{env.WRT_TAG_GROUP}}
             平台：${{env.WRT_TARGET}}
 
             登录地址：${{env.WRT_IP}}

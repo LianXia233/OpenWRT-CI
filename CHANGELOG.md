@@ -1,4 +1,47 @@
 # 更新日志
+## [2026-09-26] Releases 按变体归组：同组多机型产物汇聚同一 Release
+
+### 背景
+
+此前每个配置组合（配置名 × MT 模式 × 源码 × 分支）各生成一个独立 Release
+（Tag 含秒级时间戳），Releases 页面按「机型 × 模式」碎片化展开，找固件困难。
+改为按变体归类：`MT5700` 放一起、`MT5700M` 放一起、`FM350` 放一起，
+`NetWiz` 独立一组（不与 MT 模式交叉）。
+
+### 设计要点
+
+1. **Tag 改为分组式**：`<组名>-<YY.MM.DD>`（天级精度）。组名在
+   `WRT-CORE.yml`「初始化构建变量」时推导：`WRT_VARIANT`（FM350 / NetWiz）
+   优先，其次 `MT_MODE`（MT5700 / MT5700M），兜底 `BASE`（无变体且未选
+   MT 模式的手动构建）。
+2. **跨 workflow 共享 Tag 的依据**：三个机型的定时 job 由同一次 Auto-Clean
+   触发、同一天内执行，天级时间戳必然一致，因此无需在 workflow 层传递
+   统一日期 —— `H5000M-MT-AUTO` / `AP3000M-MT-AUTO` / `X86-MT-AUTO` 各自
+   独立计算的 `MT5700-<日期>` Tag 天然相同。`action-gh-release` 对已存在
+   的 Tag 会把产物追加进既有 Release，同组三机型即汇聚一页。
+3. **固件文件名保持秒级时间戳**：同组内不同批次的构建（如当天手动重跑）
+   文件名可区分；同名资产由 action-gh-release 覆盖。
+4. **Auto-Clean 双格式兼容**：`keep_latest_per_device` 的归组键解析依次
+   尝试旧格式 `<配置>-<MT模式>-<源码>-<分支>-<YY.MM.DD>-<HH.MM.SS>`
+   （drop=2，按机型保留）与新格式 `<组名>-<YY.MM.DD>`（drop=0，按变体
+   保留），历史 Release 不被误删；非流水线 Tag 退化为整条作键（只多保留）。
+5. **五个定时工作流与手动入口零改动**：归组完全由 WRT-CORE 内部从既有
+   `WRT_VARIANT` / `MT_MODE` 入参推导，`FM350-AUTO` / `NetWiz-AUTO` /
+   三个 MT-AUTO / `WRT-BUILD` 均不需要感知。
+
+### 变更
+
+- `.github/workflows/WRT-CORE.yml`：
+  - 「初始化构建变量」新增 `WRT_TAG_GROUP`（归组名）与 `WRT_RELEASE_TAG`
+    （`<组名>-<YY.MM.DD>`，TZ=UTC-8）
+  - 「发布固件到 Release」的 `tag_name` 改用 `WRT_RELEASE_TAG`，body 增加
+    归组说明与文件名格式说明
+- `.github/workflows/Auto-Clean.yml`：`keep_latest_per_device` 归组键解析
+  兼容新旧两种 Tag 格式
+- `README.md`：「产物命名与 Release 规范」章节重写（归组表、机制说明、
+  兼容性说明）
+- `CHANGELOG.md`：本条
+
 ## [2026-09-25] 新增 NetWiz 变体：三机型各一份独立配置 + 统一编译入口
 
 ### 背景

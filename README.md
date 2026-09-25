@@ -173,29 +173,29 @@
 
 ### 3. 产物命名与 Release 规范
 
-自动工作流会将模式标签与生成日期直接融入产物名与 Release Tag，便于区分：
+**Release 按变体归组**：Tag 格式为 `<组名>-<YY.MM.DD>`（天级），同组同一天内全部机型的产物汇聚到**同一个 Release**，Releases 页面天然按类别归类：
+
+| Release（Tag 示例） | 包含内容 |
+| :--- | :--- |
+| `MT5700-26.09.26` | 当天全部机型的 MT5700 模式固件 |
+| `MT5700M-26.09.26` | 当天全部机型的 MT5700M 模式固件 |
+| `FM350-26.09.26` | 当天全部机型的 FM350 变体固件 |
+| `NetWiz-26.09.26` | 当天全部机型的 NetWiz 变体固件（独立一组，不与 MT 模式交叉） |
+| `BASE-26.09.26` | 当天手动编译的无变体、无 MT 模式固件 |
+
+> [!NOTE]
+> **归组机制**：`WRT-CORE.yml` 在「初始化构建变量」时按 `WRT_VARIANT`（FM350 / NetWiz）优先、其次 `MT_MODE`（MT5700 / MT5700M）、兜底 `BASE` 推导组名，Tag 只含天级日期 —— 三个机型的定时 job 由同一次 Auto-Clean 触发、同一天内执行，天级时间戳必然一致，因此跨 workflow 也能共享同一 Tag；`action-gh-release` 对已存在的 Tag 会把产物追加进既有 Release 而非另开新页。
+>
+> **Auto-Clean 兼容**：`keep_latest_per_device` 的归组键解析同时兼容旧格式 `<配置>-<MT模式>-<源码>-<分支>-<日期时间>`（按机型保留）与新格式 `<组名>-<日期>`（按变体保留），历史 Release 不会被误删。
+
+**固件文件名**（含秒级时间戳，同组内可区分不同批次的构建）：
 
 ```text
-# 固件文件名规范示例
+# 固件文件名规范示例（变体标签追加在日期之后）
 immortalwrt-mediatek-filogic-hiveton_h5000m-MT5700-wifi-yes-26.09.13-sysupgrade.bin
 immortalwrt-mediatek-filogic-hiveton_h5000m-MT5700M-wifi-yes-26.09.13-sysupgrade.bin
-
-# Release Tag 规范
-H5000M-WIFI-YES-MT5700-2026.09.13
-H5000M-WIFI-YES-MT5700M-2026.09.13
-
-# FM350 变体：文件名末尾追加 -FM350
 ...-hiveton_h5000m-NONE-wifi-yes-26.09.23-FM350-sysupgrade.bin
-
-# FM350 变体 Release Tag（配置名本身已含 FM350）
-AP3000M-FM350-NONE-VIKINGYFY-owrt-26.09.23
-
-# NetWiz 变体：文件名末尾追加 -NetWiz
 ...-hiveton_h5000m-NONE-wifi-yes-26.09.26-NetWiz-sysupgrade.bin
-
-# NetWiz 变体 Release Tag（配置名本身已含 NETWIZ）
-AP3000M-NETWIZ-NONE-VIKINGYFY-owrt-26.09.26
-
 ```
 
 > [!TIP]
