@@ -1,4 +1,75 @@
 # 更新日志
+## [2026-09-25] 新增 NetWiz 变体：三机型各一份独立配置 + 统一编译入口
+
+### 背景
+
+网络配置向导 `luci-app-netwiz`（上游 `huchd0/luci-app-netwiz`）需要编入固件。
+现有机型配置（`H5000M-WIFI-YES` / `AP3000M` / `X86`）与既有 FM350 变体均
+不做任何改动，改为各新增一份 NetWiz 变体配置。
+
+### 设计要点
+
+1. **只新增、不改现有配置**：三份 `<机型>-NETWIZ.txt` 的板级部分与母配置逐行
+   一致，仅在末尾追加 `luci-app-netwiz` 及其依赖（`luci-base` / `rpcd` /
+   `iwinfo` / `rpcd-mod-iwinfo` / `luci-compat` / `ppp-mod-pppoe` / `jsonfilter`）。
+   母配置与 FM350 变体零改动，三条构建路径互不干扰。
+2. **配置名必须保留机型前缀**：`WRT-CORE.yml` 中 AP3000M 的 EEPROM 注入与
+   AirPi Rust 后端预编译两步靠 `contains(env.WRT_CONFIG, 'AP3000M')` 命中，
+   改名会让它们静默失配（factory 分区为空 → mt76 起不来 → Wi-Fi 瘫痪）。
+3. **产物区分靠三层标识**，互不覆盖：
+   - 固件文件名末尾追加 `-NetWiz`（`WRT_VARIANT` 入参，既有机制直接复用）；
+   - Release Tag 含配置名（`AP3000M-NETWIZ-...`），与母配置 / FM350 天然不同；
+   - 配置导出名 `Config-<配置名>-<MT>-...txt` 同样含配置名。
+   经推演核验：9 个配置组合（3 机型 × 3 变体）的 Tag / 配置导出名 / Auto-Clean
+   归组键均为 9/9 唯一，变体产物不会被 `keep_latest_per_device` 误删。
+4. **上游仓库是 monorepo 形态**：仓库根目录放 `install.sh` / `probe.py` /
+   `worker.js` 等开发辅助文件，包本体在根下的 `luci-app-netwiz/` 一级子目录。
+   OpenWrt 只认 `package/<包名>/Makefile`，故取包脚本先 clone 到临时目录
+   `.netwiz-upstream`，再把子目录整体搬到 `package/luci-app-netwiz/`。
+5. **上游文件全是 CRLF，必须归一化**（本次排查中最关键的非显然问题）：
+   上游提交的 20 个文件（`Makefile`、全部 init.d 服务、rpcd 插件、hotplug
+   守卫、`menu.d`/`acl.d` JSON、`.po` 翻译）均为 CRLF。三种具体后果：
+   - `Makefile`：`include $(TOPDIR)/feeds/luci/luci.mk` 的行尾 `\r` 被并入
+     文件名，make 报 `luci.mk\r: No such file or directory`，包直接编不过；
+   - `init.d` shebang 变成 `#!/bin/sh /etc/rc.common\r`，procd 经 rc.common
+     派发时解释器路径被污染，服务起不来；
+   - `menu.d` / `acl.d` JSON 中的 `\r` 是字符串外非法空白，LuCI 解析失败，
+     表现为「包装上了但界面里找不到入口」。
+   `WRT-CORE.yml` 既有的「脚本格式规整（CRLF → LF）」步骤**管不到**这里：
+   它只覆盖 OpenWrt 源码树顶层三级的 `txt/sh`，且执行时机早于取包步骤，
+   顺序上已错过。因此归一化在取包脚本内部就地完成并逐文件复核。
+6. **走 LuCI feed 编译框架**：与 `luci-app-fm350` 只用 `rules.mk` / `package.mk`
+   不同，本包 `include $(TOPDIR)/feeds/luci/luci.mk`，因此必须晚于
+   `feeds update -a`、早于 `make defconfig` 就位。步骤位置已按此固定，
+   并增加 `feeds/luci/luci.mk` 可用性预检，避免在编译中期才报难懂的 make 错误。
+7. **翻译包必须一起选中**：`po/zh_Hans` + `po/zh_Hant` 会被 `luci.mk` 拆成
+   `luci-i18n-netwiz-zh-cn` / `luci-i18n-netwiz-zh-tw` 独立包，主包默认只带
+   英文。未选中翻译包时界面回退英文，但编译照样全绿 —— 属「能用但不对」的
+   静默缺陷，故在校验步骤中一并断言。
+8. **`LUCI_PKGARCH:=all`**：纯脚本架构，生成的 ipk/apk 与 CPU 架构无关，
+   三机型共用同一份包定义，变体配置之间无需架构差异处理。
+
+### 变更
+
+- 新增 `Config/H5000M-WIFI-YES-NETWIZ.txt` / `Config/AP3000M-NETWIZ.txt` / `Config/X86-NETWIZ.txt`
+- 新增 `Scripts/Packages-NetWiz.sh`（NetWiz 变体专用源码拉取：monorepo 子目录
+  搬移 + CRLF→LF 归一化 + 逐文件复核 + Makefile 断言 + luci.mk 引用断言 + 可执行位补齐）
+- 新增 `.github/workflows/NetWiz-AUTO.yml`（一份 workflow 覆盖三机型；矩阵用
+  `include` 逐项绑定各自源码上游，H5000M / AP3000M 取 `owrt`，X86 取 `master`；
+  `MT_MODE` 固定留空，`WRT_VARIANT` 传 `NetWiz`）
+- `.github/workflows/WRT-CORE.yml`：新增带 `contains(env.WRT_CONFIG, 'NETWIZ')`
+  条件的「导入 luci-app-netwiz」（含 luci.mk 预检）与「校验 luci-app-netwiz 已选中」
+  （含中文语言包断言）两个步骤；`WRT_VARIANT` 入参机制为既有实现，未改动
+- `.github/workflows/WRT-BUILD.yml`：Target Device 下拉新增三个 NetWiz 配置项
+  （并按母配置 / FM350 / NetWiz 分组注释）；`WRT_VARIANT` 推导由单一 `endsWith`
+  扩展为嵌套三元链，同时识别 `NETWIZ` → `NetWiz` 与 `FM350` → `FM350`
+- `Scripts/Packages.sh`、`Scripts/Handles.sh`、`Scripts/ApplyMTMode.sh`、
+  `Scripts/VerifyMTMode.sh`、`.github/workflows/Auto-Clean.yml`：**均未改动**
+  （Auto-Clean 的 Tag 归组逻辑经推演对新变体天然兼容，无需调整）
+- `README.md`：机型表新增三行、功能小节 5（NetWiz）、CRLF 处理说明、
+  工作流矩阵、手动指引、产物命名（含大小写差异说明）、项目结构、鸣谢
+- `CHANGELOG.md`：本条
+
 ## [2026-09-25] 修复定时构建失败：sing-box 过时补丁导致编译中断
 
 ### 背景

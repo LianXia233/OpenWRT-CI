@@ -264,6 +264,34 @@ jobs:
           rustup target list --installed | grep -qx "$RUST_TARGET"
           rustc --version
 
+      # NetWiz 变体专属：拉取 luci-app-netwiz 源码放进 package/。
+      # 条件为 contains NETWIZ，H5000M / AP3000M / X86 及各自 FM350 变体
+      # 均不执行本步骤，既有构建路径零影响。
+      #
+      # 位置与上面的 fm350 步骤同理，必须在「生成配置并执行 defconfig」之前：
+      # make defconfig 只认 package/ 树里此刻已存在的 Makefile，包未就位时
+      # CONFIG_PACKAGE_luci-app-netwiz=y 是孤立符号，会被连依赖一起丢弃，
+      # 结果是「编译全绿、固件里没有这个插件」。
+      #
+      # 本包额外依赖 LuCI feed 的编译框架（上游 Makefile 走
+      # include $(TOPDIR)/feeds/luci/luci.mk），故还必须晚于
+      # 「更新 feeds 软件源」步骤 —— 当前位置已满足。
+      - name: 导入 luci-app-netwiz（NetWiz 变体）
+        if: contains(env.WRT_CONFIG, 'NETWIZ')
+        run: |
+          cd ./wrt/package/
+
+          $GITHUB_WORKSPACE/Scripts/Packages-NetWiz.sh
+
+          # luci.mk 可用性预检：上游 Makefile 用它触发出包与 i18n 拆分，
+          # 缺失只会在编译中期报难懂的 make 错误，这里提前显式失败。
+          LUCI_MK="$(pwd)/../feeds/luci/luci.mk"
+          if [ ! -f "$LUCI_MK" ]; then
+            echo "::error::未找到 $LUCI_MK：feeds 未更新或 luci feed 未展开"
+            exit 1
+          fi
+          echo "luci.mk 就位：$LUCI_MK"
+
       - name: 生成配置并执行 defconfig
         run: |
           cd ./wrt/
@@ -314,6 +342,32 @@ jobs:
 
           echo "luci-app-fm350 已就位且已被 .config 选中"
 
+      # 防回归：与上面 fm350 校验同源。NetWiz 多一项翻译包必须一起校验 ——
+      # 主包默认只带英文，luci-i18n-netwiz-zh-cn 未被选中时界面回退英文，
+      # 但编译照样全绿，属「能用但不对」的静默缺陷。
+      - name: 校验 luci-app-netwiz 已选中
+        if: contains(env.WRT_CONFIG, 'NETWIZ')
+        run: |
+          cd ./wrt/
+
+          if [ ! -d ./package/luci-app-netwiz ]; then
+            echo "::error::package/luci-app-netwiz 不存在：Packages-NetWiz.sh 未执行或 clone 失败"
+            exit 1
+          fi
+
+          if ! grep -qx 'CONFIG_PACKAGE_luci-app-netwiz=y' ./.config; then
+            echo "::error::.config 未选中 luci-app-netwiz：包是否在 make defconfig 之前就位？"
+            grep -i 'netwiz' ./.config || echo "（.config 中无任何 netwiz 相关行）"
+            exit 1
+          fi
+
+          if ! grep -qx 'CONFIG_PACKAGE_luci-i18n-netwiz-zh-cn=y' ./.config; then
+            echo "::error::.config 未选中 luci-i18n-netwiz-zh-cn：中文界面将回退英文"
+            grep -i 'netwiz' ./.config || echo "（.config 中无任何 netwiz 相关行）"
+            exit 1
+          fi
+
+          echo "luci-app-netwiz 及中文语言包已就位且已被 .config 选中"
       - name: 预下载源码包
         if: env.WRT_TEST != 'true'
         run: |
