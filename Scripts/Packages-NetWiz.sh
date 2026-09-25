@@ -19,7 +19,9 @@ set -euo pipefail
 
 PKG_NAME=luci-app-netwiz
 PKG_REPO=huchd0/luci-app-netwiz
-PKG_BRANCH="${NETWIZ_BRANCH:-main}"
+# 上游仓库只有 master 分支（git ls-remote 实测，API default_branch=master），
+# 不存在 main —— 写错分支名会在 clone 阶段直接 fatal: Remote branch not found
+PKG_BRANCH="${NETWIZ_BRANCH:-master}"
 
 # 上游仓库根目录名（clone 目标），与包目录名区分开，避免搬移时自我覆盖
 REPO_DIR=".netwiz-upstream"
