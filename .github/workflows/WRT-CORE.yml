@@ -591,6 +591,18 @@ jobs:
             echo "WRT_KVER=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^kernel - \K[\d\.]+' {} \;)" >> $GITHUB_ENV
             echo "WRT_LIST=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^luci-(app|theme)[^ ]*' {} \; | tr '\n' ' ')" >> $GITHUB_ENV
 
+            # 插件清单转 Markdown 列表：WRT_LIST 是空格分隔长串（几十个包挤一行），
+            # 直接放进 Release body 无法阅读。GITHUB_ENV 多行值用官方 heredoc 语法写入。
+            if [ -n "$WRT_LIST" ] && [ "$WRT_LIST" != "none" ]; then
+              {
+                echo "WRT_LIST_MD<<GITHUB_ENV_LIST_EOF"
+                printf '%s\n' $WRT_LIST | awk '{printf "- `%s`\n", $0}'
+                echo "GITHUB_ENV_LIST_EOF"
+              } >> $GITHUB_ENV
+            else
+              echo "WRT_LIST_MD=（未采集到插件清单）" >> $GITHUB_ENV
+            fi
+
             find ./bin/targets/ -iregex ".*\(buildinfo\|json\|sha256sums\|packages\)$" -exec rm -rf {} +
 
             for FILE in $(find ./bin/targets/ -type f -iname "*$WRT_TARGET*") ; do
@@ -616,27 +628,51 @@ jobs:
           # MT5700 / MT5700M / FM350 / NetWiz / BASE 天然归类。
           tag_name: ${{env.WRT_RELEASE_TAG}}
           files: ./wrt/upload/*.*
+          # body 为结构化 Markdown：组别速查、文件名解读、默认参数、构建信息。
+          # 注意：多机型产物追加进同一 Release 时，action-gh-release 会用本 job
+          # 的 body 覆盖既有说明，因此「本批构建信息」一节必须标注
+          # 「为最后完成机型的数据」，避免读者误以为是全组唯一值。
+          # 插件清单用折叠块（details）呈现，清单内容来自 WRT_LIST_MD。
           body: |
-            本 Release 按变体归组：同一天内全部机型的该变体固件汇聚于此，请按设备型号选择对应文件！
+            > 同一天内全部机型的 **${{env.WRT_TAG_GROUP}}** 变体固件汇聚于此。本仓库 Releases 按变体归组，认准组名下载即可。
 
-            文件名格式：<镜像名>-<源码>-<分支>-<MT模式>-<wifi>-<日期时间>-<变体>.<扩展名>
+            ## 组别速查
 
-            全系带开源硬件加速，别问了！
+            | 组名 | 适用场景 |
+            | :--- | :--- |
+            | `MT5700` | MT5700 模组方案（方案 B，单包内置 Rust 后端） |
+            | `MT5700M` | MT5700M 模组方案（方案 A，含短信与 AT 守护） |
+            | `FM350` | Fibocom FM350-GL 模组管理（RNDIS 数据通道） |
+            | `NetWiz` | NetWiz 网络配置向导（独立变体，不装 MT 插件） |
+            | `BASE` | 无变体基础构建（手动触发） |
 
-            源码：${{env.WRT_REPO}}
-            分支：${{env.WRT_BRANCH}}
-            提交：${{env.WRT_HASH}}
+            ## 文件名解读
 
-            配置：${{env.WRT_CONFIG}}
-            MT模式：${{env.WRT_MT}}
-            归组：${{env.WRT_TAG_GROUP}}
-            平台：${{env.WRT_TARGET}}
+            ```
+            <镜像名>-<源码>-<分支>-<MT模式>-<wifi>-<日期时间>-<变体>.<扩展名>
+            ```
 
-            登录地址：${{env.WRT_IP}}
-            登录密码：${{env.WRT_PW}}
+            镜像名中的设备 profile 段（如 `airpi_ap3000m`、`hiveton_h5000m`）即目标机型，按设备选择对应文件。全系带开源硬件加速。
 
-            WIFI名称：${{env.WRT_SSID}}
-            WIFI密码：${{env.WRT_WORD}}
+            ## 默认出厂参数
 
-            内核版本：${{env.WRT_KVER}}
-            插件列表：${{env.WRT_LIST}}
+            | 项目 | 值 |
+            | :--- | :--- |
+            | 后台地址 | `${{env.WRT_IP}}` |
+            | 后台密码 | `${{env.WRT_PW}}` |
+            | Wi-Fi | `${{env.WRT_SSID}}` / `${{env.WRT_WORD}}`（WPA 混合加密） |
+
+            ## 本批构建信息
+
+            > 多机型产物追加进同一 Release 时，本节为最后完成机型的数据，仅作参考。
+
+            - 源码：`${{env.WRT_REPO}}`（`${{env.WRT_BRANCH}}` @ `${{env.WRT_HASH}}`）
+            - 配置：`${{env.WRT_CONFIG}}` · MT 模式：`${{env.WRT_MT}}` · 归组：`${{env.WRT_TAG_GROUP}}`
+            - 平台：`${{env.WRT_TARGET}}` · 内核：`${{env.WRT_KVER}}`
+
+            <details>
+            <summary>插件清单（点开展开）</summary>
+
+            ${{env.WRT_LIST_MD}}
+
+            </details>
