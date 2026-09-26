@@ -1,4 +1,29 @@
 # 更新日志
+## [2026-09-26] 优化 Release 简介排版：结构化 Markdown + 插件清单折叠列表
+
+### 问题
+
+归组后 Release body 存在三处可读性缺陷：
+
+1. 插件列表（`WRT_LIST`）是空格分隔的一整行长串，几十个包挤在一行无法阅读；
+2. 多机型产物追加进同一 Release 时，`action-gh-release` 会用后完成 job 的
+   body 覆盖既有说明，而旧文案未标注这一点，读者会误把单一机型数据当全组值；
+3. 缺少结构：组别含义、文件名如何对应机型、默认参数混排在一起。
+
+### 变更
+
+- `.github/workflows/WRT-CORE.yml`：
+  - 「整理并打包固件」新增 `WRT_LIST_MD` 生成：把空格分隔的插件清单转为
+    Markdown 无序列表（经 `$GITHUB_ENV` 官方 heredoc 语法写入多行值）；
+  - 「发布固件到 Release」body 重写为结构化 Markdown：
+    - 顶部归组提示（组名加粗）
+    - 组别速查表（MT5700 / MT5700M / FM350 / NetWiz / BASE 各自适用场景）
+    - 文件名解读（含「设备 profile 段即目标机型」的指引）
+    - 默认出厂参数表（后台地址 / 密码 / Wi-Fi）
+    - 本批构建信息（显式标注「为最后完成机型的数据，仅作参考」）
+    - 插件清单折叠块（`<details>` + `WRT_LIST_MD`）
+- `CHANGELOG.md`：本条
+
 ## [2026-09-26] Releases 按变体归组：同组多机型产物汇聚同一 Release
 
 ### 背景
