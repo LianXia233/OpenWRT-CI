@@ -385,6 +385,28 @@ jobs:
             exit 1
           fi
 
+          # 组合变体一致性：配置名以 -MT5700M / -MT5700 结尾时，对应 MT 主包
+          # 必须已被 MT_MODE 驱动选中（MT 层不内嵌在配置文件里——ApplyMTMode
+          # 空模式会禁用全部 MT 包，Packages.sh 的 FOLD_MT5700M 也必须由
+          # MT_MODE=MT5700M 驱动）。若手动构建错配 MT_MODE（选了 NETWIZ-MT5700
+          # 却把 MT Mode 留空），这里立即拦截，避免产出名不副实的固件。
+          case "$WRT_CONFIG" in
+            *-MT5700M)
+              if ! grep -qx 'CONFIG_PACKAGE_luci-app-mt5700m=y' ./.config; then
+                echo "::error::配置 $WRT_CONFIG 要求 MT_MODE=MT5700M，但 .config 未选中 luci-app-mt5700m（手动构建时 MT Mode 是否错配？）"
+                grep -i 'mt5700' ./.config || echo "（.config 中无任何 mt5700 相关行）"
+                exit 1
+              fi
+              ;;
+            *-MT5700)
+              if ! grep -qx 'CONFIG_PACKAGE_luci-app-mt5700=y' ./.config; then
+                echo "::error::配置 $WRT_CONFIG 要求 MT_MODE=MT5700，但 .config 未选中 luci-app-mt5700（手动构建时 MT Mode 是否错配？）"
+                grep -i 'mt5700' ./.config || echo "（.config 中无任何 mt5700 相关行）"
+                exit 1
+              fi
+              ;;
+          esac
+
           echo "luci-app-netwiz 及中文语言包已就位且已被 .config 选中"
       - name: 预下载源码包
         if: env.WRT_TEST != 'true'
@@ -644,6 +666,8 @@ jobs:
             | `MT5700M` | MT5700M 模组方案（方案 A，含短信与 AT 守护） |
             | `FM350` | Fibocom FM350-GL 模组管理（RNDIS 数据通道） |
             | `NetWiz` | NetWiz 网络配置向导（独立变体，不装 MT 插件） |
+            | `NetWiz-MT5700` / `NetWiz-MT5700M` | NetWiz 向导 + MT 插件组合变体 |
+            | `NetWiz-FM350` | NetWiz 向导 + FM350 模组组合变体 |
             | `BASE` | 无变体基础构建（手动触发） |
 
             ## 文件名解读

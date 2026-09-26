@@ -1,4 +1,53 @@
 # 更新日志
+## [2026-09-26] NetWiz 家族扩展组合变体：× MT5700 / MT5700M / FM350 各自单独配置
+
+### 背景
+
+NetWiz 变体此前为独立组合（纯 NetWiz，无 MT、无 FM350）。需求变更：NetWiz
+需要能与其他模组方案组合，且每种组合单独一份配置文件 —— 新增 9 份配置
+（3 机型 × MT5700 / MT5700M / FM350 三种组合），NetWiz 家族扩至
+4 种组合 × 3 机型 = 12 份配置。
+
+### 设计要点
+
+1. **MT 组合必须由 MT_MODE 驱动，不能内嵌进配置文件**（本次最关键判断）：
+   - `ApplyMTMode.sh` 在空模式时会显式禁用全部 MT 包（`write_disable`
+     覆盖一切此前写入的 MT 行）；
+   - `Packages.sh` 的 `FOLD_MT5700M`（MT5700M 的 Rust 后端折叠）由
+     `case "$MT_MODE" in MT5700M)` 驱动，MT_MODE 为空时 luci-app-mt5700m
+     根本不会被克隆与折叠；
+   - 因此 `*-NETWIZ-MT5700.txt` / `*-NETWIZ-MT5700M.txt` 的正文与
+     `*-NETWIZ.txt` 逐行一致（仅头部注释不同），MT 层由定时矩阵绑定的
+     `MT_MODE` 叠加 —— 完整复用 ApplyMTMode 互斥保护与 VerifyMTMode 校验。
+2. **手动错配防护**：手动构建选了 `*-NETWIZ-MT5700` 却把 MT Mode 留空时，
+   ApplyMTMode 空模式会禁用 MT 包 → 「校验 luci-app-netwiz 已选中」步骤
+   新增组合一致性断言（按配置名后缀检查对应 MT 主包是否选中），立即拦截。
+3. **FM350 组合零额外机制**：WRT-CORE 的导入/校验步骤按 `contains` 子串
+   命中，`*-NETWIZ-FM350` 同时命中 NETWIZ 与 FM350 两分支（netwiz 与
+   fm350 源码都就位、Rust target 都准备、两个校验都执行）。
+4. **产物归组独立**：`WRT_VARIANT` 推导由 `endsWith` 升级为 contains 嵌套
+   三元链 —— `NetWiz` / `NetWiz-MT5700` / `NetWiz-MT5700M` / `NetWiz-FM350`
+   各自成组（Tag `<组名>-<YY.MM.DD>`，Auto-Clean 归组键解析经推演全部
+   正确），产物文件名后缀 `-NetWiz-MT5700` 等。
+5. **成本提示**：NetWiz-AUTO 定时矩阵 3 → 12 个 job（每天全量约 21 个
+   编译任务）；如需控制用量可注释矩阵中的组合项。
+
+### 变更
+
+- 新增 9 份配置：`Config/{H5000M-WIFI-YES,AP3000M,X86}-NETWIZ-{MT5700,MT5700M,FM350}.txt`
+  （MT 组合正文与 `*-NETWIZ.txt` 逐行一致，头部注释说明 MT_MODE 绑定关系；
+  FM350 组合为 NETWIZ 正文 + FM350 追加段；全部 LF，板级一致性已断言）
+- `.github/workflows/NetWiz-AUTO.yml`：矩阵 3 → 12 项（新增 MT 字段驱动
+  MT_MODE），`WRT_VARIANT` 改为按 CONFIG 推导
+- `.github/workflows/WRT-BUILD.yml`：下拉 9 → 18 项；`WRT_VARIANT` 推导
+  contains 化；MT Mode 说明更新
+- `.github/workflows/WRT-CORE.yml`：NetWiz 校验步骤新增组合一致性断言；
+  Release body 组别速查表补 `NetWiz-MT5700` / `NetWiz-MT5700M` / `NetWiz-FM350` 行
+- `README.md`：机型表、NetWiz 说明、手动指引、归组表、项目结构
+- `CHANGELOG.md`：本条
+- 既有母配置、FM350 变体、纯 NetWiz 配置、Packages.sh / Handles.sh /
+  ApplyMTMode.sh / VerifyMTMode.sh：**均未改动**
+
 ## [2026-09-26] 优化 Release 简介排版：结构化 Markdown + 插件清单折叠列表
 
 ### 问题

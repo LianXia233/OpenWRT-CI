@@ -1,0 +1,172 @@
+# X86_64 独立配置（NetWiz 网络向导 + MT5700 模组方案）
+#
+# 本文件为新增文件：板级与插件部分与 Config/X86-NETWIZ.txt 逐行一致。
+# MT 插件层刻意不写在本文件中：由调用方传入 MT_MODE=MT5700，由
+# Scripts/ApplyMTMode.sh 在 Settings.sh 之后叠加 Config/MT5700.txt 并执行
+# 互斥保护（MT5700M 还会触发 Packages.sh 的 FOLD_MT5700M 折叠 Rust 后端）。
+#
+# 定时工作流（NetWiz-AUTO）矩阵已绑定对应 MT_MODE；手动触发 WRT-BUILD 时
+# 必须把 MT Mode 下拉同步选为 MT5700——若留空，ApplyMTMode 空模式会禁用
+# 全部 MT 包，「校验 luci-app-netwiz 已选中」步骤的组合一致性断言会拦截。
+#
+# 命名保留 "X86" 子串以继承按机型名匹配的既有逻辑；产物归组
+# NetWiz-MT5700（Release Tag 形如 NetWiz-MT5700-<YY.MM.DD>，固件名后缀 -NetWiz-MT5700）。
+# 目标平台
+CONFIG_TARGET_x86=y
+CONFIG_TARGET_x86_64=y
+CONFIG_TARGET_ALL_PROFILES=y
+
+# 镜像格式与引导支持
+CONFIG_ISO_IMAGES=y
+CONFIG_EFI_IMAGES=y
+CONFIG_GRUB_IMAGES=y
+CONFIG_GRUB_EFI_IMAGES=y
+CONFIG_VMDK_IMAGES=y
+
+# 分区大小与文件系统
+CONFIG_TARGET_KERNEL_PARTSIZE=128
+CONFIG_TARGET_ROOTFS_PARTSIZE=1024
+CONFIG_TARGET_ROOTFS_EXT4FS=n
+CONFIG_TARGET_ROOTFS_SQUASHFS=y
+
+# 存储设备驱动
+CONFIG_PACKAGE_kmod-ata-core=y
+CONFIG_PACKAGE_kmod-ata-ahci=y
+CONFIG_PACKAGE_kmod-nvme=y
+CONFIG_PACKAGE_kmod-scsi-core=y
+CONFIG_PACKAGE_kmod-usb-storage=y
+CONFIG_PACKAGE_kmod-usb-storage-uas=y
+CONFIG_PACKAGE_kmod-usb-storage-extras=y
+
+# 文件系统与字符集支持
+CONFIG_PACKAGE_kmod-fs-vfat=y
+CONFIG_PACKAGE_kmod-fs-ext4=y
+CONFIG_PACKAGE_kmod-nls-cp437=y
+CONFIG_PACKAGE_kmod-nls-iso8859-1=y
+
+# 输入设备驱动
+CONFIG_PACKAGE_kmod-usb-hid=y
+CONFIG_PACKAGE_kmod-hid-generic=y
+CONFIG_PACKAGE_kmod-input-core=y
+CONFIG_PACKAGE_kmod-input-evdev=y
+
+# 无线驱动
+# MediaTek MT76 系列
+CONFIG_PACKAGE_kmod-mt76=y
+CONFIG_PACKAGE_kmod-mt7603=y
+CONFIG_PACKAGE_kmod-mt76x0e=y
+CONFIG_PACKAGE_kmod-mt76x2e=y
+CONFIG_PACKAGE_kmod-mt7615e=y
+CONFIG_PACKAGE_kmod-mt7915e=y
+CONFIG_PACKAGE_kmod-mt7915-firmware=y
+CONFIG_PACKAGE_kmod-mt7916-firmware=y
+CONFIG_PACKAGE_kmod-mt7921e=y
+CONFIG_PACKAGE_kmod-mt7921-common=y
+CONFIG_PACKAGE_kmod-mt792x-common=y
+CONFIG_PACKAGE_kmod-mt7921-firmware=y
+CONFIG_PACKAGE_kmod-mt7922-firmware=y
+CONFIG_PACKAGE_kmod-mt7925e=y
+CONFIG_PACKAGE_kmod-mt7925-firmware=y
+CONFIG_PACKAGE_kmod-mt76-usb=y
+CONFIG_PACKAGE_kmod-mt76x0u=y
+CONFIG_PACKAGE_kmod-mt76x2u=y
+CONFIG_PACKAGE_kmod-mt7663u=y
+CONFIG_PACKAGE_kmod-mt7921u=y
+
+# Qualcomm Atheros ath10k（仅官方驱动）
+CONFIG_PACKAGE_kmod-ath=y
+CONFIG_PACKAGE_kmod-ath10k=y
+# CONFIG_PACKAGE_kmod-ath10k-ct is not set
+CONFIG_PACKAGE_ath10k-firmware-qca988x=y
+# CONFIG_PACKAGE_ath10k-firmware-qca988x-ct is not set
+CONFIG_PACKAGE_ath10k-firmware-qca9887=y
+CONFIG_PACKAGE_ath10k-firmware-qca9888=y
+CONFIG_PACKAGE_ath10k-firmware-qca99x0=y
+CONFIG_PACKAGE_ath10k-firmware-qca6174=y
+CONFIG_PACKAGE_ath10k-board-qca988x=y
+
+# Qualcomm ath11k
+CONFIG_PACKAGE_kmod-ath11k=y
+CONFIG_PACKAGE_kmod-ath11k-pci=y
+CONFIG_PACKAGE_ath11k-firmware-qcn9074=y
+CONFIG_PACKAGE_ath11k-firmware-wcn6855=y
+
+# Qualcomm ath12k
+CONFIG_PACKAGE_kmod-ath12k=y
+
+# Realtek rtw88 / rtw89
+CONFIG_PACKAGE_kmod-rtw88=y
+CONFIG_PACKAGE_kmod-rtw88-pci=y
+CONFIG_PACKAGE_kmod-rtw88-usb=y
+CONFIG_PACKAGE_kmod-rtw88-8821c=y
+CONFIG_PACKAGE_kmod-rtw88-8822b=y
+CONFIG_PACKAGE_kmod-rtw88-8822c=y
+CONFIG_PACKAGE_kmod-rtw89=y
+CONFIG_PACKAGE_kmod-rtw89-pci=y
+CONFIG_PACKAGE_kmod-rtw89-8852ae=y
+CONFIG_PACKAGE_kmod-rtw89-8852be=y
+CONFIG_PACKAGE_kmod-rtw89-8852ce=y
+
+# 通用无线框架
+CONFIG_PACKAGE_kmod-mac80211=y
+
+# WPA 支持
+CONFIG_PACKAGE_wpad-openssl=y
+
+# 硬件监控与看门狗
+CONFIG_PACKAGE_kmod-hwmon-w83627ehf=y
+CONFIG_PACKAGE_kmod-hwmon-w83627hf=y
+CONFIG_PACKAGE_kmod-w83627hf-wdt=y
+
+# ImmortalWrt 常用组件
+CONFIG_PACKAGE_block-mount=y
+CONFIG_PACKAGE_kmod-nf-nathelper=y
+CONFIG_PACKAGE_kmod-nf-nathelper-extra=y
+
+# 应用插件
+CONFIG_PACKAGE_luci-app-dockerman=y
+
+# ===== NetWiz 网络向导：luci-app-netwiz =====
+#
+# 包来源：https://github.com/huchd0/luci-app-netwiz（分支 main，版本 1.7.5-r1）
+# 构成：LuCI JS 界面 + rpcd 插件（netwiz / netwiz_dev）+ 3 个 procd 服务
+#       （netwiz-monitor / netwiz-recovery / netwiz-watchdog）+ DHCP 热插拔守卫。
+#
+# 四条打包特性决定了这里该写什么、不该写什么：
+#   1. 上游 Makefile 走 include $(TOPDIR)/feeds/luci/luci.mk，属于 LuCI feed
+#      编译框架，必须在 `./scripts/feeds update -a && install -a` 之后、
+#      make defconfig 之前就位（WRT-CORE 中插入位置已满足）。
+#   2. LUCI_PKGARCH:=all —— 纯脚本架构，生成的 ipk/apk 与 CPU 架构无关，
+#      mediatek/filogic 与 x86 可共用同一份包，三份变体配置无需差异处理。
+#   3. 有 po/zh_Hans 与 po/zh_Hant，luci.mk 会拆出独立的翻译包
+#      luci-i18n-netwiz-zh-cn / luci-i18n-netwiz-zh-tw。主包只带英文，
+#      中文界面必须显式选中翻译包，否则页面回退英文。
+#   4. 无 Lua 控制器、无 .ut 模板，菜单经 menu.d JSON 注册，ACL 走 acl.d JSON。
+CONFIG_PACKAGE_luci-app-netwiz=y
+CONFIG_PACKAGE_luci-i18n-netwiz-zh-cn=y
+
+# Makefile DEPENDS 逐项显式选中。
+# 理由：依赖若只靠 DEPENDS 隐式解析，上游一旦调整打包、或某个依赖在别的配置层
+# 被置 =n，make defconfig 之后会静默缺包 —— 界面能装但功能不全，比直接编不过更难查。
+# Config/GENERAL.txt 中已是 =y 的只有 luci-base 与 luci-compat，其余项
+# （rpcd / iwinfo / rpcd-mod-iwinfo / ppp-mod-pppoe / jsonfilter）并不在其中，
+# 属本包真实新增的依赖，不能省。重复声明的两项在后写覆盖后结果一致，仅为自解释。
+# X86 母配置已带 wpad-openssl 与全套 mac80211 无线栈，无线下同样可用，无额外需求。
+CONFIG_PACKAGE_luci-base=y
+CONFIG_PACKAGE_rpcd=y
+CONFIG_PACKAGE_iwinfo=y
+CONFIG_PACKAGE_rpcd-mod-iwinfo=y
+CONFIG_PACKAGE_luci-compat=y
+CONFIG_PACKAGE_ppp-mod-pppoe=y
+
+# 运行时外部命令：插件脚本大量调用 uci / jsonfilter / wifi / iwinfo / ping / sed /
+# grep / tar / wget 等。除 jsonfilter 外均由 BusyBox / 系统基础组件提供，
+# 无需额外声明；jsonfilter 属独立小包，这里显式拉起以免依赖链变动时丢失。
+CONFIG_PACKAGE_jsonfilter=y
+
+# 插件会按需重启 ddns / mwan3 / lighttpd / dockerd，但每处调用都带
+# [ -f /etc/init.d/xxx ] 或 [ -x /etc/init.d/xxx ] 存在性守卫，属软依赖，
+# 未安装时静默跳过，因此本文件不声明这些包。
+#
+# MT 相关包一律交给 MT_MODE 决定：Scripts/ApplyMTMode.sh 在本层之后执行，
+# 会用 =n 覆盖本文件可能写入的任何 MT 包，故本文件不声明任何 MT 包。

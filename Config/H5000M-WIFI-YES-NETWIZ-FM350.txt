@@ -1,0 +1,102 @@
+# Hiveton H5000M 独立配置（NetWiz 网络向导 + Fibocom FM350-GL 模组管理）
+#
+# 本文件为新增文件：板级与 NetWiz 部分与 Config/H5000M-WIFI-YES-NETWIZ.txt 逐行一致，
+# 另追加 luci-app-fm350 及其依赖（追加段与 Config/H5000M-WIFI-YES-FM350.txt 一致）。
+# WRT-CORE 的导入/校验步骤按 contains 子串命中：NETWIZ 与 FM350 两个分支
+# 对本配置同时生效（netwiz 与 fm350 源码都会就位，Rust target 均会准备）。
+#
+# FM350 走 RNDIS 数据通道，与 MT5700M 方案的 QMI vendor 驱动无 rootfs 冲突；
+# 本配置 MT_MODE 留空（定时工作流已固定），不装 MT5700 / MT5700M 插件。
+#
+# 命名保留 "H5000M-WIFI-YES" 子串以继承按机型名匹配的既有逻辑；产物归组
+# NetWiz-FM350（Release Tag 形如 NetWiz-FM350-<YY.MM.DD>，固件名后缀 -NetWiz-FM350）。
+# 设备平台
+CONFIG_TARGET_mediatek=y
+CONFIG_TARGET_mediatek_filogic=y
+
+# 仅编译 Hiveton H5000M
+CONFIG_TARGET_MULTI_PROFILE=n
+CONFIG_TARGET_ALL_PROFILES=n
+CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_hiveton_h5000m=y
+
+# 内核调整
+CONFIG_PACKAGE_kmod-cryptodev=y
+CONFIG_PACKAGE_kmod-tls=y
+
+# H5000M 专用硬件
+CONFIG_PACKAGE_luci-app-h5000m-fancontrol=y
+
+# ===== NetWiz 网络向导：luci-app-netwiz =====
+#
+# 包来源：https://github.com/huchd0/luci-app-netwiz（分支 main，版本 1.7.5-r1）
+# 构成：LuCI JS 界面 + rpcd 插件（netwiz / netwiz_dev）+ 3 个 procd 服务
+#       （netwiz-monitor / netwiz-recovery / netwiz-watchdog）+ DHCP 热插拔守卫。
+#
+# 四条打包特性决定了这里该写什么、不该写什么：
+#   1. 上游 Makefile 走 include $(TOPDIR)/feeds/luci/luci.mk，属于 LuCI feed
+#      编译框架，必须在 `./scripts/feeds update -a && install -a` 之后、
+#      make defconfig 之前就位（WRT-CORE 中插入位置已满足）。
+#   2. LUCI_PKGARCH:=all —— 纯脚本架构，生成的 ipk/apk 与 CPU 架构无关，
+#      mediatek/filogic 与 x86 可共用同一份包，三份变体配置无需差异处理。
+#   3. 有 po/zh_Hans 与 po/zh_Hant，luci.mk 会拆出独立的翻译包
+#      luci-i18n-netwiz-zh-cn / luci-i18n-netwiz-zh-tw。主包只带英文，
+#      中文界面必须显式选中翻译包，否则页面回退英文。
+#   4. 无 Lua 控制器、无 .ut 模板，菜单经 menu.d JSON 注册，ACL 走 acl.d JSON。
+CONFIG_PACKAGE_luci-app-netwiz=y
+CONFIG_PACKAGE_luci-i18n-netwiz-zh-cn=y
+
+# Makefile DEPENDS 逐项显式选中。
+# 理由：依赖若只靠 DEPENDS 隐式解析，上游一旦调整打包、或某个依赖在别的配置层
+# 被置 =n，make defconfig 之后会静默缺包 —— 界面能装但功能不全，比直接编不过更难查。
+# Config/GENERAL.txt 中已是 =y 的只有 luci-base 与 luci-compat，其余项
+# （rpcd / iwinfo / rpcd-mod-iwinfo / ppp-mod-pppoe / jsonfilter）并不在其中，
+# 属本包真实新增的依赖，不能省。重复声明的两项在后写覆盖后结果一致，仅为自解释。
+CONFIG_PACKAGE_luci-base=y
+CONFIG_PACKAGE_rpcd=y
+CONFIG_PACKAGE_iwinfo=y
+CONFIG_PACKAGE_rpcd-mod-iwinfo=y
+CONFIG_PACKAGE_luci-compat=y
+CONFIG_PACKAGE_ppp-mod-pppoe=y
+
+# 运行时外部命令：插件脚本大量调用 uci / jsonfilter / wifi / iwinfo / ping / sed /
+# grep / tar / wget 等。除 jsonfilter 外均由 BusyBox / 系统基础组件提供，
+# 无需额外声明；jsonfilter 属独立小包，这里显式拉起以免依赖链变动时丢失。
+CONFIG_PACKAGE_jsonfilter=y
+
+# 插件会按需重启 ddns / mwan3 / lighttpd / dockerd，但每处调用都带
+# [ -f /etc/init.d/xxx ] 或 [ -x /etc/init.d/xxx ] 存在性守卫，属软依赖，
+# 未安装时静默跳过，因此本文件不声明这些包。
+#
+# MT 相关包一律交给 MT_MODE 决定：Scripts/ApplyMTMode.sh 在本层之后执行，
+# 会用 =n 覆盖本文件可能写入的任何 MT 包，故本文件不声明任何 MT 包。
+
+# ===== Fibocom FM350-GL 模组：luci-app-fm350 =====
+#
+# 包来源：https://github.com/LianXia233/luci-app-fm350（分支 main，版本 1.0.2-r1）
+# 构成：LuCI JS 界面 + Rust 后端守护 fm350d（/usr/sbin/fm350d）+ rpcd ucode 插件。
+#
+# 四条打包特性决定了这里该写什么、不该写什么：
+#   1. 上游 Makefile 只 include rules.mk / package.mk，不使用 feeds/luci/luci.mk，
+#      因此不依赖 LuCI feed 的编译框架，源码树与 SDK 都能构建。
+#   2. 菜单通过 /usr/share/luci/menu.d/*.json 注册，无 Lua 控制器、无 .ut 模板。
+#   3. 界面文案为中文硬编码，不使用 .lmo 翻译文件 —— 因此不存在
+#      luci-i18n-fm350-zh-cn 这个包，写了就是一条无人认领的无效配置。
+#   4. 后端 fm350d 由 cargo 交叉编译产出（musl 静态链接），不是独立软件包，
+#      不能写 CONFIG_PACKAGE_fm350d=y。
+CONFIG_PACKAGE_luci-app-fm350=y
+
+# Makefile DEPENDS 逐项显式选中。
+# 理由：依赖若只靠 DEPENDS 隐式解析，上游一旦调整打包、或某个依赖在别的配置层
+# 被置 =n，make defconfig 之后会静默缺包 —— 界面能装但功能不全，比直接编不过更难查。
+# kmod-usb-net-rndis / kmod-usb-serial-option 在 Config/GENERAL.txt 中已是 =y，
+# 这里重复声明只为自解释；后写覆盖先写，结果一致。
+CONFIG_PACKAGE_luci-base=y
+CONFIG_PACKAGE_rpcd=y
+CONFIG_PACKAGE_rpcd-mod-ucode=y
+CONFIG_PACKAGE_kmod-usb-net-rndis=y
+CONFIG_PACKAGE_kmod-usb-serial-option=y
+
+# FM350 走 RNDIS 数据通道，与 MT5700M 方案的 QMI vendor 驱动
+# （kmod-qmi_wwan_f / kmod-qmi_wwan_q）不争抢同名 .ko，无 rootfs 文件冲突。
+# MT 相关包一律交给 MT_MODE 决定：Scripts/ApplyMTMode.sh 在本层之后执行，
+# 会用 =n 覆盖本文件可能写入的任何 MT 包，故本文件不声明任何 MT 包。

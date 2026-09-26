@@ -21,10 +21,21 @@ on:
           - H5000M-WIFI-YES-FM350
           - AP3000M-FM350
           - X86-FM350
-          # NetWiz 变体：母配置 + luci-app-netwiz
+          # NetWiz 家族：母配置 + luci-app-netwiz（及可选 MT / FM350 组合）
+          # 注意：选 -NETWIZ-MT5700 / -NETWIZ-MT5700M 时，下方 MT Mode 必须同步
+          # 选为 MT5700 / MT5700M，否则校验步骤会拦截（防止产出名不副实的固件）
           - H5000M-WIFI-YES-NETWIZ
           - AP3000M-NETWIZ
           - X86-NETWIZ
+          - H5000M-WIFI-YES-NETWIZ-MT5700
+          - AP3000M-NETWIZ-MT5700
+          - X86-NETWIZ-MT5700
+          - H5000M-WIFI-YES-NETWIZ-MT5700M
+          - AP3000M-NETWIZ-MT5700M
+          - X86-NETWIZ-MT5700M
+          - H5000M-WIFI-YES-NETWIZ-FM350
+          - AP3000M-NETWIZ-FM350
+          - X86-NETWIZ-FM350
       SOURCE:
         description: '源码仓库'
         default: 'immortalwrt/immortalwrt'
@@ -82,11 +93,14 @@ jobs:
       # 必须用显式三元链保证 NONE 时最终得到空值。
       MT_MODE: ${{ inputs.MT_MODE == 'MT5700' && 'MT5700' || (inputs.MT_MODE == 'MT5700M' && 'MT5700M' || '') }}
       # 变体标签：配置名后缀用于产物文件名区分（固件名本身不含机型名，
-      # 不加这个后缀，下载到本地后分不出是普通版、FM350 版还是 NetWiz 版）。
+      # 不加这个后缀，下载到本地后分不出是普通版还是各变体版）。
       #
       # 写法要点：GHA 表达式中空字符串为 falsy，不能写成 `cond && '' || x`
-      # （空值会被 `||` 吞掉继续取右值），必须用显式嵌套三元链。
+      # （空值会被 `||` 吞掉继续取右值），必须用显式嵌套三元链；
+      # NetWiz 家族含组合变体（NETWIZ-MT5700 / -MT5700M / -FM350），
+      # 判定 NETWIZ 必须用 contains 而非 endsWith。
       # 配置名后缀与产物标签刻意不同大小写：
       #   - 配置名（Config/*.txt / 下拉项）用全大写 NETWIZ，与既有 FM350 风格一致；
       #   - 产物标签用驼峰 NetWiz，因为它直接出现在下载到的固件文件名里，给人看。
-      WRT_VARIANT: ${{ endsWith(inputs.CONFIG, 'NETWIZ') && 'NetWiz' || (endsWith(inputs.CONFIG, 'FM350') && 'FM350' || '') }}
+      # 组合变体归组独立：NetWiz-MT5700 / NetWiz-MT5700M / NetWiz-FM350 各自成组。
+      WRT_VARIANT: ${{ contains(inputs.CONFIG, 'NETWIZ') && (contains(inputs.CONFIG, 'FM350') && 'NetWiz-FM350' || (endsWith(inputs.CONFIG, 'MT5700M') && 'NetWiz-MT5700M' || (endsWith(inputs.CONFIG, 'MT5700') && 'NetWiz-MT5700' || 'NetWiz'))) || (contains(inputs.CONFIG, 'FM350') && 'FM350' || '') }}
