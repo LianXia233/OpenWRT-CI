@@ -1,16 +1,22 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-# NetWiz 变体统一编译入口：一份 workflow 覆盖全部机型的 NetWiz 配置
+# NetWiz 变体统一编译入口：一份 workflow 覆盖全部机型的 NetWiz 家族配置
 #
 # 与 XXX-MT-AUTO 系列的关系：
-#   - 配置层改用 Config/<机型>-NETWIZ.txt（母配置板级定义 + luci-app-netwiz 段）
-#   - MT_MODE 留空：NetWiz 是网络配置向导，与 MT5700 / MT5700M 插件无耦合
-#   - 传 WRT_VARIANT=NetWiz，产物文件名末尾追加 "-NetWiz" 以便与母配置区分
+#   - 配置层改用 Config/<机型>-NETWIZ*.txt（母配置板级定义 + luci-app-netwiz 段）
+#   - 矩阵覆盖 NetWiz 家族四种组合，每项 12 个 job：
+#       纯 NetWiz          MT_MODE 留空，产物归组 NetWiz
+#       NetWiz + MT5700    MT_MODE=MT5700（MT 层由 ApplyMTMode.sh 叠加），归组 NetWiz-MT5700
+#       NetWiz + MT5700M   MT_MODE=MT5700M，归组 NetWiz-MT5700M
+#       NetWiz + FM350     MT_MODE 留空，归组 NetWiz-FM350
+#   - MT_MODE 不能内嵌进配置文件：ApplyMTMode.sh 在空模式时会显式禁用全部
+#     MT 包，Packages.sh 的 FOLD_MT5700M（MT5700M 的 Rust 后端折叠）也必须
+#     由 MT_MODE=MT5700M 驱动 —— MT 选择必须走独立配置层。
 #
-# 矩阵用 include 而非笛卡尔积：三个机型的 NetWiz 配置虽同名后缀，但源码上游不同
-# （H5000M / AP3000M 取 VIKINGYFY/immortalwrt 的 owrt 分支，X86 取
-# immortalwrt/immortalwrt 的 master 分支），必须逐项绑定，不能交叉组合。
+# 矩阵用 include 而非笛卡尔积：三个机型的源码上游不同（H5000M / AP3000M 取
+# VIKINGYFY/immortalwrt 的 owrt 分支，X86 取 immortalwrt/immortalwrt 的 master
+# 分支），必须逐项绑定，不能交叉组合。
 #
 # 配置名保留机型前缀：WRT-CORE.yml 的 AP3000M 专属步骤（EEPROM 注入、
 # AirPi Rust 后端预编译）靠 contains 子串匹配，改名会让它们静默失配。
@@ -39,11 +45,12 @@ permissions: write-all
 
 jobs:
   config:
-    name: ${{ matrix.CONFIG }}（NetWiz 变体）
+    name: ${{ matrix.CONFIG }}（NetWiz 家族）
     strategy:
       fail-fast: false
       matrix:
         include:
+          # ---- 纯 NetWiz（无 MT、无 FM350）----
           - CONFIG: H5000M-WIFI-YES-NETWIZ
             SOURCE: VIKINGYFY/immortalwrt
             BRANCH: owrt
@@ -51,6 +58,42 @@ jobs:
             SOURCE: VIKINGYFY/immortalwrt
             BRANCH: owrt
           - CONFIG: X86-NETWIZ
+            SOURCE: immortalwrt/immortalwrt
+            BRANCH: master
+          # ---- NetWiz + MT5700（MT 层由 MT_MODE 驱动）----
+          - CONFIG: H5000M-WIFI-YES-NETWIZ-MT5700
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: owrt
+            MT: MT5700
+          - CONFIG: AP3000M-NETWIZ-MT5700
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: owrt
+            MT: MT5700
+          - CONFIG: X86-NETWIZ-MT5700
+            SOURCE: immortalwrt/immortalwrt
+            BRANCH: master
+            MT: MT5700
+          # ---- NetWiz + MT5700M（MT 层由 MT_MODE 驱动，含 FOLD 折叠）----
+          - CONFIG: H5000M-WIFI-YES-NETWIZ-MT5700M
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: owrt
+            MT: MT5700M
+          - CONFIG: AP3000M-NETWIZ-MT5700M
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: owrt
+            MT: MT5700M
+          - CONFIG: X86-NETWIZ-MT5700M
+            SOURCE: immortalwrt/immortalwrt
+            BRANCH: master
+            MT: MT5700M
+          # ---- NetWiz + FM350（MT_MODE 留空）----
+          - CONFIG: H5000M-WIFI-YES-NETWIZ-FM350
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: owrt
+          - CONFIG: AP3000M-NETWIZ-FM350
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: owrt
+          - CONFIG: X86-NETWIZ-FM350
             SOURCE: immortalwrt/immortalwrt
             BRANCH: master
 
@@ -71,7 +114,7 @@ jobs:
 
       WRT_PACKAGE: ${{ inputs.PACKAGE }}
       WRT_TEST: ${{ inputs.TEST }}
-      # NetWiz 变体不装 MT 插件
-      MT_MODE: ''
-      # 产物文件名区分标记
-      WRT_VARIANT: NetWiz
+      # MT 层由矩阵项的 MT 字段驱动（未写 MT 的项为空 → 不装 MT 插件）
+      MT_MODE: ${{ matrix.MT || '' }}
+      # 产物归组标签：FM350 组合 → NetWiz-FM350；MT 组合按配置名后缀推导；纯 NetWiz → NetWiz
+      WRT_VARIANT: ${{ contains(matrix.CONFIG, 'FM350') && 'NetWiz-FM350' || (endsWith(matrix.CONFIG, 'MT5700M') && 'NetWiz-MT5700M' || (endsWith(matrix.CONFIG, 'MT5700') && 'NetWiz-MT5700' || 'NetWiz')) }}
