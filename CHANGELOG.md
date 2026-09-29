@@ -1,4 +1,19 @@
 # 更新日志
+## [2026-09-29] luci-app-h5000m-netmode 打包失败：五个定时工作流 17 个 job 全灭
+
+### 修复
+
+- **`luci-app-h5000m-netmode` 打包失败导致全机型全矩阵构建中断**（`43307fb`）：今日（09-29 00:51）五个定时工作流（`H5000M-MT-AUTO` / `AP3000M-MT-AUTO` / `X86-MT-AUTO` / `FM350-AUTO` / `NetWiz-AUTO`）共 **17 个 job 全部失败**，且不受 `MT_MODE`（空 / MT5700 / MT5700M）影响，x86_64 与 aarch64_cortex-a53 两个架构同样中招。报错高度一致：`make[2]: *** [package/Makefile:255: package/luci-app-h5000m-netmode/compile] Error 1`、`make[3]: *** [feeds/luci/luci.mk:408: .../luci-app-h5000m-netmode-1.8.5-r7.apk] Error 2`、`Process completed with exit code 2`。与 MT 模组方案互斥、EEPROM 注入、内核与工具链均无关，根因在插件仓库：`luci-app-h5000m-netmode` 后端重写为 Rust crate 后保留 `src/`（Rust 源码）且**没有 `src/Makefile`**，而 `feeds/luci/luci.mk` 两个分支判定条件不一致——`Build/Compile` 依据 `$(wildcard ${CURDIR}/src/Makefile)`（要求有 Makefile），`Package/.../install` 依据 `$(wildcard ${CURDIR}/src)`（只要目录存在）。于是 Compile 被跳过、`ipkg-install` 目录永不生成，install 阶段却仍执行 `Build/Install/Default`，对顶层没有 Makefile 的构建目录执行 `make ... install`，报 `*** No rule to make target 'install'.  Stop.` 并以 exit code 2 退出（本地复现一致），进而层层上抛至 `toplevel.mk:268` 中断整个 `world` 编译。`src/` 由插件 `c68ac211`（2026-09-28）引入，9-27 那批定时构建尚且全绿，9-29 是首个带 `src/` 的构建。已在 `Scripts/Packages.sh` 克隆该插件后新增 `FIX_H5000M_NETMODE_SRC` 删除 `src/`：`Packages-FM350.sh` 与 `Packages-NetWiz.sh` 未单独引用该插件，同走 `Packages.sh`，故一处修复覆盖全部变体。真正被打进包的是 `root/`（预编译 ELF 本就在 `root/usr/sbin/` 下）、`htdocs/` 与 `po/`，产物不受影响；且 buildroot 内没有 Rust 工具链，不走 `SETUP_RUST` 路线、直接删源最省时也最稳。
+
+### 变更文件
+
+- `Scripts/Packages.sh` — 新增 `FIX_H5000M_NETMODE_SRC`（克隆 `luci-app-h5000m-netmode` 后移除无 Makefile 的 `src/` 目录）
+- 上游根治：插件仓库 `LianXia233/luci-app-h5000m-netmode` 已补 `src/Makefile`（`94eb1a5`），空 `compile` / `clean` + `install` 拷贝已发布 ELF，两处修复互不冲突，下游 workaround 可保留或移除
+
+### 运维记录
+
+- 04:08 那批基于旧 commit `3cf62f94`、注定失败的 5 个运行已主动取消，并基于 `43307fb` 重新触发，避免空耗约 1.5 小时与 Actions 并发额度。
+
 ## [2026-09-26] NetWiz 家族扩展组合变体：× MT5700 / MT5700M / FM350 各自单独配置
 
 ### 背景
