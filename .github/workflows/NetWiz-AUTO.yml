@@ -5,11 +5,13 @@
 #
 # 与 XXX-MT-AUTO 系列的关系：
 #   - 配置层改用 Config/<机型>-NETWIZ*.txt（母配置板级定义 + luci-app-netwiz 段）
-#   - 矩阵覆盖 NetWiz 家族四种组合，每项 12 个 job：
-#       纯 NetWiz          MT_MODE 留空，产物归组 NetWiz
-#       NetWiz + MT5700    MT_MODE=MT5700（MT 层由 ApplyMTMode.sh 叠加），归组 NetWiz-MT5700
-#       NetWiz + MT5700M   MT_MODE=MT5700M，归组 NetWiz-MT5700M
-#       NetWiz + FM350     MT_MODE 留空，归组 NetWiz-FM350
+#   - 矩阵覆盖 NetWiz 家族三种组合（纯 NetWiz 已移除，仅保留组合变体），共 9 个 job：
+#       NetWiz + MT5700    MT_MODE=MT5700（MT 层由 ApplyMTMode.sh 叠加）
+#       NetWiz + MT5700M   MT_MODE=MT5700M
+#       NetWiz + FM350     MT_MODE 留空
+#   - 归组：NetWiz 家族统一归组「NetWiz」——NetWiz 是独立产品分类，
+#     即使组合变体内部使用 MT / FM350 插件，也只属于 NetWiz，
+#     绝不进入 MT5700 / MT5700M / FM350 等其他分类。
 #   - MT_MODE 不能内嵌进配置文件：ApplyMTMode.sh 在空模式时会显式禁用全部
 #     MT 包，Packages.sh 的 FOLD_MT5700M（MT5700M 的 Rust 后端折叠）也必须
 #     由 MT_MODE=MT5700M 驱动 —— MT 选择必须走独立配置层。
@@ -50,16 +52,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ---- 纯 NetWiz（无 MT、无 FM350）----
-          - CONFIG: H5000M-WIFI-YES-NETWIZ
-            SOURCE: VIKINGYFY/immortalwrt
-            BRANCH: owrt
-          - CONFIG: AP3000M-NETWIZ
-            SOURCE: VIKINGYFY/immortalwrt
-            BRANCH: owrt
-          - CONFIG: X86-NETWIZ
-            SOURCE: immortalwrt/immortalwrt
-            BRANCH: master
           # ---- NetWiz + MT5700（MT 层由 MT_MODE 驱动）----
           - CONFIG: H5000M-WIFI-YES-NETWIZ-MT5700
             SOURCE: VIKINGYFY/immortalwrt
@@ -116,5 +108,7 @@ jobs:
       WRT_TEST: ${{ inputs.TEST }}
       # MT 层由矩阵项的 MT 字段驱动（未写 MT 的项为空 → 不装 MT 插件）
       MT_MODE: ${{ matrix.MT || '' }}
-      # 产物归组标签：FM350 组合 → NetWiz-FM350；MT 组合按配置名后缀推导；纯 NetWiz → NetWiz
-      WRT_VARIANT: ${{ contains(matrix.CONFIG, 'FM350') && 'NetWiz-FM350' || (endsWith(matrix.CONFIG, 'MT5700M') && 'NetWiz-MT5700M' || (endsWith(matrix.CONFIG, 'MT5700') && 'NetWiz-MT5700' || 'NetWiz')) }}
+      # NetWiz 家族统一归组「NetWiz」：NetWiz 是独立产品分类，即使组合变体
+      # 内含 MT / FM350 插件也只属于 NetWiz，不进入 MT5700 / MT5700M / FM350 分类。
+      # 文件名内的组合区分（NetWiz-MT5700 等）由 WRT-CORE 按配置名推导。
+      WRT_VARIANT: NetWiz

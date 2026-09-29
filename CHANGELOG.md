@@ -1,4 +1,27 @@
 # 更新日志
+## [2026-09-29] Releases 组织优化：移除纯 NetWiz 配置、NetWiz 家族统一归组、固件文件名简化
+
+### 需求
+
+按「产品/配置本身」而非「已安装插件」严格分类 Releases：NetWiz 是独立产品分类，NetWiz-FM350 / NetWiz-MT5700 / NetWiz-MT5700M 全部归属 NetWiz（绝不进入 FM350 / MT5700 / MT5700M 分类）；一份固件只属于一个 Release 分类；**删除纯 NetWiz 配置**（无插件），仅保留带插件的 NetWiz 组合变体；BIN 固件文件名统一为 `<设备>-<产品/方案>-<固件类型>.bin`，去掉冗余的源码 / 分支 / 时间戳。
+
+### 设计要点
+
+1. **纯 NetWiz 移除**：删除 `Config/H5000M-WIFI-YES-NETWIZ.txt` / `Config/AP3000M-NETWIZ.txt` / `Config/X86-NETWIZ.txt` 三份纯 NetWiz 配置，同步移除 `NetWiz-AUTO.yml` 矩阵与 `WRT-BUILD.yml` 下拉中的对应项。NetWiz 家族精简为 3 种组合 × 3 机型 = 9 份配置。
+2. **NetWiz 统一归组**：`WRT_VARIANT` 一律传 `NetWiz` → Release Tag 统一为 `NetWiz-<YY.MM.DD>`，全部组合变体汇聚同一 Release，不再拆出 `NetWiz-MT5700` / `NetWiz-MT5700M` / `NetWiz-FM350` 独立 Tag（避免一份固件落入多个分类）。组合差异保留在固件文件名后缀（`WRT-CORE.yml` 按配置名推导 `WRT_FLAVOR`）。
+3. **文件名简化**：`WRT-CORE.yml` 重命名逻辑由镜像原名重写为 `<设备>-<产品/方案>-<固件类型>.<扩展名>`：设备段（`H5000M` / `AP3000M` / `X86`）消歧同 Release 多机型，产品/方案段（`NetWiz-MT5700` / `MT5700` / `MT5700M` / `FM350` / `自用` / 空）按产品身份推导，固件类型段（`sysupgrade` / `factory` / `initramfs` / `recovery` / `efi` / `combined` / `rootfs` / `kernel`）保留刷机判断所需信息。配置文件导出同步去掉源码 / 分支 / 秒级时间戳（`Config-<配置名>-<MT模式>.txt`）。
+4. **自用 / MT 独立性保持**：NETMONITOR（自用）与普通 MT5700 / MT5700M / FM350 / BASE 分类不受影响，私有自用配置依旧独立归组，不进入公开 MT5700。
+
+### 变更
+
+- 删除 `Config/H5000M-WIFI-YES-NETWIZ.txt` / `Config/AP3000M-NETWIZ.txt` / `Config/X86-NETWIZ.txt`（纯 NetWiz，无插件）
+- `.github/workflows/NetWiz-AUTO.yml`：矩阵移除 3 个纯 NetWiz job；`WRT_VARIANT: NetWiz` 统一归组
+- `.github/workflows/WRT-BUILD.yml`：下拉移除 3 个纯 NetWiz 项（19 → 16 项）；`WRT_VARIANT` 推导改为 NETWIZ → 统一 `NetWiz`
+- `.github/workflows/WRT-CORE.yml`：新增 `WRT_DEVICE` / `WRT_FLAVOR` 推导；固件重命名改为 `<设备>-<产品/方案>-<固件类型>.<扩展名>`；Release body 组别速查与文件名解读更新
+- `README.md`：机型表 / NetWiz 说明 / 工作流矩阵 / 手动指引 / 归组表 / 文件名规范 / 项目结构同步更新
+- `CHANGELOG.md`：本条
+- 母配置、FM350 变体、MT5700 / MT5700M 配置、`Packages.sh` / `ApplyMTMode.sh` / `VerifyMTMode.sh` / `Auto-Clean.yml`：**均未改动**
+
 ## [2026-09-29] 新增 H5000M 自用配置：NetMonitor 网络监控 + Taygedo 签到（基于 MT5700 方案）
 
 ### 需求
