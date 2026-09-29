@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: MIT
+# Copyright (C) 2026 VIKINGYFY
+
+# H5000M 自用（NetMonitor + Taygedo）专用编译入口：一份 workflow 只服务
+# 作者自有的 H5000M 设备，产物在 Releases 中单独归组「自用」。
+#
+# 与 XXX-MT-AUTO 系列的关系：
+#   - 配置层用 Config/H5000M-WIFI-YES-NETMONITOR.txt（母配置板级定义 +
+#     luci-app-netmonitor + luci-app-taygedo 段）
+#   - MT 层固定走 MT5700 方案：MT 选择必须走独立配置层（ApplyMTMode.sh
+#     在空模式时会显式禁用全部 MT 包，Packages.sh 的 MT5700 克隆也由
+#     MT_MODE=MT5700 驱动），不能内嵌进配置文件 —— 本工作流矩阵直接绑定
+#     MT_MODE=MT5700，与配置头部注释一致。
+#   - 归组标签固定「自用」：WRT_VARIANT=自用 → Release Tag 形如
+#     自用-<YY.MM.DD>，固件文件名末尾追加 "-自用"，与 MT5700 / MT5700M /
+#     FM350 / NetWiz / BASE 等分类完全隔离。
+#   - 仅编译 H5000M（VIKINGYFY/immortalwrt 的 owrt 分支），不做 X86 / AP3000M。
+#
+# Auto-Clean 兼容：keep_latest_per_device 的归组键解析为通用逻辑（按 Tag
+# 剥日期段取组名），「自用」组自动按最新一个 Release 保留，无需改 Auto-Clean。
+name: H5000M 自用定时编译（NetMonitor + Taygedo）
+
+on:
+  # Auto-Clean 完成后自动触发
+  workflow_run:
+    workflows: ["自动清理"]
+    types:
+      - completed
+  # 也可手动触发
+  workflow_dispatch:
+    inputs:
+      PACKAGE:
+        description: '手动追加插件包（多行请用换行隔开）'
+        required: false
+        type: string
+      TEST:
+        description: '仅输出配置文件，不编译固件。'
+        default: 'false'
+        required: false
+        type: boolean
+
+permissions: write-all
+
+jobs:
+  config:
+    name: H5000M-WIFI-YES-NETMONITOR（自用 · MT5700 方案）
+    strategy:
+      fail-fast: false
+      matrix:
+        # 仅 H5000M：源码取自 VIKINGYFY/immortalwrt 的 owrt 分支（该仓库无 master 分支）
+        CONFIG: [H5000M-WIFI-YES-NETMONITOR]
+        SOURCE: [VIKINGYFY/immortalwrt]
+        BRANCH: [owrt]
+
+    uses: ./.github/workflows/WRT-CORE.yml
+    with:
+      WRT_CONFIG: ${{ matrix.CONFIG }}
+
+      WRT_THEME: aurora
+      WRT_NAME: OWRT
+      WRT_SSID: OWRT
+      WRT_WORD: 12345678
+      WRT_IP: 192.168.10.1
+      WRT_PW: 无
+
+      WRT_REPO: https://github.com/${{ matrix.SOURCE }}.git
+      WRT_BRANCH: ${{ matrix.BRANCH }}
+      WRT_SOURCE: ${{ matrix.SOURCE }}
+
+      WRT_PACKAGE: ${{ inputs.PACKAGE }}
+      WRT_TEST: ${{ inputs.TEST }}
+      # MT 层固定 MT5700 方案（方案 B，单包内置 Rust 后端）
+      MT_MODE: MT5700
+      # 归组「自用」：Release Tag 形如 自用-<YY.MM.DD>，固件名后缀 -自用，
+      # 不进入 MT5700 / MT5700M / FM350 / NetWiz / BASE 等其他任何分类
+      WRT_VARIANT: 自用
