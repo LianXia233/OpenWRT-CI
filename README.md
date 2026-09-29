@@ -12,7 +12,7 @@
 
 *适配 Hiveton H5000M 5G CPE（MT7986 + MT5700M）、AirPi AP3000M（MT7981B）与通用 X86_64 架构设备*
 
-*每个机型除母配置外另有多个变体：**FM350 变体**（Fibocom FM350-GL 模组管理 `luci-app-fm350`）、**NetWiz 家族**（网络配置向导 `luci-app-netwiz`，含纯 NetWiz 及与 MT5700 / MT5700M / FM350 的组合变体，共 4 种 × 3 机型）。另有一份 **H5000M 自用配置**（`H5000M-WIFI-YES-NETMONITOR`：NetMonitor 网络监控 + Taygedo 签到，固定 MT5700 方案，仅服务作者自有设备，产物在 Releases 单独归组「自用」）*
+*每个机型除母配置外另有多个变体：**FM350 变体**（Fibocom FM350-GL 模组管理 `luci-app-fm350`）、**NetWiz 家族**（网络配置向导 `luci-app-netwiz`，含与 MT5700 / MT5700M / FM350 的组合变体，共 3 种 × 3 机型 = 9 份配置）。另有一份 **H5000M 自用配置**（`H5000M-WIFI-YES-NETMONITOR`：NetMonitor 网络监控 + Taygedo 签到，固定 MT5700 方案，仅服务作者自有设备，产物在 Releases 单独归组「自用」）*
 
 ---
 
@@ -28,9 +28,6 @@
 | `H5000M-WIFI-YES-FM350` | MediaTek Filogic (MT7986) | Hiveton H5000M + Fibocom FM350-GL | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) (`owrt`) | ✅ 开启 | Sysupgrade / Factory |
 | `AP3000M-FM350` | MediaTek Filogic (MT7981B) | AirPi AP3000M + Fibocom FM350-GL | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) (`owrt`) | ✅ 开启 | Sysupgrade / Factory |
 | `X86-FM350` | 标准 x86_64 处理器 | 通用 64 位 PC / 工控机 + Fibocom FM350-GL | [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) (`master`) | — | ISO / EFI / GRUB / VMDK |
-| `H5000M-WIFI-YES-NETWIZ` | MediaTek Filogic (MT7986) | Hiveton H5000M + NetWiz 网络向导 | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) (`owrt`) | ✅ 开启 | Sysupgrade / Factory |
-| `AP3000M-NETWIZ` | MediaTek Filogic (MT7981B) | AirPi AP3000M + NetWiz 网络向导 | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) (`owrt`) | ✅ 开启 | Sysupgrade / Factory |
-| `X86-NETWIZ` | 标准 x86_64 处理器 | 通用 64 位 PC / 工控机 + NetWiz 网络向导 | [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) (`master`) | — | ISO / EFI / GRUB / VMDK |
 | `*-NETWIZ-MT5700` | 各机型同上 | NetWiz 向导 + MT5700 方案（MT 层由 `MT_MODE=MT5700` 驱动） | 同上（与各机型母配置一致） | ✅ 开启 | 同上 |
 | `*-NETWIZ-MT5700M` | 各机型同上 | NetWiz 向导 + MT5700M 方案（含短信与 AT 守护） | 同上 | ✅ 开启 | 同上 |
 | `*-NETWIZ-FM350` | 各机型同上 | NetWiz 向导 + FM350 模组管理 | 同上 | ✅ / — | 同上 |
@@ -40,10 +37,11 @@
 > **FM350 变体说明**：三份 `<机型>-FM350.txt` 均为**新增文件**，板级部分与母配置逐行一致，仅在末尾追加 `luci-app-fm350` 及其依赖；母配置未做任何改动。配置名保留机型前缀是硬性要求：`WRT-CORE.yml` 中 AP3000M 的 EEPROM 注入与 AirPi Rust 后端预编译两步靠 `contains(env.WRT_CONFIG, 'AP3000M')` 命中，改名会让它们静默失配（factory 分区为空 → mt76 起不来 → Wi-Fi 瘫痪）。
 
 > [!NOTE]
-> **NetWiz 变体说明**：NetWiz 家族共 4 种组合 × 3 机型 = 12 份配置，均为**新增文件**，板级部分与母配置逐行一致：
-> - `*-NETWIZ`：板级 + `luci-app-netwiz` 及其依赖；`MT_MODE` 留空，产物归组 `NetWiz`。
-> - `*-NETWIZ-MT5700` / `*-NETWIZ-MT5700M`：板级 + NetWiz 段，**MT 插件层刻意不写在配置里** —— `ApplyMTMode.sh` 在空模式时会显式禁用全部 MT 包，`Packages.sh` 的 `FOLD_MT5700M`（MT5700M 的 Rust 后端折叠）也必须由 `MT_MODE=MT5700M` 驱动，因此 MT 选择必须走独立配置层：定时工作流矩阵已绑定对应 `MT_MODE`，手动触发时须把 MT Mode 下拉同步选对（错配会被校验步骤拦截），归组 `NetWiz-MT5700` / `NetWiz-MT5700M`。
-> - `*-NETWIZ-FM350`：板级 + NetWiz 段 + FM350 段；WRT-CORE 的导入/校验步骤按 `contains` 子串命中，NETWIZ 与 FM350 两个分支同时生效，`MT_MODE` 留空，归组 `NetWiz-FM350`。
+> **NetWiz 变体说明**：NetWiz 家族共 3 种组合 × 3 机型 = 9 份配置，均为**新增文件**，板级部分与母配置逐行一致（纯 NetWiz 配置已移除，仅保留带插件的组合变体）：
+> - `*-NETWIZ-MT5700` / `*-NETWIZ-MT5700M`：板级 + NetWiz 段，**MT 插件层刻意不写在配置里** —— `ApplyMTMode.sh` 在空模式时会显式禁用全部 MT 包，`Packages.sh` 的 `FOLD_MT5700M`（MT5700M 的 Rust 后端折叠）也必须由 `MT_MODE=MT5700M` 驱动，因此 MT 选择必须走独立配置层：定时工作流矩阵已绑定对应 `MT_MODE`，手动触发时须把 MT Mode 下拉同步选对（错配会被校验步骤拦截）。
+> - `*-NETWIZ-FM350`：板级 + NetWiz 段 + FM350 段；WRT-CORE 的导入/校验步骤按 `contains` 子串命中，NETWIZ 与 FM350 两个分支同时生效，`MT_MODE` 留空。
+>
+> **NetWiz 为独立产品分类**：全部 NetWiz 家族产物统一归组「NetWiz」（Tag `NetWiz-<YY.MM.DD>`），绝不进入 MT5700 / MT5700M / FM350 等其他插件分类；组合差异体现在固件文件名后缀（`NetWiz-MT5700` / `NetWiz-MT5700M` / `NetWiz-FM350`）。
 >
 > 母配置、FM350 变体均未做任何改动。配置名保留机型前缀（`AP3000M` 的 EEPROM 注入等按 `contains` 命中）。
 
@@ -107,7 +105,7 @@
 > FM350 走 **RNDIS** 数据通道，与 MT5700M 方案的 QMI vendor 驱动（`kmod-qmi_wwan_f` / `kmod-qmi_wwan_q`）不争抢同名 `.ko`，两者无 rootfs 文件冲突。FM350 变体的 `MT_MODE` 一律留空（不装 MT 插件）。
 
 ### 5. NetWiz 网络配置向导 (`luci-app-netwiz`)
-*（仅编入 `<机型>-NETWIZ` 变体）*
+*（仅编入 NetWiz 家族变体：`<机型>-NETWIZ-MT5700` / `-NETWIZ-MT5700M` / `-NETWIZ-FM350`）*
 
 - 🧭 **向导式网络配置**：把「上网方式选择 → 参数填写 → 生效验证」串成一条引导流程，降低初次配置门槛。
 - 🛡️ **非破坏性改动**：向导只按需追加/修改自身所需配置项，不改动既有网络结构，回退成本低。
@@ -170,7 +168,7 @@
 | **`AP3000M-MT-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 并行编译 AP3000M 的 **MT5700 + MT5700M** 双配置并自动发版 |
 | **`X86-MT-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 并行编译 X86 的 **MT5700 + MT5700M** 双配置并自动发版 |
 | **`FM350-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 一份 workflow 覆盖全部机型的 **FM350 变体**（H5000M / AP3000M / X86）并自动发版 |
-| **`NetWiz-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 一份 workflow 覆盖全部机型的 **NetWiz 变体**（H5000M / AP3000M / X86）并自动发版 |
+| **`NetWiz-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 一份 workflow 覆盖全部机型的 **NetWiz 家族组合变体**（3 机型 × MT5700 / MT5700M / FM350，共 9 个 job）并自动发版 |
 | **`H5000M-NETMONITOR-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 仅编译 H5000M **自用配置**（NetMonitor 网络监控 + Taygedo 签到，固定 MT5700 方案），产物归组「自用」并自动发版 |
 | **`Auto-Clean`** | 每日定时调度 / 手动 | 保持仓库整洁：保留最近 1 个 Release 及 30 天以内的构建日志 |
 | **`Cache-Clean`** | 手动触发 | 主动清理 actions/cache 编译缓存（不设定时清空，避免缓存频繁冷启动） |
@@ -180,7 +178,7 @@
 1. 进入仓库页面，点击 **`Actions`** 选项卡。
 2. 在左侧列表选择 **`WRT-BUILD`**，点击右侧 **`Run workflow`**。
 3. 按需选择：
-   - **Target Device**：母配置 3 项 / FM350 变体 3 项 / NetWiz 家族 12 项（`*-NETWIZ` 及 `-NETWIZ-MT5700` / `-NETWIZ-MT5700M` / `-NETWIZ-FM350` 组合）/ H5000M 自用 1 项（`H5000M-WIFI-YES-NETMONITOR`），共 19 项
+   - **Target Device**：母配置 3 项 / FM350 变体 3 项 / NetWiz 家族 9 项（`-NETWIZ-MT5700` / `-NETWIZ-MT5700M` / `-NETWIZ-FM350` 组合）/ H5000M 自用 1 项（`H5000M-WIFI-YES-NETMONITOR`），共 16 项
    - **MT Mode**：`MT5700M` / `MT5700` / `NONE`（选 `*-NETWIZ-MT5700` / `*-NETWIZ-MT5700M` / `H5000M-WIFI-YES-NETMONITOR` 配置时**必须**同步选对应 MT 模式，否则校验拦截；其余配置保持 `NONE`）
    - **TEST**：若要正式输出固件，**务必将 `TEST` 改为 `false`**（设为 `true` 仅导出校验用 `.config`）。
 
@@ -193,10 +191,7 @@
 | `MT5700-26.09.26` | 当天全部机型的 MT5700 模式固件 |
 | `MT5700M-26.09.26` | 当天全部机型的 MT5700M 模式固件 |
 | `FM350-26.09.26` | 当天全部机型的 FM350 变体固件 |
-| `NetWiz-26.09.26` | 当天全部机型的纯 NetWiz 固件 |
-| `NetWiz-MT5700-26.09.26` | 当天全部机型的 NetWiz + MT5700 组合固件 |
-| `NetWiz-MT5700M-26.09.26` | 当天全部机型的 NetWiz + MT5700M 组合固件 |
-| `NetWiz-FM350-26.09.26` | 当天全部机型的 NetWiz + FM350 组合固件 |
+| `NetWiz-26.09.26` | 当天全部机型的 NetWiz 家族固件（`NetWiz-MT5700` / `NetWiz-MT5700M` / `NetWiz-FM350` 全部组合变体统一归此组，组合差异见文件名后缀） |
 | `自用-26.09.26` | 当天 H5000M 自用固件（NetMonitor + Taygedo，MT5700 方案） |
 | `BASE-26.09.26` | 当天手动编译的无变体、无 MT 模式固件 |
 
@@ -205,20 +200,23 @@
 >
 > **Auto-Clean 兼容**：`keep_latest_per_device` 的归组键解析同时兼容旧格式 `<配置>-<MT模式>-<源码>-<分支>-<日期时间>`（按机型保留）与新格式 `<组名>-<日期>`（按变体保留），历史 Release 不会被误删。
 
-**固件文件名**（含秒级时间戳，同组内可区分不同批次的构建）：
+**固件文件名**：统一为 `<设备>-<产品/方案>-<固件类型>.<扩展名>`，去掉冗余的源码 / 分支 / 时间戳：
 
 ```text
-# 固件文件名规范示例（变体标签追加在日期之后）
-immortalwrt-mediatek-filogic-hiveton_h5000m-MT5700-wifi-yes-26.09.13-sysupgrade.bin
-immortalwrt-mediatek-filogic-hiveton_h5000m-MT5700M-wifi-yes-26.09.13-sysupgrade.bin
-...-hiveton_h5000m-NONE-wifi-yes-26.09.23-FM350-sysupgrade.bin
-...-hiveton_h5000m-NONE-wifi-yes-26.09.26-NetWiz-sysupgrade.bin
+# 固件文件名规范示例
+H5000M-MT5700-sysupgrade.bin
+H5000M-MT5700M-sysupgrade.bin
+AP3000M-FM350-factory.bin
+H5000M-NetWiz-MT5700-sysupgrade.bin
+H5000M-NetWiz-MT5700M-sysupgrade.bin
+X86-NetWiz-FM350-efi.img
+H5000M-自用-sysupgrade.bin
 ```
 
 > [!TIP]
-> **为什么要加变体后缀**：固件文件名由镜像原名拼出，**不含机型配置名**，普通版、FM350 版与 NetWiz 版的文件名会完全一样，下载到本地后无法区分。因此在 `WRT-CORE.yml` 增加可选入参 `WRT_VARIANT`：FM350 变体传 `FM350`，NetWiz 变体传 `NetWiz`，追加到文件名末尾；现有机型不传该参数，产物名逐字节不变。
+> **为什么重写文件名**：旧文件名为镜像原名（含源码 / 分支 / 秒级时间戳，如 `immortalwrt-mediatek-filogic-hiveton_h5000m-...`），不同变体下载到本地后难以区分。现统一重命名为 `<设备>-<产品/方案>-<固件类型>.<扩展名>`：设备段（`H5000M` / `AP3000M` / `X86`）消歧同一 Release 内的多机型产物，产品/方案段（`NetWiz-MT5700` / `MT5700` / `MT5700M` / `FM350` / `自用` / 空）按产品身份推导，固件类型段（`sysupgrade` / `factory` / `efi` / `combined` 等）保留刷机判断所需信息。
 >
-> **为什么产物标签大小写不同**：配置名（`Config/*.txt` 与下拉项）统一用全大写 `NETWIZ`，与既有 `FM350` 风格一致；而产物标签用驼峰 `NetWiz`，因为它会直接出现在用户下载到的固件文件名里，可读性更好。两者在 `WRT-BUILD.yml` 中通过独立的 `endsWith` 三元链各自映射，互不干扰。
+> **为什么配置名与产物名大小写不同**：配置名（`Config/*.txt` 与下拉项）统一用全大写 `NETWIZ`，与既有 `FM350` 风格一致；而产物标签用驼峰 `NetWiz`，因为它会直接出现在用户下载到的固件文件名里，可读性更好。两者在 `WRT-BUILD.yml` 中通过独立的 `contains` 三元链各自映射，互不干扰。
 
 ---
 
@@ -247,9 +245,6 @@ OpenWRT-CI/
 │   ├── H5000M-WIFI-YES-FM350.txt # H5000M 板级定义 + luci-app-fm350
 │   ├── AP3000M-FM350.txt     # AP3000M 板级定义 + luci-app-fm350
 │   ├── X86-FM350.txt         # X86_64 板级定义 + luci-app-fm350
-│   ├── H5000M-WIFI-YES-NETWIZ.txt # H5000M 板级定义 + luci-app-netwiz
-│   ├── AP3000M-NETWIZ.txt    # AP3000M 板级定义 + luci-app-netwiz
-│   ├── X86-NETWIZ.txt        # X86_64 板级定义 + luci-app-netwiz
 │   ├── *-NETWIZ-MT5700.txt   # 各机型板级 + netwiz（MT 层由 MT_MODE=MT5700 驱动）
 │   ├── *-NETWIZ-MT5700M.txt  # 各机型板级 + netwiz（MT 层由 MT_MODE=MT5700M 驱动）
 │   ├── *-NETWIZ-FM350.txt    # 各机型板级 + netwiz + fm350
