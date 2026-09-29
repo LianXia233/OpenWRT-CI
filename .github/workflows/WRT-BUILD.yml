@@ -36,6 +36,10 @@ on:
           - H5000M-WIFI-YES-NETWIZ-FM350
           - AP3000M-NETWIZ-FM350
           - X86-NETWIZ-FM350
+          # H5000M 自用：母配置 + luci-app-netmonitor + luci-app-taygedo
+          # 注意：选此项时，下方 MT Mode 必须同步选为 MT5700（本配置固定
+          # MT5700 方案，MT 层由 ApplyMTMode 叠加），否则校验步骤会拦截
+          - H5000M-WIFI-YES-NETMONITOR
       SOURCE:
         description: '源码仓库'
         default: 'immortalwrt/immortalwrt'
@@ -103,4 +107,6 @@ jobs:
       #   - 配置名（Config/*.txt / 下拉项）用全大写 NETWIZ，与既有 FM350 风格一致；
       #   - 产物标签用驼峰 NetWiz，因为它直接出现在下载到的固件文件名里，给人看。
       # 组合变体归组独立：NetWiz-MT5700 / NetWiz-MT5700M / NetWiz-FM350 各自成组。
-      WRT_VARIANT: ${{ contains(inputs.CONFIG, 'NETWIZ') && (contains(inputs.CONFIG, 'FM350') && 'NetWiz-FM350' || (endsWith(inputs.CONFIG, 'MT5700M') && 'NetWiz-MT5700M' || (endsWith(inputs.CONFIG, 'MT5700') && 'NetWiz-MT5700' || 'NetWiz'))) || (contains(inputs.CONFIG, 'FM350') && 'FM350' || '') }}
+      # H5000M 自用（NETMONITOR）优先判定：归组「自用」、固件名后缀 -自用，
+      # 与 MT5700 / MT5700M / FM350 / NetWiz / BASE 等其他分类完全隔离。
+      WRT_VARIANT: ${{ contains(inputs.CONFIG, 'NETMONITOR') && '自用' || (contains(inputs.CONFIG, 'NETWIZ') && (contains(inputs.CONFIG, 'FM350') && 'NetWiz-FM350' || (endsWith(inputs.CONFIG, 'MT5700M') && 'NetWiz-MT5700M' || (endsWith(inputs.CONFIG, 'MT5700') && 'NetWiz-MT5700' || 'NetWiz'))) || (contains(inputs.CONFIG, 'FM350') && 'FM350' || '')) }}
