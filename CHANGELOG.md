@@ -1,4 +1,74 @@
 # 更新日志
+## [2026-09-29] README.md 优化：新增「变体总览」章节、精简工程细节、美化排版
+
+### 需求
+
+优化并精简 README.md，**详细说明每种变体的区别**，同时保证文档美观可读。
+
+### 变更
+
+- **新增「📦 变体总览」核心章节**：分组对照表（母配置 / FM350 变体 / NetWiz 家族 / 自用）逐行说明每种变体的核心插件、MT 模式与适用场景；另附「插件 × 变体对照矩阵」表，用 `✅` / `🟡` / `—` 一眼看出各插件在哪种变体中存在
+- **精简工程细节**：删除 FM350 / NetWiz / NETMONITOR 三个冗长 NOTE 块（吸收进变体总览）、NetWiz CRLF 处理说明、源码拉取 TIP、文件名 TIP 长解释等维护者笔记；EEPROM 校准与 MT 驱动冲突防护压缩为要点式提示块
+- **美化排版**：头部署区精简、表格统一对齐、功能章节卡片式分组、引用块（IMPORTANT / WARNING / NOTE / TIP）按语义区分使用
+- 全文档 295 行 → 233 行，内容准确性不变（机型 / 插件 / 归组 / 命名均与工作流实现一致）
+- `CHANGELOG.md`：本条
+- 工作流与配置：**未改动**
+
+## [2026-09-29] Releases 组织优化：移除纯 NetWiz 配置、NetWiz 家族统一归组、固件文件名简化
+
+### 需求
+
+按「产品/配置本身」而非「已安装插件」严格分类 Releases：NetWiz 是独立产品分类，NetWiz-FM350 / NetWiz-MT5700 / NetWiz-MT5700M 全部归属 NetWiz（绝不进入 FM350 / MT5700 / MT5700M 分类）；一份固件只属于一个 Release 分类；**删除纯 NetWiz 配置**（无插件），仅保留带插件的 NetWiz 组合变体；BIN 固件文件名统一为 `<设备>-<产品/方案>-<固件类型>.bin`，去掉冗余的源码 / 分支 / 时间戳。
+
+### 设计要点
+
+1. **纯 NetWiz 移除**：删除 `Config/H5000M-WIFI-YES-NETWIZ.txt` / `Config/AP3000M-NETWIZ.txt` / `Config/X86-NETWIZ.txt` 三份纯 NetWiz 配置，同步移除 `NetWiz-AUTO.yml` 矩阵与 `WRT-BUILD.yml` 下拉中的对应项。NetWiz 家族精简为 3 种组合 × 3 机型 = 9 份配置。
+2. **NetWiz 统一归组**：`WRT_VARIANT` 一律传 `NetWiz` → Release Tag 统一为 `NetWiz-<YY.MM.DD>`，全部组合变体汇聚同一 Release，不再拆出 `NetWiz-MT5700` / `NetWiz-MT5700M` / `NetWiz-FM350` 独立 Tag（避免一份固件落入多个分类）。组合差异保留在固件文件名后缀（`WRT-CORE.yml` 按配置名推导 `WRT_FLAVOR`）。
+3. **文件名简化**：`WRT-CORE.yml` 重命名逻辑由镜像原名重写为 `<设备>-<产品/方案>-<固件类型>.<扩展名>`：设备段（`H5000M` / `AP3000M` / `X86`）消歧同 Release 多机型，产品/方案段（`NetWiz-MT5700` / `MT5700` / `MT5700M` / `FM350` / `自用` / 空）按产品身份推导，固件类型段（`sysupgrade` / `factory` / `initramfs` / `recovery` / `efi` / `combined` / `rootfs` / `kernel`）保留刷机判断所需信息。配置文件导出同步去掉源码 / 分支 / 秒级时间戳（`Config-<配置名>-<MT模式>.txt`）。
+4. **自用 / MT 独立性保持**：NETMONITOR（自用）与普通 MT5700 / MT5700M / FM350 / BASE 分类不受影响，私有自用配置依旧独立归组，不进入公开 MT5700。
+
+### 变更
+
+- 删除 `Config/H5000M-WIFI-YES-NETWIZ.txt` / `Config/AP3000M-NETWIZ.txt` / `Config/X86-NETWIZ.txt`（纯 NetWiz，无插件）
+- `.github/workflows/NetWiz-AUTO.yml`：矩阵移除 3 个纯 NetWiz job；`WRT_VARIANT: NetWiz` 统一归组
+- `.github/workflows/WRT-BUILD.yml`：下拉移除 3 个纯 NetWiz 项（19 → 16 项）；`WRT_VARIANT` 推导改为 NETWIZ → 统一 `NetWiz`
+- `.github/workflows/WRT-CORE.yml`：新增 `WRT_DEVICE` / `WRT_FLAVOR` 推导；固件重命名改为 `<设备>-<产品/方案>-<固件类型>.<扩展名>`；Release body 组别速查与文件名解读更新
+- `README.md`：机型表 / NetWiz 说明 / 工作流矩阵 / 手动指引 / 归组表 / 文件名规范 / 项目结构同步更新
+- `CHANGELOG.md`：本条
+- 母配置、FM350 变体、MT5700 / MT5700M 配置、`Packages.sh` / `ApplyMTMode.sh` / `VerifyMTMode.sh` / `Auto-Clean.yml`：**均未改动**
+
+## [2026-09-29] 新增 H5000M 自用配置：NetMonitor 网络监控 + Taygedo 签到（基于 MT5700 方案）
+
+### 需求
+
+单独新增一份 H5000M 配置，在现有 **MT5700 方案**的基础上加入两个 LianXia233 插件：
+- `luci-app-netmonitor`（[LianXia233/luci-app-netmonitor](https://github.com/LianXia233/luci-app-netmonitor)，网络延迟 / 连通性实时监控）
+- `luci-app-taygedo`（[LianXia233/taygedo-CI](https://github.com/LianXia233/taygedo-CI)，塔吉多 / 幻塔 / 异环每日自动签到）
+
+该配置标明为【个人自用】：仅服务作者自有的 H5000M 设备，产物在 Releases 中**单独归组「自用」**（Tag 形如 `自用-<YY.MM.DD>`、固件名后缀 `-自用`），不进入 MT5700 / MT5700M / FM350 / NetWiz / BASE 等其他任何分类。
+
+### 设计要点
+
+1. **MT 层仍走独立配置层**：配置文件不内嵌任何 MT 包，由定时工作流固定传 `MT_MODE=MT5700` —— `ApplyMTMode.sh` 叠加 `Config/MT5700.txt` 并做互斥保护、`VerifyMTMode.sh` 校验互斥，完整复用既有机制（与 NetWiz-MT5700 组合变体同源）。
+2. **自用归组隔离**：`WRT_VARIANT=自用` → Release Tag `自用-<YY.MM.DD>`、固件名后缀 `-自用`。`Auto-Clean` 的归组键解析为通用逻辑（剥日期段取组名），「自用」组自动按最新一个保留，**无需改动 Auto-Clean.yml**。
+3. **手动错配防护**：手动构建选 `H5000M-WIFI-YES-NETMONITOR` 但 MT Mode 非 MT5700 时，新增校验步骤立即拦截（`grep .config` 断言 `luci-app-mt5700=y`），避免产出缺少 MT5700 模组功能的名不副实固件。
+4. **两个包的就位方式不同**（均独立成脚本，不动全机型共用的 `Packages.sh`）：
+   - `luci-app-netmonitor`：仓库根即包（`Makefile` / `htdocs/` / `po/` / `root/` 平铺），直接 clone 到 `package/luci-app-netmonitor`；其 Makefile **刻意不设 PKG_NAME**（包名由 luci.mk 按目录名推导，CI 环境不得导出同名环境变量），走 `feeds/luci/luci.mk` 编译框架（必须晚于 feeds update、早于 make defconfig）；
+   - `luci-app-taygedo`：`taygedo-CI` 是 monorepo（根目录为 Rust 工程），包本体在 `openwrt/luci-app-taygedo/` 一级子目录，需整体搬移到 `package/`；走标准 `package.mk`，`Build/Prepare` 从 GitHub Release `v0.5.0` 下载预编译 musl 二进制（H5000M 为 aarch64 → `taygedo-rs-aarch64-unknown-linux-musl.tar.gz`，资产已实测确认存在），不经 OpenWrt `rust/host` 源码构建，编译耗时可控。
+5. **CRLF 防御**：两仓库 `.gitattributes` 均强制 LF，取包脚本仍做幂等归一化 + 逐文件复核（模式同 `Packages-NetWiz.sh`），防 runner 环境漂移导致 BusyBox ash / procd 启动失败。
+6. **依赖显式选中**：netmonitor 的 `LUCI_DEPENDS`（`luci-mod-status` + `ucode-mod-fs` / `-uci` / `-ubus` / `-uloop`）与 taygedo 的 `+ca-bundle` 全部在配置里显式 `=y`（做法与 NetWiz 配置一致），避免依赖链变动时静默缺包。
+
+### 变更
+
+- 新增 `Config/H5000M-WIFI-YES-NETMONITOR.txt`（H5000M 板级 + netmonitor 段 + taygedo 段，MT 层留空由 `MT_MODE` 驱动）
+- 新增 `Scripts/Packages-NetMonitor.sh`（拉取两个自用插件，含 monorepo 布局断言 / CRLF 归一化 / 可执行位补齐）
+- 新增 `.github/workflows/H5000M-NETMONITOR-AUTO.yml`（定时随 Auto-Clean 触发，矩阵固定 `MT_MODE=MT5700`、`WRT_VARIANT=自用`）
+- `.github/workflows/WRT-CORE.yml`：新增 NETMONITOR 条件取包 / 校验步骤（含 MT5700 一致性断言）；Release body 组别速查表补「自用」行
+- `.github/workflows/WRT-BUILD.yml`：下拉 18 → 19 项；`WRT_VARIANT` 推导新增 NETMONITOR → 自用（置于优先级最高处）
+- `README.md`：机型表 / 自用配置说明 / 工作流矩阵 / 手动指引 / 归组表 / 项目结构
+- `CHANGELOG.md`：本条
+- 既有母配置、MT5700 / MT5700M / FM350 / NetWiz 配置、`Packages.sh` / `ApplyMTMode.sh` / `VerifyMTMode.sh` / `Auto-Clean.yml`：**均未改动**
+
 ## [2026-09-29] luci-app-h5000m-netmode 打包失败：五个定时工作流 17 个 job 全灭
 
 ### 修复
