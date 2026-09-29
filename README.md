@@ -12,7 +12,7 @@
 
 *适配 Hiveton H5000M 5G CPE（MT7986 + MT5700M）、AirPi AP3000M（MT7981B）与通用 X86_64 架构设备*
 
-*每个机型除母配置外另有多个变体：**FM350 变体**（Fibocom FM350-GL 模组管理 `luci-app-fm350`）、**NetWiz 家族**（网络配置向导 `luci-app-netwiz`，含纯 NetWiz 及与 MT5700 / MT5700M / FM350 的组合变体，共 4 种 × 3 机型）*
+*每个机型除母配置外另有多个变体：**FM350 变体**（Fibocom FM350-GL 模组管理 `luci-app-fm350`）、**NetWiz 家族**（网络配置向导 `luci-app-netwiz`，含纯 NetWiz 及与 MT5700 / MT5700M / FM350 的组合变体，共 4 种 × 3 机型）。另有一份 **H5000M 自用配置**（`H5000M-WIFI-YES-NETMONITOR`：NetMonitor 网络监控 + Taygedo 签到，固定 MT5700 方案，仅服务作者自有设备，产物在 Releases 单独归组「自用」）*
 
 ---
 
@@ -34,6 +34,7 @@
 | `*-NETWIZ-MT5700` | 各机型同上 | NetWiz 向导 + MT5700 方案（MT 层由 `MT_MODE=MT5700` 驱动） | 同上（与各机型母配置一致） | ✅ 开启 | 同上 |
 | `*-NETWIZ-MT5700M` | 各机型同上 | NetWiz 向导 + MT5700M 方案（含短信与 AT 守护） | 同上 | ✅ 开启 | 同上 |
 | `*-NETWIZ-FM350` | 各机型同上 | NetWiz 向导 + FM350 模组管理 | 同上 | ✅ / — | 同上 |
+| `H5000M-WIFI-YES-NETMONITOR` | MediaTek Filogic (MT7986) | Hiveton H5000M（自用：NetMonitor 网络监控 + Taygedo 签到，固定 MT5700 方案） | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) (`owrt`) | ✅ 开启 | Sysupgrade / Factory |
 
 > [!NOTE]
 > **FM350 变体说明**：三份 `<机型>-FM350.txt` 均为**新增文件**，板级部分与母配置逐行一致，仅在末尾追加 `luci-app-fm350` 及其依赖；母配置未做任何改动。配置名保留机型前缀是硬性要求：`WRT-CORE.yml` 中 AP3000M 的 EEPROM 注入与 AirPi Rust 后端预编译两步靠 `contains(env.WRT_CONFIG, 'AP3000M')` 命中，改名会让它们静默失配（factory 分区为空 → mt76 起不来 → Wi-Fi 瘫痪）。
@@ -45,6 +46,9 @@
 > - `*-NETWIZ-FM350`：板级 + NetWiz 段 + FM350 段；WRT-CORE 的导入/校验步骤按 `contains` 子串命中，NETWIZ 与 FM350 两个分支同时生效，`MT_MODE` 留空，归组 `NetWiz-FM350`。
 >
 > 母配置、FM350 变体均未做任何改动。配置名保留机型前缀（`AP3000M` 的 EEPROM 注入等按 `contains` 命中）。
+
+> [!NOTE]
+> **H5000M 自用配置说明**：`H5000M-WIFI-YES-NETMONITOR` 为【个人自用】配置，仅在现有 MT5700 方案基础上追加 `luci-app-netmonitor`（网络延迟/连通性实时监控）与 `luci-app-taygedo`（塔吉多每日自动签到）两个插件。**MT 插件层刻意不写在配置里**，由定时工作流固定传 `MT_MODE=MT5700`（`ApplyMTMode.sh` 叠加 `Config/MT5700.txt` 并做互斥保护）；手动触发时必须把 MT Mode 下拉同步选为 `MT5700`，否则校验步骤拦截。产物在 Releases 中**单独归组「自用」**（Tag 形如 `自用-<YY.MM.DD>`、固件名后缀 `-自用`），不进入 MT5700 / MT5700M / FM350 / NetWiz / BASE 等其他分类。
 
 > [!TIP]
 > **源码拉取说明**：自动化编译工作流中，`H5000M-WIFI-YES` 与 `AP3000M` 固定拉取 `VIKINGYFY/immortalwrt` 的 `owrt` 分支；`X86-MT-AUTO` 拉取 `immortalwrt/immortalwrt` 的 `master` 分支。手动触发 `WRT-BUILD` 时，可通过界面下拉框自由切换源码上游与分支。
@@ -167,6 +171,7 @@
 | **`X86-MT-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 并行编译 X86 的 **MT5700 + MT5700M** 双配置并自动发版 |
 | **`FM350-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 一份 workflow 覆盖全部机型的 **FM350 变体**（H5000M / AP3000M / X86）并自动发版 |
 | **`NetWiz-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 一份 workflow 覆盖全部机型的 **NetWiz 变体**（H5000M / AP3000M / X86）并自动发版 |
+| **`H5000M-NETMONITOR-AUTO`** | 每日定时 (随 Auto-Clean) / 手动 | 仅编译 H5000M **自用配置**（NetMonitor 网络监控 + Taygedo 签到，固定 MT5700 方案），产物归组「自用」并自动发版 |
 | **`Auto-Clean`** | 每日定时调度 / 手动 | 保持仓库整洁：保留最近 1 个 Release 及 30 天以内的构建日志 |
 | **`Cache-Clean`** | 手动触发 | 主动清理 actions/cache 编译缓存（不设定时清空，避免缓存频繁冷启动） |
 
@@ -175,8 +180,8 @@
 1. 进入仓库页面，点击 **`Actions`** 选项卡。
 2. 在左侧列表选择 **`WRT-BUILD`**，点击右侧 **`Run workflow`**。
 3. 按需选择：
-   - **Target Device**：母配置 3 项 / FM350 变体 3 项 / NetWiz 家族 12 项（`*-NETWIZ` 及 `-NETWIZ-MT5700` / `-NETWIZ-MT5700M` / `-NETWIZ-FM350` 组合），共 18 项
-   - **MT Mode**：`MT5700M` / `MT5700` / `NONE`（选 `*-NETWIZ-MT5700` / `*-NETWIZ-MT5700M` 配置时**必须**同步选对应 MT 模式，否则校验拦截；其余配置保持 `NONE`）
+   - **Target Device**：母配置 3 项 / FM350 变体 3 项 / NetWiz 家族 12 项（`*-NETWIZ` 及 `-NETWIZ-MT5700` / `-NETWIZ-MT5700M` / `-NETWIZ-FM350` 组合）/ H5000M 自用 1 项（`H5000M-WIFI-YES-NETMONITOR`），共 19 项
+   - **MT Mode**：`MT5700M` / `MT5700` / `NONE`（选 `*-NETWIZ-MT5700` / `*-NETWIZ-MT5700M` / `H5000M-WIFI-YES-NETMONITOR` 配置时**必须**同步选对应 MT 模式，否则校验拦截；其余配置保持 `NONE`）
    - **TEST**：若要正式输出固件，**务必将 `TEST` 改为 `false`**（设为 `true` 仅导出校验用 `.config`）。
 
 ### 3. 产物命名与 Release 规范
@@ -192,10 +197,11 @@
 | `NetWiz-MT5700-26.09.26` | 当天全部机型的 NetWiz + MT5700 组合固件 |
 | `NetWiz-MT5700M-26.09.26` | 当天全部机型的 NetWiz + MT5700M 组合固件 |
 | `NetWiz-FM350-26.09.26` | 当天全部机型的 NetWiz + FM350 组合固件 |
+| `自用-26.09.26` | 当天 H5000M 自用固件（NetMonitor + Taygedo，MT5700 方案） |
 | `BASE-26.09.26` | 当天手动编译的无变体、无 MT 模式固件 |
 
 > [!NOTE]
-> **归组机制**：`WRT-CORE.yml` 在「初始化构建变量」时按 `WRT_VARIANT`（FM350 / NetWiz）优先、其次 `MT_MODE`（MT5700 / MT5700M）、兜底 `BASE` 推导组名，Tag 只含天级日期 —— 三个机型的定时 job 由同一次 Auto-Clean 触发、同一天内执行，天级时间戳必然一致，因此跨 workflow 也能共享同一 Tag；`action-gh-release` 对已存在的 Tag 会把产物追加进既有 Release 而非另开新页。
+> **归组机制**：`WRT-CORE.yml` 在「初始化构建变量」时按 `WRT_VARIANT`（自用 / FM350 / NetWiz）优先、其次 `MT_MODE`（MT5700 / MT5700M）、兜底 `BASE` 推导组名，Tag 只含天级日期 —— 三个机型的定时 job 由同一次 Auto-Clean 触发、同一天内执行，天级时间戳必然一致，因此跨 workflow 也能共享同一 Tag；`action-gh-release` 对已存在的 Tag 会把产物追加进既有 Release 而非另开新页。
 >
 > **Auto-Clean 兼容**：`keep_latest_per_device` 的归组键解析同时兼容旧格式 `<配置>-<MT模式>-<源码>-<分支>-<日期时间>`（按机型保留）与新格式 `<组名>-<日期>`（按变体保留），历史 Release 不会被误删。
 
@@ -228,6 +234,7 @@ OpenWRT-CI/
 │   ├── X86-MT-AUTO.yml       # X86 双配置定时自动化发布
 │   ├── FM350-AUTO.yml        # FM350 变体统一入口（覆盖全部机型）
 │   ├── NetWiz-AUTO.yml       # NetWiz 变体统一入口（覆盖全部机型）
+│   ├── H5000M-NETMONITOR-AUTO.yml # H5000M 自用配置定时自动化发布（NetMonitor + Taygedo）
 │   ├── Auto-Clean.yml        # 自动化历史制品与任务日志清理
 │   └── Cache-Clean.yml       # 手动编译缓存回收
 ├── Config/                   # 模块化编译配置文件层
@@ -245,7 +252,8 @@ OpenWRT-CI/
 │   ├── X86-NETWIZ.txt        # X86_64 板级定义 + luci-app-netwiz
 │   ├── *-NETWIZ-MT5700.txt   # 各机型板级 + netwiz（MT 层由 MT_MODE=MT5700 驱动）
 │   ├── *-NETWIZ-MT5700M.txt  # 各机型板级 + netwiz（MT 层由 MT_MODE=MT5700M 驱动）
-│   └── *-NETWIZ-FM350.txt    # 各机型板级 + netwiz + fm350
+│   ├── *-NETWIZ-FM350.txt    # 各机型板级 + netwiz + fm350
+│   └── H5000M-WIFI-YES-NETMONITOR.txt # H5000M 板级 + netmonitor + taygedo（自用，MT5700 方案）
 ├── AP3000M-EEPROM/           # AP3000M 自动化射频恢复套件
 │   ├── mt7981_eeprom_mt7976_dbdc.bin # 提取自闭源固件的标准校准 EEPROM
 │   └── 99-ap3000m-eeprom     # 首次启动写入 factory 分区的初始化脚本
@@ -253,6 +261,7 @@ OpenWRT-CI/
 │   ├── Packages.sh           # 第三方 Feed 拉取与版本锁定
 │   ├── Packages-FM350.sh     # FM350 变体专用：拉取 luci-app-fm350 源码
 │   ├── Packages-NetWiz.sh    # NetWiz 变体专用：拉取 luci-app-netwiz 源码 + CRLF 归一化
+│   ├── Packages-NetMonitor.sh # 自用变体专用：拉取 netmonitor / taygedo 源码 + CRLF 归一化
 │   ├── ApplyMTMode.sh        # 根据选定模式组装配置层并注入互斥开关
 │   ├── VerifyMTMode.sh       # defconfig 后期校验，严查同名 .ko 驱动冲突
 │   ├── Handles.sh            # 静态资源预置、主题适配与组件补丁

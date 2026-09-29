@@ -1,4 +1,36 @@
 # 更新日志
+## [2026-09-29] 新增 H5000M 自用配置：NetMonitor 网络监控 + Taygedo 签到（基于 MT5700 方案）
+
+### 需求
+
+单独新增一份 H5000M 配置，在现有 **MT5700 方案**的基础上加入两个 LianXia233 插件：
+- `luci-app-netmonitor`（[LianXia233/luci-app-netmonitor](https://github.com/LianXia233/luci-app-netmonitor)，网络延迟 / 连通性实时监控）
+- `luci-app-taygedo`（[LianXia233/taygedo-CI](https://github.com/LianXia233/taygedo-CI)，塔吉多 / 幻塔 / 异环每日自动签到）
+
+该配置标明为【个人自用】：仅服务作者自有的 H5000M 设备，产物在 Releases 中**单独归组「自用」**（Tag 形如 `自用-<YY.MM.DD>`、固件名后缀 `-自用`），不进入 MT5700 / MT5700M / FM350 / NetWiz / BASE 等其他任何分类。
+
+### 设计要点
+
+1. **MT 层仍走独立配置层**：配置文件不内嵌任何 MT 包，由定时工作流固定传 `MT_MODE=MT5700` —— `ApplyMTMode.sh` 叠加 `Config/MT5700.txt` 并做互斥保护、`VerifyMTMode.sh` 校验互斥，完整复用既有机制（与 NetWiz-MT5700 组合变体同源）。
+2. **自用归组隔离**：`WRT_VARIANT=自用` → Release Tag `自用-<YY.MM.DD>`、固件名后缀 `-自用`。`Auto-Clean` 的归组键解析为通用逻辑（剥日期段取组名），「自用」组自动按最新一个保留，**无需改动 Auto-Clean.yml**。
+3. **手动错配防护**：手动构建选 `H5000M-WIFI-YES-NETMONITOR` 但 MT Mode 非 MT5700 时，新增校验步骤立即拦截（`grep .config` 断言 `luci-app-mt5700=y`），避免产出缺少 MT5700 模组功能的名不副实固件。
+4. **两个包的就位方式不同**（均独立成脚本，不动全机型共用的 `Packages.sh`）：
+   - `luci-app-netmonitor`：仓库根即包（`Makefile` / `htdocs/` / `po/` / `root/` 平铺），直接 clone 到 `package/luci-app-netmonitor`；其 Makefile **刻意不设 PKG_NAME**（包名由 luci.mk 按目录名推导，CI 环境不得导出同名环境变量），走 `feeds/luci/luci.mk` 编译框架（必须晚于 feeds update、早于 make defconfig）；
+   - `luci-app-taygedo`：`taygedo-CI` 是 monorepo（根目录为 Rust 工程），包本体在 `openwrt/luci-app-taygedo/` 一级子目录，需整体搬移到 `package/`；走标准 `package.mk`，`Build/Prepare` 从 GitHub Release `v0.5.0` 下载预编译 musl 二进制（H5000M 为 aarch64 → `taygedo-rs-aarch64-unknown-linux-musl.tar.gz`，资产已实测确认存在），不经 OpenWrt `rust/host` 源码构建，编译耗时可控。
+5. **CRLF 防御**：两仓库 `.gitattributes` 均强制 LF，取包脚本仍做幂等归一化 + 逐文件复核（模式同 `Packages-NetWiz.sh`），防 runner 环境漂移导致 BusyBox ash / procd 启动失败。
+6. **依赖显式选中**：netmonitor 的 `LUCI_DEPENDS`（`luci-mod-status` + `ucode-mod-fs` / `-uci` / `-ubus` / `-uloop`）与 taygedo 的 `+ca-bundle` 全部在配置里显式 `=y`（做法与 NetWiz 配置一致），避免依赖链变动时静默缺包。
+
+### 变更
+
+- 新增 `Config/H5000M-WIFI-YES-NETMONITOR.txt`（H5000M 板级 + netmonitor 段 + taygedo 段，MT 层留空由 `MT_MODE` 驱动）
+- 新增 `Scripts/Packages-NetMonitor.sh`（拉取两个自用插件，含 monorepo 布局断言 / CRLF 归一化 / 可执行位补齐）
+- 新增 `.github/workflows/H5000M-NETMONITOR-AUTO.yml`（定时随 Auto-Clean 触发，矩阵固定 `MT_MODE=MT5700`、`WRT_VARIANT=自用`）
+- `.github/workflows/WRT-CORE.yml`：新增 NETMONITOR 条件取包 / 校验步骤（含 MT5700 一致性断言）；Release body 组别速查表补「自用」行
+- `.github/workflows/WRT-BUILD.yml`：下拉 18 → 19 项；`WRT_VARIANT` 推导新增 NETMONITOR → 自用（置于优先级最高处）
+- `README.md`：机型表 / 自用配置说明 / 工作流矩阵 / 手动指引 / 归组表 / 项目结构
+- `CHANGELOG.md`：本条
+- 既有母配置、MT5700 / MT5700M / FM350 / NetWiz 配置、`Packages.sh` / `ApplyMTMode.sh` / `VerifyMTMode.sh` / `Auto-Clean.yml`：**均未改动**
+
 ## [2026-09-29] luci-app-h5000m-netmode 打包失败：五个定时工作流 17 个 job 全灭
 
 ### 修复
