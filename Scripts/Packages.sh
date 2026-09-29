@@ -350,6 +350,32 @@ esac
 
 UPDATE_PACKAGE "luci-app-h5000m-netmode" "LianXia233/luci-app-h5000m-netmode" "main"
 
+# ===== luci-app-h5000m-netmode 的 src/ 目录清理（2026-09-29 全机型全矩阵失败根因）=====
+# 该插件后端已重写为 Rust crate，仓库里保留 src/（Rust 源码），并把预编译的静态 ELF
+# 直接随包发布在 root/usr/sbin 下（见插件 Makefile 顶部注释：buildroot 内没有 Rust 工具链）。
+# 但 feeds/luci/luci.mk 的两个分支判断条件并不一致：
+#   Build/Compile       按 $(wildcard ${CURDIR}/src/Makefile) 判断 —— 需要“有 Makefile”
+#   Package/.../install 按 $(wildcard ${CURDIR}/src)         判断 —— 只要“目录存在”即可
+# 于是「有 src/ 但没有 src/Makefile」这个组合会踩坑：Compile 被跳过、ipkg-install 目录
+# 永远不会生成，install 阶段却仍执行 Build/Install/Default，即 make -C $(PKG_BUILD_DIR) install；
+# 该目录顶层没有 Makefile，make 报 “No rule to make target 'install'” 并以 exit code 2 退出，
+# 表现为 luci.mk 末尾 BuildPackage 展开的打包规则报错（luci.mk:408），进而整个 world 编译中断。
+# 证据链：src/ 由插件 2026-09-28 的 c68ac211（rewrite backend as single static Rust ELF）引入，
+# 本仓库 9-27 的定时构建仍全部成功，9-29 00:51 那批是首个带 src/ 的构建，
+# H5000M / AP3000M / X86 / FM350 / NetWiz 五个工作流的全部 job 报错行与退出码完全一致。
+# 删除 src/ 不影响产物：真正被打进包的是 root/、htdocs/、po/，二进制本来就已在仓库内预编译好。
+# 本仓库不走 SETUP_RUST 路线，是因为该包根本不需要在构建机编译 Rust，直接删源最省时也最稳。
+FIX_H5000M_NETMODE_SRC() {
+	local SRC_DIR="./luci-app-h5000m-netmode/src"
+	if [ -d "$SRC_DIR" ]; then
+		rm -rf "$SRC_DIR"
+		echo "h5000m-netmode: 移除无 Makefile 的 src/（否则 luci.mk install 分支会误走 Build/Install/Default）"
+	else
+		echo "h5000m-netmode: 无 src/ 目录，跳过"
+	fi
+}
+FIX_H5000M_NETMODE_SRC
+
 #安装 Honk 预编译 APK（避免从源码编译 Rust/eBPF 导致超过 6 小时上限）
 # 流程：
 #   1. 按编译目标架构从上游最新 release 下载 honk 与 luci-app-honk 的 openwrt-25.12 APK：
