@@ -59,11 +59,6 @@ jobs:
       WRT_CONFIG: ${{ matrix.CONFIG }}
 
       WRT_THEME: aurora
-      WRT_NAME: OWRT
-      WRT_SSID: OWRT
-      WRT_WORD: 12345678
-      WRT_IP: 192.168.10.1
-      WRT_PW: 无
 
       WRT_REPO: https://github.com/${{ matrix.SOURCE }}.git
       WRT_BRANCH: ${{ matrix.BRANCH }}

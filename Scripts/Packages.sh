@@ -2,13 +2,18 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
+# 严格模式：任一克隆/拉取/下载失败即终止（避免「编译全绿、固件里却缺包」
+# 的静默失败 —— 之前 clone 失败只是打一行日志，缺的包会被 defconfig 悄悄丢弃）。
+# 注意：set -u 下第 5 个位置参数必须写 ${5:-}（下方 UPDATE_PACKAGE 已处理）。
+set -euo pipefail
+
 #安装和更新软件包
 UPDATE_PACKAGE() {
 	local PKG_NAME=$1
 	local PKG_REPO=$2
 	local PKG_BRANCH=$3
 	local PKG_SPECIAL=$4
-	local PKG_LIST=("$PKG_NAME" $5)  # 第5个参数为自定义名称列表
+	local PKG_LIST=("$PKG_NAME" ${5:-})  # 第5个参数为自定义名称列表（可省略）
 	local REPO_NAME=${PKG_REPO#*/}
 
 	echo " "
@@ -174,7 +179,9 @@ FIX_HOMEPROXY_SINGBOX() {
 	# 约束下限取同一 feed 内 sing-box 的实际版本
 	SBOX_MK=$(find . -maxdepth 3 -type f -path "*/sing-box/Makefile" 2>/dev/null | head -1)
 	if [ -n "$SBOX_MK" ]; then
-		SBOX_VER=$(grep -m1 -oP '^PKG_VERSION:=\K.*' "$SBOX_MK" | tr -d '[:space:]')
+		# || true：sing-box Makefile 无 PKG_VERSION 行（grep 无匹配返回非零）时，
+		# 在 set -e -o pipefail 下整条赋值管道会中止脚本，与下方白名单兜底相悖
+		SBOX_VER=$(grep -m1 -oP '^PKG_VERSION:=\K.*' "$SBOX_MK" | tr -d '[:space:]' || true)
 	fi
 	# 版本串白名单：只允许数字/字母/点/下划线/连字符，避免脏数据进入 sed 表达式
 	case "$SBOX_VER" in
@@ -499,6 +506,6 @@ UPDATE_VERSION() {
 #UPDATE_VERSION "sing-box"
 
 #引入私有扩展脚本
-if [ -f "$GITHUB_WORKSPACE/Scripts/PRIVATE.sh" ]; then
+if [ -n "${GITHUB_WORKSPACE:-}" ] && [ -f "$GITHUB_WORKSPACE/Scripts/PRIVATE.sh" ]; then
 	source "$GITHUB_WORKSPACE/Scripts/PRIVATE.sh"
 fi
