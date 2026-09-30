@@ -13,21 +13,29 @@ on:
       WRT_THEME:
         required: true
         type: string
+      # 以下局域网 / 无线默认值统一由 Config/Defaults.txt 提供（优先级：
+      # 本输入显式传入 > 配置文件默认）。留空（default: ""）即使用配置文件值，
+      # 各调用方无需再重复传参；需要单独覆盖时传对应值即可。
       WRT_NAME:
-        required: true
+        required: false
         type: string
+        default: ""
       WRT_SSID:
-        required: true
+        required: false
         type: string
+        default: ""
       WRT_WORD:
-        required: true
+        required: false
         type: string
+        default: ""
       WRT_IP:
-        required: true
+        required: false
         type: string
+        default: ""
       WRT_PW:
-        required: true
+        required: false
         type: string
+        default: ""
       WRT_REPO:
         required: true
         type: string

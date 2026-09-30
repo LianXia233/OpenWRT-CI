@@ -1,4 +1,41 @@
 # 更新日志
+## [2026-09-30] 局域网 / 无线默认配置收敛为显式配置文件 Config/Defaults.txt
+
+### 背景
+
+后台地址、后台密码、主机名、Wi-Fi（SSID / 密码 / 加密方式 / 国家码 / 频宽）
+等默认值此前分散硬编码在 7 个调用方工作流的 `WRT_SSID` / `WRT_WORD` /
+`WRT_IP` / `WRT_NAME` / `WRT_PW` 输入与 `Scripts/Settings.sh` 中（加密方式
+`psk-mixed`、国家码 `CN`、2.4G `40MHz`、5G `160MHz` 直接写死），改一处需同步
+多处，容易遗漏。
+
+### 修复
+
+- 新增显式配置文件 `Config/Defaults.txt`：作为局域网 / 无线默认配置的唯一来源，
+  含 `LAN_IP=192.168.10.1`、`LAN_PASSWORD=无`（首次开机无密码）、`HOST_NAME=OWRT`、
+  `WIFI_SSID=OWRT`、`WIFI_PASSWORD=12345678`、`WIFI_ENCRYPTION=psk-mixed`（WPA 混合）、
+  `WIFI_COUNTRY=CN`、`WIFI_2G_WIDTH=40`、`WIFI_5G_WIDTH=160`。
+- `Scripts/Settings.sh`：
+  - 脚本开头加载 `Config/Defaults.txt`，按「环境变量（CI 输入）> 配置文件 > 内置兜底」
+    解析 `WRT_IP` / `WRT_PW` / `WRT_NAME` / `WRT_SSID` / `WRT_WORD` / `WRT_THEME`；
+  - 无线加密方式 / 国家码 / 2.4G·5G 频宽由硬编码改为读取配置变量（`.sh` 分支用
+    数值映射为 `HT40` / `VHT160`，`.uc` 分支直接用数值）；
+  - 解析后的最终值回写 `GITHUB_ENV`，确保 Release 说明展示实际生效值。
+- `.github/workflows/WRT-CORE.yml`：`WRT_NAME` / `WRT_SSID` / `WRT_WORD` /
+  `WRT_IP` / `WRT_PW` 由 `required: true` 改为可选（`default: ""`），留空即取
+  配置文件默认；`WRT_THEME` 保持必传。
+- 7 个调用方工作流（`WRT-BUILD` / `H5000M-MT-AUTO` / `AP3000M-MT-AUTO` /
+  `X86-MT-AUTO` / `FM350-AUTO` / `NetWiz-AUTO` / `H5000M-NETMONITOR-AUTO`）
+  删除重复的 5 个局域网 / 无线传参，仅保留 `WRT_THEME`。
+- `README.md` 固件默认参数表补充「后台密码 无」行与来源说明。
+
+### 验证
+
+- `bash -n Scripts/Settings.sh` 通过；8 个工作流 YAML 解析通过
+- 配置解析逻辑实测：无环境变量时取配置文件值；传入 `WRT_*` 时优先环境变量；
+  配置文件缺失时回落内置兜底
+- 行尾 LF（新增 `Config/Defaults.txt` 及全部改动文件）
+
 ## [2026-09-30] 详细检查修复：EEPROM 空分区判定/末字节溢位、工具链缓存失效、脚本严格模式与引号安全
 
 ### 背景
