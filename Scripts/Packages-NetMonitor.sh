@@ -71,7 +71,7 @@ mv "./${REPO_DIR2}/openwrt/${PKG2}" "./${PKG2}"
 rm -rf "./${REPO_DIR2}"
 
 # ===== 上游 taygedo Makefile 补丁 =====
-# 上游 v0.5.0 的 Makefile 有两处 bug，会导致自用配置编译失败（Error 255）：
+# 上游 v0.5.0 的 Makefile 有三处问题，会导致自用配置编译失败：
 #   1) 架构判断用了 $(CONFIG_ARCH)（OpenWrt 包上下文里该变量未定义/为空）
 #      → 所有 ifeq 分支落空 → 落到 else 下载 x86_64-* 二进制，
 #        而 H5000M 实际是 aarch64，产物装进目标后无法运行。
@@ -80,17 +80,34 @@ rm -rf "./${REPO_DIR2}"
 #      （<文件> <URL>），而 download.pl 签名是 <dir> <filename> <hash> <url>...
 #      → 缺参直接打印 Syntax 用法并以 255 退出。
 #      改为 curl 直接下载同一 URL（此 URL 为 GitHub Release 资产，无需 hash）。
-# 只改 clone 下来的包，不触碰上游仓库；仅对自用配置生效。
+#   3) Build/Compile 为 `$(TARGET_STRIP) $(PKG_BUILD_DIR)/taygedo-rs`。
+#      该二进制是 aarch64 的 prebuilt musl 产物（Release 资产已 stripped、
+#      静态链接），而编译 step 跑在 x86_64 runner 上：当 TARGET_STRIP 在该
+#      包上下文展开为空时，make 把整条 recipe 退化成“直接执行该二进制”，
+#      x86_64 host 无法执行 aarch64 ELF → 报
+#      `taygedo-rs: cannot execute binary file` / `make: Error 126`。
+#      修复方式与 WRT-CORE.yml 里 AP3000M 的 AIRPI_PREBUILT 分支一致：
+#      Build/Compile 只做文件操作（chmod），绝不把目标架构二进制当宿主命令跑。
+#      二进制已 stripped，去掉裁剪无任何体积/正确性损失；Package/install
+#      仍以 $(INSTALL_BIN) 直接从 $(PKG_BUILD_DIR)/taygedo-rs 安装到 /usr/bin。
+# 以上补丁只改 clone 下来的包，不触碰上游仓库；仅对自用配置生效。
 TAYGEDO_MK="./${PKG2}/Makefile"
 if [ -f "$TAYGEDO_MK" ]; then
 	sed -i \
 		-e 's/ifeq ($(CONFIG_ARCH),/ifeq ($(ARCH),/g' \
 		-e 's|$(SCRIPT_DIR)/download.pl "$(TAYGEDO_DL)" "$(TAYGEDO_DL_URL)"; \\|curl -fsSL --retry 3 -o "$(TAYGEDO_DL)" "$(TAYGEDO_DL_URL)"; \\|' \
+		-e 's|^[[:space:]]*$(TARGET_STRIP)[[:space:]]*$(PKG_BUILD_DIR)/taygedo-rs|\tchmod 755 $(PKG_BUILD_DIR)/taygedo-rs|' \
 		"$TAYGEDO_MK"
-	echo "==> ${PKG2}/Makefile 已打补丁（CONFIG_ARCH→ARCH，download.pl→curl）"
+	echo "==> ${PKG2}/Makefile 已打补丁（CONFIG_ARCH→ARCH，download.pl→curl，Build/Compile 去宿主执行）"
 	# 防踩坑复核：仍含 CONFIG_ARCH 说明上游结构/写法变了，需人工跟进
 	if grep -q 'CONFIG_ARCH' "$TAYGEDO_MK"; then
 		echo "::warning::${PKG2}/Makefile 仍含 CONFIG_ARCH 字样：上游写法已变更，请复核补丁"
+	fi
+	# Build/Compile 复核：若仍出现“以 $(PKG_BUILD_DIR)/taygedo-rs 开头”的 recipe
+	# 行（即可能把 aarch64 二进制当宿主命令执行），立即告警，避免固件编译期 Exec
+	# format error 反复横跳。仅匹配 recipe 行，不误伤 install/注释。
+	if grep -nE '^[[:space:]]*\$\(PKG_BUILD_DIR\)/taygedo-rs([[:space:]]|$)' "$TAYGEDO_MK"; then
+		echo "::warning::${PKG2}/Makefile Build/Compile 仍可能执行目标二进制：请复核补丁（taygedo-rs 应为 chmod 而非直接运行）"
 	fi
 else
 	echo "::error::${TAYGEDO_MK} 不存在：期望的 taygedo Makefile 未就位"
