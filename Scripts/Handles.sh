@@ -273,7 +273,11 @@ if [ -f "$RUST_FILE" ]; then
 fi
 
 #AP3000M EEPROM 自动初始化 (备份EEPROM模板 + uci-defaults)
-if [ "$WRT_CONFIG" = "AP3000M" ]; then
+# 匹配所有 AP3000M 实体配置（含 FM350 / NETWIZ 等变体，WRT_CONFIG 形如
+# AP3000M-FM350 / AP3000M-NETWIZ-MT5700 ...），保证任意 AP3000M 实体机身
+# 都注入 EEPROM 校准，而不仅是基础 AP3000M 配置。
+case "$WRT_CONFIG" in
+AP3000M|AP3000M-*)
 	echo " "
 	echo "AP3000M EEPROM fix: injecting..."
 
@@ -294,7 +298,8 @@ if [ "$WRT_CONFIG" = "AP3000M" ]; then
 	else
 		echo "AP3000M-EEPROM directory not found; skipping EEPROM fix!"
 	fi
-fi
+	;;
+esac
 
 
 #修复 dockerd 在 CI runner 上的构建失败

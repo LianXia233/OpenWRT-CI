@@ -1,4 +1,24 @@
 # 更新日志
+## [2026-09-30] 修复 H5000M 自用配置编译失败（Run 36667204571）+ AP3000M 全变体 EEPROM 注入
+
+### 根因
+
+本次两条问题同批处理：
+
+1. **H5000M 自用（NETMONITOR）配置编译失败**（Run 36667204571，失败步骤「编译固件」）。`luci-app-taygedo` 上游 v0.5.0 的 Makefile `Build/Compile` 为 `$(TARGET_STRIP) $(PKG_BUILD_DIR)/taygedo-rs`：当 `TARGET_STRIP` 在该包上下文展开为空时，make 把整条 recipe 退化成「直接执行该二进制」。而该二进制是 **aarch64** 的 prebuilt musl 产物，编译 step 跑在 **x86_64 runner** 上 → `Exec format error` / `taygedo-rs: cannot execute binary file` / `make: Error 126`。此前已修复的两处问题（`CONFIG_ARCH`→`$(ARCH)`、`download.pl`→`curl`）解决的是下载/取错架构，这一处是编译期执行目标架构二进制。
+2. **AP3000M 变体漏注 EEPROM**：`Scripts/Handles.sh` 的 EEPROM 注入门禁为 `[ "$WRT_CONFIG" = "AP3000M" ]`，只匹配基础配置，`AP3000M-FM350`、`AP3000M-NETWIZ-*` 等实体配置不会触发注入，机身 Wi-Fi 校准参数缺失。
+
+### 修复
+
+- `Scripts/Packages-NetMonitor.sh`：对克隆下来的 taygedo `Makefile` 追加第三处 sed 补丁，把 `Build/Compile` 从 `$(TARGET_STRIP) $(PKG_BUILD_DIR)/taygedo-rs` 改为 `chmod 755 $(PKG_BUILD_DIR)/taygedo-rs`——编译期只做文件操作、绝不把目标架构二进制当宿主命令执行（与 `WRT-CORE.yml` 中 AP3000M 的 `AIRPI_PREBUILT` 分支一致）。二进制已 stripped，去掉裁剪无体积/正确性损失；`Package/install` 仍以 `$(INSTALL_BIN)` 正常安装到 `/usr/bin`。补丁仍只作用于克隆的包，不触碰上游仓库，仅对自用配置生效。并新增 Build/Compile 复核 guard：若补丁后仍出现以 `$(PKG_BUILD_DIR)/taygedo-rs` 开头的 recipe 行，`::warning::` 立即告警，避免该 Exec format 错误反复横跳。
+- `Scripts/Handles.sh`：EEPROM 注入门禁由 `if [ "$WRT_CONFIG" = "AP3000M" ]` 改为 `case` 分支匹配 `AP3000M` 及 `AP3000M-*` 全部变体，保证任意 AP3000M 实体机身（基础 / FM350 / NETWIZ 家族）都注入 `mt7981_eeprom_mt7976_dbdc.bin` 模板与 `99-ap3000m-eeprom` uci-defaults 脚本。
+
+### 验证
+
+- 两条脚本 `bash -n` 语法检查通过，行尾 LF（Shell 一律 LF，避免 BusyBox ash / procd 启动失败）
+- Run 36667204571 失败步骤确认为「编译固件」，与 taygedo `Exec format error` 一致
+- `AP3000M-EEPROM` 注入在基础 `AP3000M` 构建中已验证成功（此前 Run 36648721637 打印 `AP3000M EEPROM fix injected!`）
+
 ## [2026-09-29] 修复 H5000M 自用配置编译失败（Run 36648721608）
 
 ### 根因
