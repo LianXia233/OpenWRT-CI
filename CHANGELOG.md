@@ -1,4 +1,28 @@
 # 更新日志
+## [2026-09-29] 修复 H5000M 自用配置编译失败（Run 36648721608）
+
+### 根因
+
+`luci-app-taygedo`（塔吉多自动签到）编译失败，`make` 报 `package/luci-app-taygedo failed to build`、`Error 255`。上层包 Makefile 有两处 bug：
+
+1. **架构判断用错变量**：用 `ifeq ($(CONFIG_ARCH),...)` 判断，但 OpenWrt 包上下文里该变量未定义（为空）→ 所有 ifeq 分支落空 → 落到 `else` 默认下载 **x86_64-unknown-linux-musl** 二进制；而目标固件是 **aarch64**（`build_dir/target-aarch64_cortex-a53_musl/...`）。即便下载成功，产物装进 aarch64 目标也无法运行。
+2. **下载调用参数错误**：`Build/Prepare` 里 `$(SCRIPT_DIR)/download.pl` 只传了 2 个位置参数（`<文件> <URL>`），而 `download.pl` 签名是 `<dir> <filename> <hash> <url>...` → 缺参直接打印 `Syntax: download.pl <target dir> ...` 并以 255 退出。
+
+### 修复
+
+在 `Scripts/Packages-NetMonitor.sh` 克隆 taygedo 包后，对 `Makefile` 就地打补丁（不触碰上游仓库，仅对自用配置生效）：
+
+- `CONFIG_ARCH` → `$(ARCH)`（OpenWrt 标准架构变量，aarch64 / x86_64）
+- `download.pl`（参数签名错误）→ `curl -fsSL --retry 3 -o` 直接下载同一 GitHub Release 资产
+
+并加入防踩坑复核：若补丁后仍残留 `CONFIG_ARCH` 字样（上游写法已变更），输出 `::warning::` 提醒人工跟进；若 Makefile 缺失则 `::error::` 终止。
+
+### 验证
+
+- 沙箱内实测返回的补丁 diff：5 处 `ifeq` 判构全部改为 `$(ARCH)`，下载行正确替换为 curl 版本
+- `Scripts/Packages-NetMonitor.sh` 语法检查通过（`bash -n`），行尾 LF
+- 该补丁仅影响 H5000M 自用（NETMONITOR）配置，现有机型构建路径不受影响
+
 ## [2026-09-29] README.md 优化：新增「变体总览」章节、精简工程细节、美化排版
 
 ### 需求
