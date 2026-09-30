@@ -1,4 +1,28 @@
 # 更新日志
+## [2026-09-30] taygedo 上游 v0.5.1 原生修复，移除自用配置的 Makefile 补丁
+
+### 背景
+
+`luci-app-taygedo` 上游 v0.5.1 的 `Makefile` 已原生包含此前由本仓库在
+`Scripts/Packages-NetMonitor.sh` 中通过 sed 追加的三处修复
+（`CONFIG_ARCH`→`$(ARCH)`、`download.pl`→`curl`、`Build/Compile` 的
+`$(TARGET_STRIP)`→`chmod 755`）。继续打补丁已无意义且存在双写风险
+（补丁表达式与上游新写法失配时会静默产出未经修复的包）。
+
+### 变更
+
+- `Scripts/Packages-NetMonitor.sh`：删除对克隆下来的 taygedo `Makefile`
+  的三处 sed 补丁，改为**上游自检**——`CONFIG_ARCH` / `download.pl` /
+  `$(TARGET_STRIP)` 任一旧写法重新出现（上游回归）时输出 `::error::` 并
+  终止，避免静默产出坏包；补丁配套的防踩坑 warning 复核随之移除（被自检覆盖）。
+- 注释同步：`CONFIG_ARCH=aarch64` → `ARCH=aarch64`，上游版本引用 v0.5.0 → v0.5.1。
+
+### 验证
+
+- `Scripts/Packages-NetMonitor.sh` 语法检查通过（`bash -n`），行尾 LF
+- 上游 taygedo-CI v0.5.1 的 Makefile 三处修复已推送（b0dbdd0），grep 复核
+  活动代码已无 `CONFIG_ARCH` / `download.pl` / `TARGET_STRIP`
+
 ## [2026-09-30] 修复 H5000M 自用配置编译失败（Run 36667204571）+ AP3000M 全变体 EEPROM 注入
 
 ### 根因
