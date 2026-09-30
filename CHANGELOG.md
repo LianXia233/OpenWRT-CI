@@ -1,4 +1,96 @@
 # 更新日志
+## [2026-09-30] 局域网 / 无线默认配置收敛为显式配置文件 Config/Defaults.txt
+
+### 背景
+
+后台地址、后台密码、主机名、Wi-Fi（SSID / 密码 / 加密方式 / 国家码 / 频宽）
+等默认值此前分散硬编码在 7 个调用方工作流的 `WRT_SSID` / `WRT_WORD` /
+`WRT_IP` / `WRT_NAME` / `WRT_PW` 输入与 `Scripts/Settings.sh` 中（加密方式
+`psk-mixed`、国家码 `CN`、2.4G `40MHz`、5G `160MHz` 直接写死），改一处需同步
+多处，容易遗漏。
+
+### 修复
+
+- 新增显式配置文件 `Config/Defaults.txt`：作为局域网 / 无线默认配置的唯一来源，
+  含 `LAN_IP=192.168.10.1`、`LAN_PASSWORD=无`（首次开机无密码）、`HOST_NAME=OWRT`、
+  `WIFI_SSID=OWRT`、`WIFI_PASSWORD=12345678`、`WIFI_ENCRYPTION=psk-mixed`（WPA 混合）、
+  `WIFI_COUNTRY=CN`、`WIFI_2G_WIDTH=40`、`WIFI_5G_WIDTH=160`。
+- `Scripts/Settings.sh`：
+  - 脚本开头加载 `Config/Defaults.txt`，按「环境变量（CI 输入）> 配置文件 > 内置兜底」
+    解析 `WRT_IP` / `WRT_PW` / `WRT_NAME` / `WRT_SSID` / `WRT_WORD` / `WRT_THEME`；
+  - 无线加密方式 / 国家码 / 2.4G·5G 频宽由硬编码改为读取配置变量（`.sh` 分支用
+    数值映射为 `HT40` / `VHT160`，`.uc` 分支直接用数值）；
+  - 解析后的最终值回写 `GITHUB_ENV`，确保 Release 说明展示实际生效值。
+- `.github/workflows/WRT-CORE.yml`：`WRT_NAME` / `WRT_SSID` / `WRT_WORD` /
+  `WRT_IP` / `WRT_PW` 由 `required: true` 改为可选（`default: ""`），留空即取
+  配置文件默认；`WRT_THEME` 保持必传。
+- 7 个调用方工作流（`WRT-BUILD` / `H5000M-MT-AUTO` / `AP3000M-MT-AUTO` /
+  `X86-MT-AUTO` / `FM350-AUTO` / `NetWiz-AUTO` / `H5000M-NETMONITOR-AUTO`）
+  删除重复的 5 个局域网 / 无线传参，仅保留 `WRT_THEME`。
+- `README.md` 固件默认参数表补充「后台密码 无」行与来源说明。
+
+### 验证
+
+- `bash -n Scripts/Settings.sh` 通过；8 个工作流 YAML 解析通过
+- 配置解析逻辑实测：无环境变量时取配置文件值；传入 `WRT_*` 时优先环境变量；
+  配置文件缺失时回落内置兜底
+- 行尾 LF（新增 `Config/Defaults.txt` 及全部改动文件）
+
+## [2026-09-30] 详细检查修复：EEPROM 空分区判定/末字节溢位、工具链缓存失效、脚本严格模式与引号安全
+
+### 背景
+
+对全仓库做一轮详细检查，发现四处问题，其中两处为会实际触发、影响产物的缺陷：
+
+1. **EEPROM 空分区判定恒为「已填充」**（`AP3000M-EEPROM/99-ap3000m-eeprom`）：
+   `hexdump -v -e '/1 "%02x"'` 不带分隔符时把所有字节拼成一个连续字符串，
+   `for byte_hex in $FACTORY_ZERO` 只会迭代一次，判据 `[ "$byte_hex" != "00" ]`
+   对整串 4096×2 个字符恒为真 → `FACTORY_ALLZERO=0` → 空分区被误判为已初始化，
+   **EEPROM 永远不会被写入校准参数与 MAC**。
+2. **MAC a2 末字节溢位**（同文件）：`MAC_B6=ff` 时 `+1` 得 0x100，`printf %02x`
+   输出 3 位 `"100"`，`\x100` 被解析为 `\x10` + 字面 `"0"`，写出错误的字节。
+3. **工具链缓存每次构建前被清空**（`.github/workflows/WRT-CORE.yml`）：
+   「生成配置并执行 defconfig」执行 `make defconfig && make clean`，而 OpenWrt
+   `_clean` 规则为 `rm -rf $(BUILD_DIR) $(STAGING_DIR) $(BIN_DIR)`——`STAGING_DIR`
+   是整个 `staging_dir/`，包含刚恢复并 touch 过时间戳的 `host*` / `tool*`。
+   恢复→删除→重新编译→再保存，工具链缓存形同虚设，每次构建都从零编译工具链；
+   同一原因下「修正缓存时间戳」写入的 `tmp/.build` 标记也被随 `$(TMP_DIR)` 删掉。
+4. **脚本缺少严格模式与引号/空结果防护**（`Scripts/Packages.sh`、`Scripts/Settings.sh`）：
+   clone 失败只打日志不终止（缺的包被 defconfig 悄悄丢弃，产物「全绿却缺包」）；
+   `Settings.sh` 用 `sed ... $(find ...)`，find 无结果时 sed 缺文件参数退化为读
+   stdin，含空格路径还会被拆词。
+
+### 修复
+
+- `AP3000M-EEPROM/99-ap3000m-eeprom`：
+  - hexdump 格式改为 `'/1 "%02x "'`（字节间带空格），`for` 循环逐字节判断，
+    空分区能正确触发写入；
+  - MAC a2 末字节 `(0x$MAC_B6 + 1) & 0xff`，0xFF+1 按 256 回绕为 0x00，
+    恒输出 2 位十六进制；
+  - 补模板文件缺失 guard：`$TEMPLATE` 不存在时置 done 标记并退出，避免
+    写出只含 MAC、缺校准参数的残缺 EEPROM。
+- `.github/workflows/WRT-CORE.yml`：
+  - `make defconfig && make clean` 拆分为 `make defconfig` + 定向清理
+    `rm -rf ./build_dir ./bin`，保留 `staging_dir`（工具链 + 已 touch 的时间戳），
+    缓存命中时跳过工具链重建；
+  - 同步更新缓存步骤注释，说明 `_clean` 会整删 `STAGING_DIR` 的前因后果。
+- `Scripts/Packages.sh`：新增 `set -euo pipefail`（clone/下载失败即终止，杜绝
+  静默缺包）；第 5 个位置参数 `$5` → `${5:-}`（set -u 下 4 参调用不再报
+  unbound）；sing-box `PKG_VERSION` 提取管道补 `|| true`（grep 无匹配时不再被
+  errexit 中断，落入既有白名单兜底）；末尾 `GITHUB_WORKSPACE` 判空。
+- `Scripts/Settings.sh`：四处 `sed ... $(find ...)` 改为
+  `find ... -print0 | xargs -0 -r sed -i ...`（空结果不执行、路径不拆词）；
+  `$WIFI_SH` / `$WIFI_UC` / `$CFG_FILE` / `cat $GITHUB_WORKSPACE/...` 全部加引号。
+
+### 验证
+
+- 三个脚本 `bash -n` 语法检查通过（下方确认），行尾 LF
+- `dash`/`bash` 算术 `$((0x0a + 1))`、`$((0xff + 1)) & 0xff` 用例核对通过
+- EEPROM 全零判定逻辑用手工构造的 hexdump 输出演练，空串/全 00/含非 00 三类输入
+  判定结果正确
+- 工具链缓存链路复核：恢复（host*/tool*）→ touch 时间戳 → 定向清理
+  （build_dir/bin）→ 编译 → 保存，不再出现恢复后被整删的路径
+
 ## [2026-09-30] taygedo 上游 v0.5.1 原生修复，移除自用配置的 Makefile 补丁
 
 ### 背景

@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: MIT
+# ===== 显式配置文件：系统默认（局域网 / 无线）=====
+# 本文件是「后台地址 / 后台密码 / 主机名 / Wi-Fi 及频宽国家码」等默认配置的
+# 唯一来源，由 Scripts/Settings.sh 在编译期读取并写入固件。
+# 优先级：工作流显式传入的 WRT_* 输入 > 本文件默认值 > 脚本内置兜底。
+# 修改后无需改动任何工作流 / 脚本，重新触发编译即生效。
+# 注意：本文件被脚本 source 解析，值请勿包含未转义的空格或 #（行内注释）。
+
+# ---- 局域网 ----
+LAN_IP=192.168.10.1          # 后台地址（路由器 LAN IP，Web 管理界面访问地址）
+LAN_PASSWORD=无              # 后台密码（仅用于 Release 说明展示；OpenWrt 默认
+                             # 首次开机无密码，「无 / 留空」即不设置密码）
+HOST_NAME=OWRT               # 默认主机名（网络标识）
+
+# ---- 无线 ----
+WIFI_SSID=OWRT               # Wi-Fi 名称（2.4G / 5G 共用）
+WIFI_PASSWORD=12345678       # Wi-Fi 密码
+WIFI_ENCRYPTION=psk-mixed    # 加密方式：WPA-PSK/WPA2-PSK 混合（WPA 混合加密）
+WIFI_COUNTRY=CN              # 国家/地区码
+WIFI_2G_WIDTH=40             # 2.4G 频宽（MHz）
+WIFI_5G_WIDTH=160            # 5G 频宽（MHz）

@@ -13,21 +13,29 @@ on:
       WRT_THEME:
         required: true
         type: string
+      # 以下局域网 / 无线默认值统一由 Config/Defaults.txt 提供（优先级：
+      # 本输入显式传入 > 配置文件默认）。留空（default: ""）即使用配置文件值，
+      # 各调用方无需再重复传参；需要单独覆盖时传对应值即可。
       WRT_NAME:
-        required: true
+        required: false
         type: string
+        default: ""
       WRT_SSID:
-        required: true
+        required: false
         type: string
+        default: ""
       WRT_WORD:
-        required: true
+        required: false
         type: string
+        default: ""
       WRT_IP:
-        required: true
+        required: false
         type: string
+        default: ""
       WRT_PW:
-        required: true
+        required: false
         type: string
+        default: ""
       WRT_REPO:
         required: true
         type: string
@@ -206,9 +214,14 @@ jobs:
 
       # 关键改动 1：工具链 + ccache 合成一份缓存
       #   - 只缓存 staging_dir/host* 与 staging_dir/tool*：
-      #     staging_dir/target-* 会被下一步的 `make clean` 删除
-      #     （Makefile 中 _clean: rm -rf $(BUILD_DIR) $(STAGING_DIR) $(BIN_DIR)），
-      #     打包上传它纯属浪费带宽，且随配置漂移污染缓存。
+      #     staging_dir/target-* 是按机型区分的编译产物，随配置漂移，
+      #     打包上传它纯属浪费带宽并污染缓存。
+      #   - 重要：原始 `make defconfig && make clean` 会连同整个 staging_dir
+      #     （含 host*/tool*）一并删除（_clean: rm -rf $(BUILD_DIR)
+      #     $(STAGING_DIR) $(BIN_DIR)），恢复进来的工具链会在编译前被清空、
+      #     每次构建都从零编译工具链，缓存形同虚设。故「生成配置并执行
+      #     defconfig」步骤已把 make clean 替换为只清 build_dir 与 bin 的
+      #     定向删除，本缓存才能真正生效。
       #   - key 绑定 WRT_TARGET 而非 WRT_CONFIG：H5000M 与 AP3000M 同为
       #     mediatek/filogic，可共用同一份工具链，避免每天白编译一次。
       #   - key 不再把 commit hash 放在唯一位置上，配合 restore-keys 做前缀回退，
@@ -389,7 +402,16 @@ jobs:
           # 必须在 Settings.sh 之后、make defconfig 之前执行
           $GITHUB_WORKSPACE/Scripts/ApplyMTMode.sh
 
-          make defconfig && make clean
+          make defconfig
+
+          # 定向清理（替代 make clean）：make clean 的 _clean 规则会
+          # rm -rf $(BUILD_DIR) $(STAGING_DIR) $(BIN_DIR)，把上面「恢复缓存」
+          # 步骤拿回的 host*/tool* 工具链连同其时间戳一起删光，导致每次构建
+          # 都从零编译工具链（数小时）且「修正缓存时间戳」步骤形同虚设。
+          # 这里只移除按机型/配置变化的构建产物 build_dir 与 bin，保留
+          # staging_dir；缓存命中时工具链可直接复用，缓存未命中时行为与
+          # 原先一致（build_dir 为空，本就无残留可清）。
+          rm -rf ./build_dir ./bin
 
       # 配置生成后、编译前：验证 MT 模式包选择互斥（双重验证之一）
       - name: 校验 MT 插件模式互斥
