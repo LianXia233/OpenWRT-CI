@@ -5,8 +5,9 @@
 
 `Config/Defaults.txt` 是全系固件「后台地址 / 后台密码 / 主机名 / Wi-Fi 及频宽国家码」
 等默认配置的唯一来源。此前无线部分只有一套 `WIFI_*` 默认值，未区分设备 WiFi 世代：
-AP3000M 为 WiFi6（802.11ax，MT7981B），H5000M 为 WiFi7（802.11be），两者能力上限不同
-（5G 频宽 WiFi6 上限 160MHz，WiFi7 上限 320MHz），但固件里写入的是同一组频宽。
+AP3000M 为 WiFi6（802.11ax，MT7981B），H5000M 为 WiFi7（802.11be），两者虽同为双频
+设备（5G 频段上限均为 160MHz），但世代能力不同，默认配置应分开管理，便于按世代
+调整加密 / 频宽等策略。
 
 ### 根因
 
@@ -24,8 +25,9 @@ AP3000M 为 WiFi6（802.11ax，MT7981B），H5000M 为 WiFi7（802.11be），两
 
 - `Config/Defaults.txt`：无线部分拆分为两节——
   - WiFi6 默认（无后缀，AP3000M 等 802.11ax）：5G `160MHz`；
-  - WiFi7 默认（`_WIFI7` 后缀，H5000M 等 802.11be）：5G 上限 `320MHz`，
-    硬件 / 法规不支持时由驱动自动回落至实际上限。
+  - WiFi7 默认（`_WIFI7` 后缀，H5000M 等 802.11be）：5G 同为 `160MHz`
+    （320MHz 仅限 6GHz 频段，H5000M 为 2.4G/5G 双频设备不启用）；
+  - 加密默认统一为 `psk-mixed`（mixed WPA/WPA2 PSK (CCMP)）。
 - `Scripts/Settings.sh`：在 source 配置后、`WRT_*` 赋值前，按设备世代选择默认值
   （`WRT_DEVICE=H5000M` → WiFi7 组，其余 → WiFi6 组），优先级保持
   `WRT_*` 环境变量 > 世代默认值 > 内置兜底；htmode 前缀同步按世代生成
