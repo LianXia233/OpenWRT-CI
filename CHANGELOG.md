@@ -1,4 +1,50 @@
 # 更新日志
+## [2026-10-01] 修复 taygedo 编译失败：Release 版本漂移导致预编译资产 404
+
+### 背景
+
+上一节修复「包未选中」后重新触发编译（run 36814142790，04:57 执行），固件编译仍失败，
+日志核心报错：
+
+```
+curl: (22) The requested URL returned error: 404
+make[3]: *** [Makefile:150: .../build_dir/target-aarch64_cortex-a53_musl/
+  luci-app-taygedo-0.5.1/.prepared_...] Error 22
+make[2]: *** [package/Makefile:255: package/luci-app-taygedo/compile] Error 1
+make: *** [/mnt/build_wrt/include/toplevel.mk:268: world] Error 2
+```
+
+### 根因
+
+上游 `LianXia233/taygedo-CI` 的 `openwrt/luci-app-taygedo/Makefile` 把 `PKG_VERSION`
+bump 到 `0.5.1`，但 `.github/workflows/build.yml` 实际只把预编译资产发布到 **v0.5.0**
+（实测：`/releases/latest` 重定向到 `v0.5.0`，且仅 v0.5.0 含 `taygedo-rs-aarch64/
+x86_64-unknown-linux-musl.tar.gz`；`v0.5.1/...` 资产 404）。H5000M 为 aarch64，于是
+`Build/Prepare` 里 `curl -fsSL --retry 3` 下载 `v0.5.1/taygedo-rs-aarch64-unknown-
+linux-musl.tar.gz` 时 404 → curl 退出码 22 → 包编译失败并最终中断 `world`。
+
+这是典型的「代码版本领先于实际 Release」时间窗，且失败点发生在深层编译期、报错晦涩。
+
+### 修复
+
+在 `Scripts/Packages-NetMonitor.sh` 的 taygedo Makefile 自检之后新增「Release 版本对齐」
+块，把「深层编译期 404」提前成「取包期显式定位到可用版本」：
+
+- 解析 Makefile 的 `TAYGEDO_REPO` 与 `PKG_VERSION`，用 HEAD 探测
+  `releases/download/v<PKG_VERSION>/taygedo-rs-aarch64-unknown-linux-musl.tar.gz`：
+  - 可达：保持不动，继续；
+  - 不可达：沿 `/releases/latest` 的 302 重定向解析最新 tag，校验其 aarch64 资产可达后
+    就地改写 Makefile 的 `PKG_VERSION`，并输出可见日志；若最新版与声明一致仍不可达、
+    或无法解析 latest tag，则显式 `::error::` 退出而非静默失败。
+- 该自检只动 `PKG_VERSION` 一行，不影响上一节已校验的架构映射 / curl 下载 / chmod 编译逻辑。
+
+### 验证
+
+- `bash -n Scripts/Packages-NetMonitor.sh` 通过。
+- 实测 `v0.5.0` aarch64 资产可达、`v0.5.1` 不可达，`/releases/latest` 重定向到 `v0.5.0`。
+- 端到端隔离测试：构造声明 `PKG_VERSION:=0.5.1` 的坏 Makefile，跑对齐块，成功改写为
+  `PKG_VERSION:=0.5.0`（与实测可用版本一致）。
+
 ## [2026-10-01] 加固 taygedo 上游 Makefile 自检：捕获解析期 $(error) 导致的「包未选中」
 
 ### 背景
