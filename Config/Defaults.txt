@@ -12,10 +12,22 @@ LAN_PASSWORD=无              # 后台密码（仅用于 Release 说明展示；
                              # 首次开机无密码，「无 / 留空」即不设置密码）
 HOST_NAME=OWRT               # 默认主机名（网络标识）
 
-# ---- 无线 ----
+# ---- 无线（WiFi6 默认 · AP3000M 等 802.11ax 设备）----
+# 无后缀变量为 WiFi6 世代默认值（保持历史兼容）；Settings.sh 按设备世代选择：
+# AP3000M（WiFi6）取本节，H5000M（WiFi7）取下方 _WIFI7 后缀节。
 WIFI_SSID=OWRT               # Wi-Fi 名称（2.4G / 5G 共用）
 WIFI_PASSWORD=12345678       # Wi-Fi 密码
 WIFI_ENCRYPTION=psk-mixed    # 加密方式：WPA-PSK/WPA2-PSK 混合（WPA 混合加密）
 WIFI_COUNTRY=CN              # 国家/地区码
 WIFI_2G_WIDTH=40             # 2.4G 频宽（MHz）
-WIFI_5G_WIDTH=160            # 5G 频宽（MHz）
+WIFI_5G_WIDTH=160            # 5G 频宽（MHz，802.11ax 上限）
+
+# ---- 无线（WiFi7 默认 · H5000M 等 802.11be 设备）----
+# 仅当 Settings.sh 识别到 WiFi7 设备（H5000M）时启用；5G 上限放宽到 320MHz
+#（802.11be 特性，硬件 / 法规不支持时由驱动自动回落至实际上限）。
+WIFI_SSID_WIFI7=OWRT             # Wi-Fi 名称（2.4G / 5G 共用）
+WIFI_PASSWORD_WIFI7=12345678     # Wi-Fi 密码
+WIFI_ENCRYPTION_WIFI7=psk-mixed  # 加密方式：WPA-PSK/WPA2-PSK 混合（WPA 混合加密）
+WIFI_COUNTRY_WIFI7=CN            # 国家/地区码
+WIFI_2G_WIDTH_WIFI7=40           # 2.4G 频宽（MHz）
+WIFI_5G_WIDTH_WIFI7=320          # 5G 频宽（MHz，802.11be 上限）

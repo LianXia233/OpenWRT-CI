@@ -11,6 +11,20 @@ if [ -f "$SYSTEM_CFG" ]; then
 	source "$SYSTEM_CFG"
 fi
 
+# 设备 WiFi 世代选择：AP3000M 为 WiFi6（802.11ax），H5000M 为 WiFi7（802.11be）。
+# 无线默认值按世代区分（Config/Defaults.txt 中 *_WIFI7 后缀为 WiFi7 专属默认，
+# 无后缀为 WiFi6 默认，保持历史兼容）；WRT_DEVICE 由工作流按配置名推导，
+# 本地手动构建时回退到 WRT_CONFIG 首段，未知设备一律按 WiFi6 处理。
+WRT_DEVICE="${WRT_DEVICE:-${WRT_CONFIG%%-*}}"
+if [ "$WRT_DEVICE" = "H5000M" ]; then
+	WIFI_SSID="${WIFI_SSID_WIFI7:-$WIFI_SSID}"
+	WIFI_PASSWORD="${WIFI_PASSWORD_WIFI7:-$WIFI_PASSWORD}"
+	WIFI_ENCRYPTION="${WIFI_ENCRYPTION_WIFI7:-$WIFI_ENCRYPTION}"
+	WIFI_COUNTRY="${WIFI_COUNTRY_WIFI7:-$WIFI_COUNTRY}"
+	WIFI_2G_WIDTH="${WIFI_2G_WIDTH_WIFI7:-$WIFI_2G_WIDTH}"
+	WIFI_5G_WIDTH="${WIFI_5G_WIDTH_WIFI7:-$WIFI_5G_WIDTH}"
+fi
+
 # 环境变量（CI 输入）优先；未显式提供时取配置文件默认值
 WRT_IP="${WRT_IP:-$LAN_IP}"
 WRT_PW="${WRT_PW:-$LAN_PASSWORD}"
@@ -25,8 +39,14 @@ WIFI_2G_WIDTH="${WIFI_2G_WIDTH:-40}"
 WIFI_5G_WIDTH="${WIFI_5G_WIDTH:-160}"
 
 # 频宽数值 -> htmode 字符串（旧式 set-wireless.sh 分支使用）
-WIFI_2G_HTMODE="HT${WIFI_2G_WIDTH}"
-WIFI_5G_HTMODE="VHT${WIFI_5G_WIDTH}"
+# 世代前缀：WiFi6（802.11ax）5G 用 HE、2.4G 用 HT；WiFi7（802.11be）用 EHT
+if [ "$WRT_DEVICE" = "H5000M" ]; then
+	WIFI_2G_HTMODE="HE${WIFI_2G_WIDTH}"
+	WIFI_5G_HTMODE="EHT${WIFI_5G_WIDTH}"
+else
+	WIFI_2G_HTMODE="HT${WIFI_2G_WIDTH}"
+	WIFI_5G_HTMODE="HE${WIFI_5G_WIDTH}"
+fi
 
 # 把解析后的最终值回写 GITHUB_ENV：后续步骤（如 Release 说明）展示实际生效值
 if [ -n "${GITHUB_ENV:-}" ]; then
@@ -71,12 +91,11 @@ elif [ -f "$WIFI_UC" ]; then
 	#修改WIFI密码
 	sed -i "s/key='.*'/key='$WRT_WORD'/g" "$WIFI_UC"
 	#修改加密方式（默认 WPA-PSK/WPA2-PSK Mixed Mode，可经 Config/Defaults.txt 覆盖）
-	sed -i "s/encryption = 'none'/encryption = '$WIFI_ENCRYPTION'/g" "$WIFI_UC"
+	sed -i "s/encryption='.*'/encryption='$WIFI_ENCRYPTION'/g" "$WIFI_UC"
 	#设置国家码（默认 CN，可经 Config/Defaults.txt 覆盖）
-	sed -i "s/country = '00'/country = '$WIFI_COUNTRY'/g" "$WIFI_UC"
-	#在 else 分支添加国家码（默认 CN）
-	sed -i "s/} else {/} else {\\n\\t\\tcountry = '$WIFI_COUNTRY';/" "$WIFI_UC"
-	#修改2.4G默认频宽、5G默认频宽（默认 40/160MHz，可经 Config/Defaults.txt 覆盖）
+	sed -i "s/country='.*'/country='$WIFI_COUNTRY'/g" "$WIFI_UC"
+	#修改2.4G默认频宽、5G默认频宽（默认 40/160MHz，可经 Config/Defaults.txt 覆盖；
+	#WiFi7 设备上限放宽到 320MHz，硬件不支持时由驱动自动回落）
 	sed -i "s/width = 20;/width = $WIFI_2G_WIDTH;/g" "$WIFI_UC"
 	sed -i "s/width > 80)/width > $WIFI_5G_WIDTH)/g" "$WIFI_UC"
 	sed -i "s/width = 80;/width = $WIFI_5G_WIDTH;/g" "$WIFI_UC"

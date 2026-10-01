@@ -1,4 +1,39 @@
 # 更新日志
+## [2026-10-01] 修复 Config/Defaults.txt 无线默认配置未区分 WiFi6 / WiFi7
+
+### 背景
+
+`Config/Defaults.txt` 是全系固件「后台地址 / 后台密码 / 主机名 / Wi-Fi 及频宽国家码」
+等默认配置的唯一来源。此前无线部分只有一套 `WIFI_*` 默认值，未区分设备 WiFi 世代：
+AP3000M 为 WiFi6（802.11ax，MT7981B），H5000M 为 WiFi7（802.11be），两者能力上限不同
+（5G 频宽 WiFi6 上限 160MHz，WiFi7 上限 320MHz），但固件里写入的是同一组频宽。
+
+### 根因
+
+`Config/Defaults.txt` 无线节为全局单组变量（`WIFI_SSID` / `WIFI_PASSWORD` /
+`WIFI_ENCRYPTION` / `WIFI_COUNTRY` / `WIFI_2G_WIDTH` / `WIFI_5G_WIDTH`），
+`Scripts/Settings.sh` 直接 source 后统一写入固件，无法按机型世代差异化。
+
+另发现 `Scripts/Settings.sh` 的 mac80211.uc 分支中，加密方式与国家码的 sed 替换模式
+（`encryption = 'none'` / `country = '00'` / `} else {`）与上游 owrt 分支
+`package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc` 实际内容
+（`encryption='${defaults?...}'` / `country='${country || 'CN'}'`）不匹配，
+导致 `WIFI_ENCRYPTION` / `WIFI_COUNTRY` 实际从未写入固件（恒为上游默认 psk2+ccmp / CN）。
+
+### 修复
+
+- `Config/Defaults.txt`：无线部分拆分为两节——
+  - WiFi6 默认（无后缀，AP3000M 等 802.11ax）：5G `160MHz`；
+  - WiFi7 默认（`_WIFI7` 后缀，H5000M 等 802.11be）：5G 上限 `320MHz`，
+    硬件 / 法规不支持时由驱动自动回落至实际上限。
+- `Scripts/Settings.sh`：在 source 配置后、`WRT_*` 赋值前，按设备世代选择默认值
+  （`WRT_DEVICE=H5000M` → WiFi7 组，其余 → WiFi6 组），优先级保持
+  `WRT_*` 环境变量 > 世代默认值 > 内置兜底；htmode 前缀同步按世代生成
+  （WiFi6 5G → HE，WiFi7 → EHT）。
+- 顺带修正 mac80211.uc 分支的加密 / 国家码替换模式，使其与上游实际内容匹配，
+  `WIFI_ENCRYPTION` / `WIFI_COUNTRY` 从「不生效」恢复为「可经配置文件覆盖」。
+- `README.md`：默认参数表按 WiFi6 / WiFi7 分列频宽默认值。
+
 ## [2026-10-01] 修复 taygedo 编译失败：Release 版本漂移导致预编译资产 404
 
 ### 背景
