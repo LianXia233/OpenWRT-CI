@@ -102,7 +102,21 @@ if [ -f "$TAYGEDO_MK" ]; then
 		echo "::error::${PKG2}/Makefile Build/Compile 仍用 TARGET_STRIP：可能把目标二进制当宿主命令执行，请复核"
 		exit 1
 	fi
-	echo "==> ${PKG2}/Makefile 自检通过：上游 v0.5.1 已原生修复（ARCH + curl + chmod），无需补丁"
+	# 4) 解析期架构 $(error)：若 arch 分支写成 `else $(error ...)`，OpenWrt 在
+	#    make defconfig 生成 tmp/.config-package.in 的元数据扫描阶段会 include
+	#    本 Makefile，而此刻 $(ARCH) 尚未从 target 解析出来（为空）→ 触发解析期
+	#    make 语法错误 → 该包被 packageinfo 扫描丢弃 → CONFIG_PACKAGE_
+	#    luci-app-taygedo 变成未知符号并被 defconfig 清除 → .config 里根本不出现
+	#    本包，最终表现为「包未选中」且很难定位（本配置历史编译失败的直接根因）。
+	#    上游 v0.5.1 已改为「只做正向架构映射 + Build/Prepare 构建期 fail-fast」，
+	#    解析期绝不出错；此处防御性自检：一旦上游回归（重新出现解析期 $(error)）就
+	#    立即显式报错，而不是让下游「未选中」告警误导排查方向。
+	#    用「行首去掉空白后第一个非空白字符不是 #」来排除注释里的 $(error) 字样。
+	if grep -E '^[[:space:]]*[^#].*\$\(error' "$TAYGEDO_MK"; then
+		echo "::error::${PKG2}/Makefile 含解析期 \$（error）分支：会导致元数据扫描丢弃本包、.config 未选中。上游需改为「仅正向架构映射 + Build/Prepare 构建期 fail-fast」"
+		exit 1
+	fi
+	echo "==> ${PKG2}/Makefile 自检通过：上游 v0.5.1 已原生修复（ARCH + curl + chmod + 解析期无 $(error)），无需补丁"
 else
 	echo "::error::${TAYGEDO_MK} 不存在：期望的 taygedo Makefile 未就位"
 	exit 1

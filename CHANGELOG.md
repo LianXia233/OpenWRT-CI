@@ -1,4 +1,48 @@
 # 更新日志
+## [2026-10-01] 加固 taygedo 上游 Makefile 自检：捕获解析期 $(error) 导致的「包未选中」
+
+### 背景
+
+自用配置（H5000M-WIFI-YES-NETMONITOR）编译失败，`make defconfig` 后校验步骤报：
+
+```
+.config 未选中 luci-app-taygedo：包是否在 make defconfig 之前就位？
+```
+
+`make defconfig` 本身成功（`configuration written to .config`），日志中的
+`tmp/.config-package.in:error: recursive dependency detected! (PACKAGE_mihomo-alpha
+/ PACKAGE_mihomo-meta)` 只是已存在的 Kconfig 告警，并非根因——其它机型配置同样
+触发该告警却能正常编译。
+
+### 根因
+
+上游 `LianXia233/taygedo-CI@main` 在 commit 7c4bf7e（2026-10-01 03:22:41 推送）
+之前的 Makefile 里，架构分支写成了解析期 `else $(error ...)`。而 OpenWrt 在
+`make defconfig` 生成 `tmp/.config-package.in` 的元数据扫描阶段会 include 该
+Makefile，此刻 `$(ARCH)` 尚未解析出来（为空）→ 触发解析期 make 语法错误 →
+`luci-app-taygedo` 被 packageinfo 扫描丢弃 → `CONFIG_PACKAGE_luci-app-taygedo`
+变成未知符号并被 defconfig 清除 → `.config` 里根本不出现本包，表现为「未选中」。
+
+本次失败的 run（36808807422，03:11:53 执行）晚于本地调试但早于上游修复推送，因此
+clone 到的是仍含解析期 `$(error)` 的旧版；上游 7c4bf7e 已将 fail-fast 移到
+`Build/Prepare` 构建期、解析期只做正向架构映射，故当前重新拉取即可选中。
+
+### 修复
+
+- `Scripts/Packages-NetMonitor.sh` 的 taygedo Makefile 自检新增第 4 项检查：
+  若存在「行首（去空白后）第一个非空白字符不是 `#`」的解析期 `$(error)` 分支即报错
+  终止。用该写法排除注释里的 `$(error)` 字样后精准命中代码分支，避免上游一旦回归
+  （重新出现解析期 `$(error)`）时被「未选中」告警误导排查方向。
+- 自检通过提示同步补充「解析期无 $(error)」说明。
+
+### 验证
+
+- `bash -n Scripts/Packages-NetMonitor.sh` 通过。
+- 正向：对当前已修复的上游 `/tmp/tg2/openwrt/luci-app-taygedo/Makefile` 运行新正则，
+  无匹配（正确放行）。
+- 反向：对构造的旧版坏 Makefile（含 `else $(error unsupported)`）运行新正则，命中
+  `$(error`（正确拦截）。
+
 ## [2026-09-30] 修复 Packages.sh 在 set -u 下因 $4 未绑定导致的「导入自定义插件」编译失败
 
 ### 背景
