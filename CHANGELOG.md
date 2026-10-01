@@ -1,4 +1,34 @@
 # 更新日志
+## [2026-09-30] 修复 Packages.sh 在 set -u 下因 $4 未绑定导致的「导入自定义插件」编译失败
+
+### 背景
+
+2026-10-01 定时编译（X86 / H5000M / AP3000M / FM350 / NetWiz HT 全矩阵）在流水线的
+「导入自定义插件」步骤全部失败，日志报错：
+
+```
+Scripts/Packages.sh: line 15: $4: unbound variable
+```
+
+`UPDATE_PACKAGE()` 开头的 `set -euo pipefail` 严格模式下，第 4 个位置参数 `$4` 被
+裸引用而未设默认值。而大量调用只传前 3 个参数（包名 / 项目地址 / 分支），例如
+`UPDATE_PACKAGE "argon" "sbwml/luci-theme-argon" "openwrt-25.12"`，脚本第一个无第 4
+参数的调用即触发 `$4: unbound variable` 并整体终止，后续全部步骤被 skipped。
+
+### 修复
+
+- `Scripts/Packages.sh`：`local PKG_SPECIAL=$4` → `local PKG_SPECIAL=${4:-}`，
+  与相邻的 `${5:-}`（第 5 参数）保持一致的默认值保护。`$4`（pkg/name/all 折叠方式）
+  与第 5 参数一样本就可选，缺省时为空字符串，落到函数内 `[[ "$PKG_SPECIAL" == ... ]]`
+  分支时不匹配即跳过，行为不变。
+
+### 验证
+
+- `bash -n Scripts/Packages.sh` 通过
+- 本地用 `set -euo pipefail` 脚本模拟「无第 4 参数」调用，不再报 unbound，正常输出
+- 已确认 `$2` / `$3`（PKG_REPO / PKG_BRANCH）为全部调用必传参数，无需改动；唯独
+  可选的 `$4` 缺失保护
+
 ## [2026-09-30] 局域网 / 无线默认配置收敛为显式配置文件 Config/Defaults.txt
 
 ### 背景
