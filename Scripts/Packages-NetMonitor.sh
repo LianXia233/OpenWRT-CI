@@ -122,6 +122,58 @@ else
 	exit 1
 fi
 
+# ===== 上游 taygedo Release 版本对齐（版本漂移防护）=====
+# 背景：上游 Develop 常先 bump PKG_VERSION 再真正 push 对应 tag / 发布 Release
+# 资产，存在「代码版本领先于实际 Release」的时间窗。此时 Build/Prepare 里
+# `curl -fsSL .../download/v<PKG_VERSION>/taygedo-rs-<triple>.tar.gz` 会 404，
+# 且报错发生在深层编译期、信息晦涩（本次自用配置编译失败的直接根因）：
+#   2026-10-01 编译日志：make[3]: [Makefile:150: .../luci-app-taygedo-0.5.1/
+#   .prepared_...] Error 22（curl 22 = HTTP 404）
+# 复现排查：上游 Makefile PKG_VERSION=0.5.1，但 taygedo-CI 实际最新 Release
+# 仅为 v0.5.0（且该 Release 才含 aarch64 / x86_64 两套 musl 资产）。
+#
+# 处理策略：取包后就地探测「声明版本 tag 的资产是否真实可达」——
+#   - 可达：保持不动，继续。
+#   - 不可达：沿 GitHub /releases/latest 重定向解析出最新已发布 tag，
+#     就地改写 Makefile 的 PKG_VERSION，并把「深层编译期 404」提前成
+#     「取包期显式定位到可用版本」，输出可见日志，避免晦涩失败。
+# 该自检只动 PKG_VERSION 一行（不影响上节已校验的架构/下载/编译逻辑）。
+TG_REPO=$(sed -n 's/^[[:space:]]*TAYGEDO_REPO:=[[:space:]]*\([^[:space:]]*\).*/\1/p' "$TAYGEDO_MK" | head -n1)
+[ -z "$TG_REPO" ] && TG_REPO="https://github.com/LianXia233/taygedo-CI"
+CUR_VER=$(sed -n 's/^[[:space:]]*PKG_VERSION:=[[:space:]]*\([0-9.]*\).*/\1/p' "$TAYGEDO_MK" | head -n1)
+# 本脚本固定服务于 H5000M（aarch64 目标），探测 aarch64 资产即可覆盖实际构建链路；
+# 若上游后续扩展为多架构同取，可在此追加更多 triple 探测。
+TG_ASSET_URL="${TG_REPO}/releases/download/v${CUR_VER}/taygedo-rs-aarch64-unknown-linux-musl.tar.gz"
+if [ -n "$CUR_VER" ] && curl -fsSIL -o /dev/null --max-time 20 "$TG_ASSET_URL" >/dev/null 2>&1; then
+	echo "==> ${PKG2} 版本对齐自检通过：v${CUR_VER} 的 aarch64 资产可达，保持 PKG_VERSION=${CUR_VER}"
+else
+	echo "==> ${PKG2}/Makefile 声明 PKG_VERSION=${CUR_VER}，但 Release v${CUR_VER} 的 aarch64 资产不可达"
+	# 沿 /releases/latest 的 302 重定向拿到最新 tag（如 v0.5.0）
+	LATEST_EP=$(curl -fsSL -o /dev/null --max-time 20 -w '%{url_effective}' "${TG_REPO}/releases/latest" 2>/dev/null || true)
+	LATEST_TAG=$(basename "$LATEST_EP" 2>/dev/null || true)
+	case "$LATEST_TAG" in
+		v[0-9]*)
+			LATEST_VER=${LATEST_TAG#v}
+			LATEST_URL="${TG_REPO}/releases/download/${LATEST_TAG}/taygedo-rs-aarch64-unknown-linux-musl.tar.gz"
+			if [ -n "$CUR_VER" ] && [ "$LATEST_VER" = "$CUR_VER" ]; then
+				echo "::error::${PKG2}/Makefile 声明的 v${CUR_VER} 资产不可达，且最新 v${LATEST_VER} 与声明一致，无法自动修复，请人工核对上游 Release"
+				exit 1
+			fi
+			if [ -n "$LATEST_VER" ] && curl -fsSIL -o /dev/null --max-time 20 "$LATEST_URL" >/dev/null 2>&1; then
+				sed -i "s/^\([[:space:]]*PKG_VERSION:=[[:space:]]*\)[0-9.]*/\1${LATEST_VER}/" "$TAYGEDO_MK"
+				echo "==> 已将 ${PKG2}/Makefile PKG_VERSION 对齐到最新已发布 v${LATEST_VER}（aarch64 资产可达）"
+			else
+				echo "::error::${PKG2} 最新 Release ${LATEST_TAG} 的 aarch64 资产仍不可达，无法自动修复"
+				exit 1
+			fi
+			;;
+		*)
+			echo "::error::${PKG2} 无法解析 /releases/latest 的最新 tag（got '${LATEST_TAG}'），请人工核对上游 Release 版本命名"
+			exit 1
+			;;
+	esac
+fi
+
 # ===== 行尾归一化：CRLF → LF（本脚本的核心必要步骤）=====
 #
 # 两仓库的 .gitattributes 均为 `* text=auto eol=lf`（强制 LF），正常 clone
