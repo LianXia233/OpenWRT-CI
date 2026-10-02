@@ -807,61 +807,94 @@ jobs:
             make clean -j$(nproc)
           fi
 
+      # 发布固件到 Release。
+      #   softprops/action-gh-release 在并发上传多文件时偶发 GitHub 服务端
+      #   断连（`other side closed`），导致「编译成功但发布标红」的假失败。
+      #   改用原生 gh CLI：多个 job 并行调用时对同一 Tag 天然幂等
+      #   （已存在则 create 报错 + 复用；产物 upload --clobber 追加/覆盖既有文件），
+      #   并单文件串行上传 + 失败重试，杜绝单文件断连拖垮整个步骤。
+      # Tag 按产品/变体分类归组：<组名>-<YY.MM.DD>。同组同一天的多个机型 job
+      # 共享同一 Tag，产物追加进同一个 Release，Releases 页面即按
+      # NetWiz / MT5700 / MT5700M / FM350 / 自用 / BASE 天然归类。
+      # body 为结构化 Markdown：组别速查、文件名解读、默认参数、构建信息。
+      # 注意：多机型产物追加进同一 Release 时，后完成 job 会用本 job 的 body
+      # 覆盖既有说明，因此「本批构建信息」一节必须标注「为最后完成机型的数据」，
+      # 避免读者误以为是全组唯一值。插件清单用折叠块（details）呈现。
       - name: 发布固件到 Release
         if: env.WRT_TEST != 'true'
-        uses: softprops/action-gh-release@v3
-        with:
-          # Tag 按产品/变体分类归组：<组名>-<YY.MM.DD>。同组同一天的多个机型 job
-          # 共享同一 Tag，产物追加进同一个 Release，Releases 页面即按
-          # NetWiz / MT5700 / MT5700M / FM350 / 自用 / BASE 天然归类。
-          tag_name: ${{env.WRT_RELEASE_TAG}}
-          files: ./wrt/upload/*.*
-          # body 为结构化 Markdown：组别速查、文件名解读、默认参数、构建信息。
-          # 注意：多机型产物追加进同一 Release 时，action-gh-release 会用本 job
-          # 的 body 覆盖既有说明，因此「本批构建信息」一节必须标注
-          # 「为最后完成机型的数据」，避免读者误以为是全组唯一值。
-          # 插件清单用折叠块（details）呈现，清单内容来自 WRT_LIST_MD。
-          body: |
-            > 同一天内全部机型的 **${{env.WRT_TAG_GROUP}}** 分类固件汇聚于此。本仓库 Releases 按「产品/配置本身」分类，认准组名下载即可。
+        env:
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+        run: |
+          set -euo pipefail
+          BODY="${{env.WRT_TAG_GROUP}}_body.md"
+          cat > "$BODY" <<'EOF'
+          > 同一天内全部机型的 **${{env.WRT_TAG_GROUP}}** 分类固件汇聚于此。本仓库 Releases 按「产品/配置本身」分类，认准组名下载即可。
 
-            ## 组别速查
+          ## 组别速查
 
-            | 组名 | 适用场景 |
-            | :--- | :--- |
-            | `NetWiz` | NetWiz 网络配置向导（独立产品：`NetWiz-MT5700` / `NetWiz-MT5700M` / `NetWiz-FM350` 全部归此组，即使含 MT / FM350 插件也不进入对应插件分类） |
-            | `MT5700` | 普通 MT5700 模组方案（方案 B，单包内置 Rust 后端，仅非 NetWiz 产品） |
-            | `MT5700M` | 普通 MT5700M 模组方案（方案 A，含短信与 AT 守护，仅非 NetWiz 产品） |
-            | `FM350` | 普通 Fibocom FM350-GL 模组管理（RNDIS 数据通道，仅非 NetWiz 产品） |
-            | `自用` | 个人自用配置（H5000M + NetMonitor 网络监控 + Taygedo 签到，MT5700 方案，不进入公开 MT5700 分类） |
-            | `BASE` | 无变体基础构建（手动触发） |
+          | 组名 | 适用场景 |
+          | :--- | :--- |
+          | `NetWiz` | NetWiz 网络配置向导（独立产品：`NetWiz-MT5700` / `NetWiz-MT5700M` / `NetWiz-FM350` 全部归此组，即使含 MT / FM350 插件也不进入对应插件分类） |
+          | `MT5700` | 普通 MT5700 模组方案（方案 B，单包内置 Rust 后端，仅非 NetWiz 产品） |
+          | `MT5700M` | 普通 MT5700M 模组方案（方案 A，含短信与 AT 守护，仅非 NetWiz 产品） |
+          | `FM350` | 普通 Fibocom FM350-GL 模组管理（RNDIS 数据通道，仅非 NetWiz 产品） |
+          | `自用` | 个人自用配置（H5000M + NetMonitor 网络监控 + Taygedo 签到，MT5700 方案，不进入公开 MT5700 分类） |
+          | `BASE` | 无变体基础构建（手动触发） |
 
-            ## 文件名解读
+          ## 文件名解读
 
-            ```
-            <设备>-<产品/方案>-<固件类型>.<扩展名>
-            ```
+          ```
+          <设备>-<产品/方案>-<固件类型>.<扩展名>
+          ```
 
-            设备：`H5000M` / `AP3000M` / `X86`；产品/方案：`NetWiz-MT5700` 等（NetWiz 家族）或 `MT5700` / `MT5700M` / `FM350`（普通配置）；固件类型：`sysupgrade` / `factory` / `initramfs` / `recovery` / `efi` / `combined` / `rootfs`。全系带开源硬件加速。
+          设备：`H5000M` / `AP3000M` / `X86`；产品/方案：`NetWiz-MT5700` 等（NetWiz 家族）或 `MT5700` / `MT5700M` / `FM350`（普通配置）；固件类型：`sysupgrade` / `factory` / `initramfs` / `recovery` / `efi` / `combined` / `rootfs`。全系带开源硬件加速。
 
-            ## 默认出厂参数
+          ## 默认出厂参数
 
-            | 项目 | 值 |
-            | :--- | :--- |
-            | 后台地址 | `${{env.WRT_IP}}` |
-            | 后台密码 | `${{env.WRT_PW}}` |
-            | Wi-Fi | `${{env.WRT_SSID}}` / `${{env.WRT_WORD}}`（WPA 混合加密） |
+          | 项目 | 值 |
+          | :--- | :--- |
+          | 后台地址 | `${{env.WRT_IP}}` |
+          | 后台密码 | `${{env.WRT_PW}}` |
+          | Wi-Fi | `${{env.WRT_SSID}}` / `${{env.WRT_WORD}}`（WPA 混合加密） |
 
-            ## 本批构建信息
+          ## 本批构建信息
 
-            > 多机型产物追加进同一 Release 时，本节为最后完成机型的数据，仅作参考。
+          > 多机型产物追加进同一 Release 时，本节为最后完成机型的数据，仅作参考。
 
-            - 源码：`${{env.WRT_REPO}}`（`${{env.WRT_BRANCH}}` @ `${{env.WRT_HASH}}`）
-            - 配置：`${{env.WRT_CONFIG}}` · MT 模式：`${{env.WRT_MT}}` · 归组：`${{env.WRT_TAG_GROUP}}`
-            - 平台：`${{env.WRT_TARGET}}` · 内核：`${{env.WRT_KVER}}`
+          - 源码：`${{env.WRT_REPO}}`（`${{env.WRT_BRANCH}}` @ `${{env.WRT_HASH}}`）
+          - 配置：`${{env.WRT_CONFIG}}` · MT 模式：`${{env.WRT_MT}}` · 归组：`${{env.WRT_TAG_GROUP}}`
+          - 平台：`${{env.WRT_TARGET}}` · 内核：`${{env.WRT_KVER}}`
 
-            <details>
-            <summary>插件清单（点开展开）</summary>
+          <details>
+          <summary>插件清单（点开展开）</summary>
 
-            ${{env.WRT_LIST_MD}}
+          ${{env.WRT_LIST_MD}}
 
-            </details>
+          </details>
+          EOF
+
+          # Release/Tag 已存在（同组同日多 job 追加）→ 复用；不存在 → 创建
+          if gh release view "$WRT_RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release 已存在（$WRT_RELEASE_TAG），追加产物"
+          else
+            gh release create "$WRT_RELEASE_TAG" --notes-file "$BODY"
+          fi
+
+          # 单文件串行上传 + 失败重试（最多 5 次，间隔 5s），规避服务端断连
+          for f in ./wrt/upload/*.*; do
+            [ -f "$f" ] || continue
+            attempt=0
+            until gh release upload --clobber "$WRT_RELEASE_TAG" "$f"; do
+              attempt=$((attempt + 1))
+              if [ "$attempt" -ge 5 ]; then
+                echo "::error::上传失败（已重试 5 次）：$f"
+                exit 1
+              fi
+              echo "上传 $f 失败（第 ${attempt} 次，5s 后重试）..."
+              sleep 5
+            done
+          done
+
+          # body 以最后完成机型（本 job）为准，与旧 action 行为一致
+          gh release edit "$WRT_RELEASE_TAG" --notes-file "$BODY"
+          rm -f "$BODY"

@@ -1,4 +1,29 @@
 # 更新日志
+## [2026-10-02] 修复 Release 发布偶发失败：上传断连导致「编译成功但发布标红」假失败
+
+### 背景
+
+`H5000M 定时编译（MT 双配置）`（run 36946756886）编译与打包全部成功，但
+「发布固件到 Release」步骤报 `##[error]other side closed`，整体结论为 failure。
+排查后确认产物实际完整：同批次 AP3000M job 稍后把同一文件成功追加到同一个
+Release（`MT5700M-26.10.02`），固件并未丢失，只是该 job 被标红。
+
+### 根因
+
+发布步骤使用 `softprops/action-gh-release@v3`。该 action 并发上传多个文件时，
+GitHub uploads 服务端偶发直接关闭连接（`other side closed`），单个文件断连即
+导致整个步骤失败，属于已知偶发网络问题。
+
+### 修复
+
+- `.github/workflows/WRT-CORE.yml`「发布固件到 Release」改用原生 `gh release` CLI：
+  - `gh release view` 检测 Tag 已存在则复用并追加产物（多 job 同组同日共享
+    Release 的幂等语义不变），否则 `gh release create` 新建；
+  - 产物改为**单文件串行上传**（`gh release upload --clobber`），失败自动重试
+    最多 5 次、间隔 5s，杜绝单文件断连拖垮整个步骤；
+  - 上传完成后 `gh release edit` 覆盖 body（以最后完成机型为准），与旧 action
+    行为保持一致。
+
 ## [2026-10-01] 修复 Config/Defaults.txt 无线默认配置未区分 WiFi6 / WiFi7
 
 ### 背景
