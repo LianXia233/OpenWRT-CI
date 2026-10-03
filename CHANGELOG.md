@@ -1,4 +1,34 @@
 # 更新日志
+## [2026-10-03] 无线默认配置补齐 WiFi 版本：H5000M 2.4G 由 AX 修正为 BE，双频同步世代
+
+### 背景
+
+上一轮已按设备 WiFi 世代拆分 `Config/Defaults.txt`（WiFi6 无后缀 / WiFi7 `_WIFI7` 后缀），
+但 WiFi **版本**并未显式配置，仍由 `Scripts/Settings.sh` 按设备硬编码 htmode 前缀。
+其中 H5000M（WiFi7）的 2.4G 沿用了 WiFi6 世代前缀 `HE`（802.11ax / AX），
+与 5G 的 `EHT`（802.11be / BE）不同代，2.4G 实际以 WiFi6 模式工作。
+
+### 根因
+
+`Scripts/Settings.sh` 的 htmode 生成分支：
+`WRT_DEVICE=H5000M` 时 2.4G 固定 `HE${WIFI_2G_WIDTH}`（WiFi6），
+仅 5G 使用 `EHT`（WiFi7）；而 `Config/Defaults.txt` 只管理频宽数值，
+WiFi 版本（AX / BE）无法按世代配置，也未与 2.4G / 5G 双频同步。
+
+### 修复
+
+- `Config/Defaults.txt`：无线两节各新增显式 WiFi 版本变量，2.4G / 5G 同步同一世代：
+  - WiFi6（AP3000M）：`WIFI_2G_MODE=AX` / `WIFI_5G_MODE=AX`（802.11ax）；
+  - WiFi7（H5000M）：`WIFI_2G_MODE_WIFI7=BE` / `WIFI_5G_MODE_WIFI7=BE`（802.11be），
+    即 2.4G 与 5G 均按 BE 工作，修正此前 2.4G 为 AX 的默认配置；
+  - 频宽保持 AP3000M 与 H5000M 均为 2.4G `40MHz`、5G `160MHz`。
+- `Scripts/Settings.sh`：
+  - H5000M 世代选择块同步覆盖 `WIFI_2G_MODE` / `WIFI_5G_MODE`，并增加
+    `AX` 兜底（配置文件缺失 / 旧版本地手动构建不报错）；
+  - htmode 生成改为按模式 + 频宽推导：`AX → HE`、`BE → EHT`，2.4G / 5G 双频
+    严格同步 WiFi 版本（AP3000M 双频 `HE40/HE160`，H5000M 双频 `EHT40/EHT160`）。
+- `README.md`：默认参数表按 WiFi6 / WiFi7 分列「无线（AX / BE + 频宽）」默认值。
+
 ## [2026-10-02] 修复 Release 发布偶发失败：上传断连导致「编译成功但发布标红」假失败
 
 ### 背景
