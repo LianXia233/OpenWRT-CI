@@ -134,8 +134,8 @@
 | **后台密码** | 无 | 首次开机无密码 |
 | **主机名** | `OWRT` | 系统网络标识 |
 | **Wi-Fi** | SSID `OWRT` / 密码 `12345678` | 2.4G 与 5G 共用，WPA 混合加密 |
-| **频宽（WiFi6 · AP3000M）** | 2.4G `40MHz` · 5G `160MHz` | 802.11ax 上限，跑满无线吞吐 |
-| **频宽（WiFi7 · H5000M）** | 2.4G `40MHz` · 5G `160MHz` | 双频设备 5G 上限同为 160MHz（320MHz 仅限 6GHz 频段） |
+| **无线（WiFi6 · AP3000M）** | 2.4G `AX 40MHz` · 5G `AX 160MHz` | 2.4G/5G 同步 802.11ax（WiFi6），跑满无线吞吐 |
+| **无线（WiFi7 · H5000M）** | 2.4G `BE 40MHz` · 5G `BE 160MHz` | 2.4G/5G 同步 802.11be（WiFi7），5G 上限同为 160MHz（320MHz 仅限 6GHz 频段） |
 | **国家码 / 时区** | `CN` / `Asia/Shanghai` | 避免时钟同步异常 |
 
 *以上局域网 / 无线默认值统一存放在 [`Config/Defaults.txt`](Config/Defaults.txt)，编译期由 `Scripts/Settings.sh` 读取并写入固件；修改该文件即可全局生效，无需改动工作流。工作流显式传入的 `WRT_*` 输入优先级更高，可用于按需覆盖。*
