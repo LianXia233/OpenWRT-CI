@@ -116,7 +116,7 @@ if [ -f "$TAYGEDO_MK" ]; then
 		echo "::error::${PKG2}/Makefile 含解析期 \$（error）分支：会导致元数据扫描丢弃本包、.config 未选中。上游需改为「仅正向架构映射 + Build/Prepare 构建期 fail-fast」"
 		exit 1
 	fi
-	echo "==> ${PKG2}/Makefile 自检通过：上游 v0.5.1 已原生修复（ARCH + curl + chmod + 解析期无 $(error)），无需补丁"
+	echo "==> ${PKG2}/Makefile 自检通过：上游 v0.5.1 已原生修复（ARCH + curl + chmod + 解析期无 \$(error)），无需补丁"
 else
 	echo "::error::${TAYGEDO_MK} 不存在：期望的 taygedo Makefile 未就位"
 	exit 1
@@ -190,14 +190,30 @@ fi
 # 用 sed 一次性扫过全部文件：不含 CR 的文件是无副作用的空操作，
 # 因此不需要先逐个 grep 判断。
 mapfile -t PKG_FILES < <(find "./${PKG1}" "./${PKG2}" -type f)
-sed -i 's/\r$//' "${PKG_FILES[@]}"
+
+# 文本 / 二进制判定：含 NUL 字节的文件视为二进制（PNG / ZIP / 可执行文件等）。
+# 二进制文件的字节流天然含 0x0D（图片数据块、压缩头等），逐字节判 CR 必然误报
+# （曾因此把 tests/preview/*.png 与 *.zip 误判为「含 CR 未归一化」导致取包步骤
+# 失败），且 sed 行替换也不该作用于二进制（有损坏风险）。故只对文本文件做
+# 归一化与复核。判定只依赖 tr / wc（与下方 CR 复核同构，Git Bash / MSYS 下
+# 行为一致），不引入 file / grep -I 等对二进制语义各平台不一致的工具。
+TXT_FILES=()
+for F in "${PKG_FILES[@]}"; do
+	ORIG_LEN=$(wc -c < "$F")
+	BIN_FREE_LEN=$(tr -d '\0' < "$F" | wc -c)
+	[ "$ORIG_LEN" -eq "$BIN_FREE_LEN" ] && TXT_FILES+=("$F")
+done
+
+if [ "${#TXT_FILES[@]}" -gt 0 ]; then
+	sed -i 's/\r$//' "${TXT_FILES[@]}"
+fi
 
 # 转换后复核：逐文件按字节判定是否仍含 CR。
 # 不用 `grep -qU $'\r'`：该写法在 Git Bash / MSYS 下对 CR 的匹配语义不可靠，
 # 改用 POSIX 参数展开 `$(cat "$F" | tr -d '\r')` 前后长度比较，
 # 只依赖 tr 与 ${#var}，跨平台行为一致。
 CR_LEFT_FILES=()
-for F in "${PKG_FILES[@]}"; do
+for F in "${TXT_FILES[@]}"; do
 	ORIG_LEN=$(wc -c < "$F")
 	STRIPPED_LEN=$(tr -d '\r' < "$F" | wc -c)
 	if [ "$ORIG_LEN" != "$STRIPPED_LEN" ]; then
@@ -206,13 +222,13 @@ for F in "${PKG_FILES[@]}"; do
 done
 
 if [ "${#CR_LEFT_FILES[@]}" -ne 0 ]; then
-	echo "::error::${PKG1} / ${PKG2} 仍存在含 CR 的文件，行尾归一化未完成"
+	echo "::error::${PKG1} / ${PKG2} 仍存在含 CR 的文本文件，行尾归一化未完成"
 	for F in "${CR_LEFT_FILES[@]}"; do
 		echo "  含 CR: $F"
 	done
 	exit 1
 fi
-echo "==> 行尾复核通过：${#PKG_FILES[@]} 个文件均为 LF"
+echo "==> 行尾复核通过：${#TXT_FILES[@]} 个文本文件均为 LF（另跳过 $(( ${#PKG_FILES[@]} - ${#TXT_FILES[@]} )) 个二进制文件）"
 
 # 可执行位补齐：git clone 会保留上游 mode，但上游若曾以 Windows 提交或经过
 # archive 下载，x 位可能丢失，导致 procd 启动 init.d 时 Permission denied。

@@ -1,4 +1,38 @@
 # 更新日志
+## [2026-10-03] 修复 H5000M NETMONITOR 定时编译失败：CR 复核误报二进制文件
+
+### 背景
+
+`H5000M 自用定时编译（NetMonitor + Taygedo）`（run 37081208739）在
+「导入 luci-app-netmonitor / luci-app-taygedo」步骤失败，
+`Scripts/Packages-NetMonitor.sh` 报 `luci-app-netmonitor / luci-app-taygedo
+仍存在含 CR 的文件，行尾归一化未完成` 并 exit 1，整次编译在取包阶段即中断。
+
+### 根因
+
+`Scripts/Packages-NetMonitor.sh` 的行尾归一化复核把 clone 下来的**全部文件**
+当作文本检查：`find` 收集所有 `-type f` 后先 `sed -i 's/\r$//'` 再逐字节比对
+`wc -c` 与 `tr -d '\r' | wc -c` 的长度。但 PNG / ZIP 等二进制文件的字节流
+天然含 `0x0D`（图片数据块、压缩头等），`tr -d '\r'` 必然改变长度，于是被
+误判为「含 CR 未归一化」。本次报错的文件正是上游
+`tests/preview/screenshots/*.png` 与 `.trae-html-share-packages/.../index.html.zip`，
+与文本行尾无关，属误报。
+
+另外日志中持续出现 `line 119: error: command not found` 噪声：该行
+`echo "...解析期无 $(error)..."` 的 `$(error)` 未转义，被 bash 当作命令替换
+执行（幸而是 echo 参数内的命令替换，`set -e` 不因此退出，仅吞掉该词并刷一行
+报错，不影响结果）。
+
+### 修复
+
+- `Scripts/Packages-NetMonitor.sh`：
+  - 归一化与复核前先用「是否含 NUL 字节」（`wc -c` vs `tr -d '\0' | wc -c`）
+    过滤出文本文件：二进制文件既不跑 `sed`（避免行替换损坏二进制），也不参与
+    CR 复核（消除误报）；判定只依赖 `tr` / `wc`，与既有复核逻辑同构，
+    Git Bash / MSYS 下行为一致，不引入 `file` / `grep -I` 等二进制语义
+    各平台不一致的工具；
+  - 第 119 行 `$(error)` 转义为 `\$(error)`，消除 `command not found` 噪声。
+
 ## [2026-10-03] 无线默认配置补齐 WiFi 版本：H5000M 2.4G 由 AX 修正为 BE，双频同步世代
 
 ### 背景
