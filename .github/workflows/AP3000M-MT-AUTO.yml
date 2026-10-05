@@ -47,6 +47,9 @@ jobs:
       WRT_BRANCH: ${{ matrix.BRANCH }}
       WRT_SOURCE: ${{ matrix.SOURCE }}
 
+      # AP3000M 为 Arm（mediatek/filogic）目标，使用 GitHub 原生 Arm64 runner 编译
+      WRT_RUNNER: ubuntu-24.04-arm
+
       WRT_PACKAGE: ${{ inputs.PACKAGE }}
       WRT_TEST: 'false'
       MT_MODE: ${{ matrix.MT_MODE }}

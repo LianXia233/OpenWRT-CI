@@ -99,6 +99,9 @@ jobs:
       WRT_BRANCH: ${{ matrix.BRANCH }}
       WRT_SOURCE: ${{ matrix.SOURCE }}
 
+      # Arm 机型（H5000M / AP3000M）用 GitHub 原生 Arm64 runner，X86 保持 x86_64
+      WRT_RUNNER: ${{ (contains(matrix.CONFIG, 'H5000M') || contains(matrix.CONFIG, 'AP3000M')) && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+
       WRT_PACKAGE: ${{ inputs.PACKAGE }}
       WRT_TEST: ${{ inputs.TEST }}
       # MT 层由矩阵项的 MT 字段驱动（未写 MT 的项为空 → 不装 MT 插件）

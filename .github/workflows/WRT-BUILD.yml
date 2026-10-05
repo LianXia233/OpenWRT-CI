@@ -82,6 +82,8 @@ jobs:
       WRT_REPO: https://github.com/${{inputs.SOURCE}}.git
       WRT_BRANCH: ${{inputs.BRANCH}}
       WRT_SOURCE: ${{inputs.SOURCE}}
+      # Arm 机型（H5000M / AP3000M）用 GitHub 原生 Arm64 runner，X86 保持 x86_64
+      WRT_RUNNER: ${{ (contains(inputs.CONFIG, 'H5000M') || contains(inputs.CONFIG, 'AP3000M')) && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
       WRT_PACKAGE: ${{inputs.PACKAGE}}
       WRT_TEST: ${{inputs.TEST}}
       # NONE / 其他 → 空字符串（不安装任何 MT 插件）

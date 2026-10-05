@@ -62,6 +62,9 @@ jobs:
       WRT_BRANCH: ${{ matrix.BRANCH }}
       WRT_SOURCE: ${{ matrix.SOURCE }}
 
+      # H5000M 为 Arm（mediatek/filogic）目标，使用 GitHub 原生 Arm64 runner 编译
+      WRT_RUNNER: ubuntu-24.04-arm
+
       WRT_PACKAGE: ${{ inputs.PACKAGE }}
       WRT_TEST: ${{ inputs.TEST }}
       # MT 层固定 MT5700 方案（方案 B，单包内置 Rust 后端）

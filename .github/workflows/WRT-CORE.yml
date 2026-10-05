@@ -10,6 +10,13 @@ on:
       WRT_CONFIG:
         required: true
         type: string
+      # 运行机器（GitHub Actions 原生 runner，默认 x86_64 ubuntu-latest）。
+      # AP3000M / H5000M 等 Arm（mediatek/filogic）目标一律传 ubuntu-24.04-arm，
+      # 由 GitHub 原生 Arm64 机器编译；X86 目标保持 ubuntu-latest。
+      WRT_RUNNER:
+        required: false
+        type: string
+        default: "ubuntu-latest"
       WRT_THEME:
         required: true
         type: string
@@ -71,6 +78,7 @@ on:
 env:
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
   WRT_CONFIG: ${{inputs.WRT_CONFIG}}
+  WRT_RUNNER: ${{inputs.WRT_RUNNER}}
   WRT_THEME: ${{inputs.WRT_THEME}}
   WRT_NAME: ${{inputs.WRT_NAME}}
   WRT_SSID: ${{inputs.WRT_SSID}}
@@ -88,7 +96,7 @@ env:
 jobs:
   core:
     name: 编译核心 · ${{inputs.WRT_SOURCE}}
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.WRT_RUNNER }}
     # 略低于平台 6h 硬上限：被硬上限杀掉时 runner 直接终止，
     # 缓存的 post 保存步骤会被整段跳过，下次必然冷编译。
     timeout-minutes: 345
@@ -224,6 +232,9 @@ jobs:
       #     定向删除，本缓存才能真正生效。
       #   - key 绑定 WRT_TARGET 而非 WRT_CONFIG：H5000M 与 AP3000M 同为
       #     mediatek/filogic，可共用同一份工具链，避免每天白编译一次。
+      #   - key 额外绑定 runner.arch：staging_dir/tool* 里的宿主工具是
+      #     按 runner 架构编译的二进制（x86_64 上跑的不能拿到 Arm64 机器用），
+      #     混用会「缓存命中但工具不可执行」。X64 / ARM64 各存各的，互不干扰。
       #   - key 不再把 commit hash 放在唯一位置上，配合 restore-keys 做前缀回退，
       #     上游一有新提交也能命中上次的工具链。
       #   - 保存不再依赖 save-always（官方已标记弃用且行为不符合预期），改为下方
@@ -234,9 +245,9 @@ jobs:
         if: env.WRT_TEST != 'true'
         uses: actions/cache/restore@v6
         with:
-          key: wrt-tc-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
+          key: wrt-tc-${{runner.arch}}-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
           restore-keys: |
-            wrt-tc-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-
+            wrt-tc-${{runner.arch}}-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-
           path: |
             ./wrt/.ccache
             ./wrt/staging_dir/host*
@@ -708,7 +719,7 @@ jobs:
         if: always() && env.WRT_TEST != 'true' && steps.cache-tc-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
-          key: wrt-tc-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
+          key: wrt-tc-${{runner.arch}}-${{env.WRT_TARGET}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_HASH}}
           path: |
             ./wrt/.ccache
             ./wrt/staging_dir/host*

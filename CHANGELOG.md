@@ -1,4 +1,35 @@
 # 更新日志
+## [2026-10-05] AP3000M / H5000M 固件改用 GitHub 原生 Arm64 runner 编译
+
+### 背景
+
+AP3000M 与 H5000M 均为 Arm（mediatek/filogic）目标，此前一直在 x86_64
+的 `ubuntu-latest` runner 上交叉编译。GitHub 已提供原生 Arm64 runner
+（`ubuntu-24.04-arm`，4 vCPU / 16GB，公开仓库免费），直接在 Arm 真机上编译，
+无需在 x86_64 上构建整套 Arm 交叉工具链，编译链路更贴近真实运行环境。
+
+### 变更
+
+- `.github/workflows/WRT-CORE.yml`：
+  - 新增 `WRT_RUNNER` 输入（默认 `ubuntu-latest`），`runs-on` 由输入决定；
+  - 工具链 & ccache 缓存 key 加入 `runner.arch`：`staging_dir/tool*` 的宿主
+    工具是按 runner 架构编译的二进制，x86_64 与 Arm64 的缓存互不通用，
+    同 key 复用会「命中但工具不可执行」。X64 / ARM64 各存各的，互不干扰；
+  - dl 源码包缓存保持跨架构共享（源码 tarball 与架构无关，节省配额）。
+- `.github/workflows/AP3000M-MT-AUTO.yml` / `H5000M-MT-AUTO.yml` /
+  `H5000M-NETMONITOR-AUTO.yml`：全部传入 `WRT_RUNNER=ubuntu-24.04-arm`，
+  纯 Arm 机型矩阵整批改用原生 Arm64 机器。
+- `.github/workflows/FM350-AUTO.yml` / `NetWiz-AUTO.yml`（混合机型矩阵）：
+  按配置名推导 runner——`H5000M` / `AP3000M` 项走 `ubuntu-24.04-arm`，
+  `X86` 项保持 `ubuntu-latest`。
+- `.github/workflows/WRT-BUILD.yml`（手动编译）：按所选配置名自动推导，
+  与上述定时工作流一致。
+
+### 影响
+
+- 首次切换后 Arm64 工具链缓存冷启动一次，之后每天命中 ARM64 独立缓存；
+  已存在的 x86_64 工具链缓存不受影响，X86 构建路径行为不变。
+
 ## [2026-10-03] 修复 H5000M NETMONITOR 定时编译失败：CR 复核误报二进制文件
 
 ### 背景
