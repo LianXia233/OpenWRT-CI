@@ -1,4 +1,29 @@
 # 更新日志
+## [2026-10-07] 暂时禁用 MT5700M 变体编译：模组方案不稳定，暂停全部 MT5700M 入口
+
+### 背景
+
+MT5700M（方案 A：luci-app-mt5700m + sms-tool_q + ubus-at-daemon）近期
+编译 / 运行不稳定，为避免持续产出不可用固件，自 2026-10-07 起暂时禁用
+全部 MT5700M 变体的编译入口；MT5700（方案 B）不受影响，继续照常编译。
+
+### 改动
+
+- `.github/workflows/H5000M-MT-AUTO.yml` / `AP3000M-MT-AUTO.yml` / `X86-MT-AUTO.yml`：
+  定时编译矩阵移除 `MT5700M`，仅保留 `MT5700` 单配置；
+- `.github/workflows/NetWiz-AUTO.yml`：NetWiz 家族矩阵删除 3 个
+  `-NETWIZ-MT5700M` 组合 job（H5000M / AP3000M / X86），保留 MT5700 / FM350 组合；
+- `.github/workflows/WRT-BUILD.yml`：手动编译下拉移除 3 个
+  `-NETWIZ-MT5700M` 配置项与 `MT5700M` 模式，MT Mode 默认改为 `MT5700`，
+  表达式强制只认 `MT5700`（API 手动传 `MT5700M` 也按空处理）；
+- `.github/workflows/WRT-CORE.yml`：新增「检查 MT5700M 是否已暂时禁用」守卫
+  步骤，任何入口传入 `MT_MODE=MT5700M` 均直接报错终止，防止漏网调用；
+- `Config/MT5700M.txt` 配置层保留未动，恢复时无需重写配置。
+
+### 恢复方法
+
+将上述入口中的 MT5700M 配置项加回、移除 WRT-CORE.yml 守卫步骤即可恢复。
+
 ## [2026-10-03] 修复 H5000M NETMONITOR 定时编译失败：CR 复核误报二进制文件
 
 ### 背景
