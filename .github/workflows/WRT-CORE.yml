@@ -55,6 +55,7 @@ on:
       #   ""      —— 不安装任何 MT 插件（默认，保持普通 CI 行为）
       #   MT5700  —— 仅 luci-app-mt5700（方案 B）
       #   MT5700M —— luci-app-mt5700m + sms-tool_q + ubus-at-daemon（方案 A）
+      #   [禁用] MT5700M 自 2026-10-07 起暂时禁用（不稳定），守卫步骤会直接拦截。
       # 其他值在 ApplyMTMode / VerifyMTMode / Packages.sh 中报错并终止。
       MT_MODE:
         required: false
@@ -102,6 +103,12 @@ jobs:
           # 上游清理若跑在 fork PR 分支上，下游检出会被拒导致构建失败；
           # 此处显式授权以保留原有行为（本流水线只信任本仓库自身的工作流）。
           allow-unsafe-pr-checkout: true
+
+      - name: 检查 MT5700M 是否已暂时禁用
+        if: env.MT_MODE == 'MT5700M'
+        run: |
+          echo "::error::MT5700M 变体已暂时禁用（2026-10-07 起，原因：不稳定）。如需恢复，请移除本守卫步骤并恢复各入口的 MT5700M 配置项。"
+          exit 1
 
       - name: 初始化编译环境
         env:

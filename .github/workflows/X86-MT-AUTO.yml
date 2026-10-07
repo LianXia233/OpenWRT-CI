@@ -6,6 +6,7 @@
 #   MT5700  —— 仅 luci-app-mt5700
 #   MT5700M —— luci-app-mt5700m + sms-tool_q + ubus-at-daemon
 # 产物文件名与 Release Tag 均嵌入 MT 模式，可并存区分。
+# 注意：MT5700M 变体自 2026-10-07 起暂时禁用（不稳定），当前仅编译 MT5700。
 name: X86 定时编译（MT 双配置）
 
 on:
@@ -39,7 +40,8 @@ jobs:
         SOURCE: [immortalwrt/immortalwrt]
         BRANCH: [master]
         # 同时编译两种 MT 配置（严格互斥，由 Apply/VerifyMTMode 保证）
-        MT_MODE: [MT5700, MT5700M]
+        # MT5700M 变体不稳定，自 2026-10-07 起暂时禁用，当前仅编译 MT5700
+        MT_MODE: [MT5700]
 
     uses: ./.github/workflows/WRT-CORE.yml
     with:

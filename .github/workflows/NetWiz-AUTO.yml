@@ -7,7 +7,7 @@
 #   - 配置层改用 Config/<机型>-NETWIZ*.txt（母配置板级定义 + luci-app-netwiz 段）
 #   - 矩阵覆盖 NetWiz 家族三种组合（纯 NetWiz 已移除，仅保留组合变体），共 9 个 job：
 #       NetWiz + MT5700    MT_MODE=MT5700（MT 层由 ApplyMTMode.sh 叠加）
-#       NetWiz + MT5700M   MT_MODE=MT5700M
+#       NetWiz + MT5700M   MT_MODE=MT5700M（自 2026-10-07 起暂时禁用：不稳定）
 #       NetWiz + FM350     MT_MODE 留空
 #   - 归组：NetWiz 家族统一归组「NetWiz」——NetWiz 是独立产品分类，
 #     即使组合变体内部使用 MT / FM350 插件，也只属于 NetWiz，
@@ -65,19 +65,7 @@ jobs:
             SOURCE: immortalwrt/immortalwrt
             BRANCH: master
             MT: MT5700
-          # ---- NetWiz + MT5700M（MT 层由 MT_MODE 驱动，含 FOLD 折叠）----
-          - CONFIG: H5000M-WIFI-YES-NETWIZ-MT5700M
-            SOURCE: VIKINGYFY/immortalwrt
-            BRANCH: owrt
-            MT: MT5700M
-          - CONFIG: AP3000M-NETWIZ-MT5700M
-            SOURCE: VIKINGYFY/immortalwrt
-            BRANCH: owrt
-            MT: MT5700M
-          - CONFIG: X86-NETWIZ-MT5700M
-            SOURCE: immortalwrt/immortalwrt
-            BRANCH: master
-            MT: MT5700M
+          # ---- NetWiz + MT5700M（暂时禁用：不稳定，2026-10-07 起暂停）----
           # ---- NetWiz + FM350（MT_MODE 留空）----
           - CONFIG: H5000M-WIFI-YES-NETWIZ-FM350
             SOURCE: VIKINGYFY/immortalwrt

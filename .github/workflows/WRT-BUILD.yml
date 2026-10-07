@@ -22,14 +22,12 @@ on:
           - AP3000M-FM350
           - X86-FM350
           # NetWiz 家族（仅组合变体）：母配置 + luci-app-netwiz + 可选 MT / FM350 组合
-          # 注意：选 -NETWIZ-MT5700 / -NETWIZ-MT5700M 时，下方 MT Mode 必须同步
-          # 选为 MT5700 / MT5700M，否则校验步骤会拦截（防止产出名不副实的固件）
+          # 注意：选 -NETWIZ-MT5700 时，下方 MT Mode 必须同步选为 MT5700，
+          # 否则校验步骤会拦截（防止产出名不副实的固件）。
+          # -NETWIZ-MT5700M 组合已暂时禁用（MT5700M 不稳定，2026-10-07 起暂停）
           - H5000M-WIFI-YES-NETWIZ-MT5700
           - AP3000M-NETWIZ-MT5700
           - X86-NETWIZ-MT5700
-          - H5000M-WIFI-YES-NETWIZ-MT5700M
-          - AP3000M-NETWIZ-MT5700M
-          - X86-NETWIZ-MT5700M
           - H5000M-WIFI-YES-NETWIZ-FM350
           - AP3000M-NETWIZ-FM350
           - X86-NETWIZ-FM350
@@ -57,11 +55,11 @@ on:
         type: string
       MT_MODE:
         description: 'MT 插件模式（二选一，留空则不安装任何 MT 插件）'
-        default: 'MT5700M'
+        default: 'MT5700'
         required: true
         type: choice
         options:
-          - MT5700M
+          # MT5700M 已暂时禁用（不稳定，2026-10-07 起暂停）
           - MT5700
           - NONE
       TEST:
@@ -85,9 +83,8 @@ jobs:
       WRT_PACKAGE: ${{inputs.PACKAGE}}
       WRT_TEST: ${{inputs.TEST}}
       # NONE / 其他 → 空字符串（不安装任何 MT 插件）
-      # 注意：GHA 表达式中空字符串为 falsy，不能写成 `cond && '' || x`，
-      # 必须用显式三元链保证 NONE 时最终得到空值。
-      MT_MODE: ${{ inputs.MT_MODE == 'MT5700' && 'MT5700' || (inputs.MT_MODE == 'MT5700M' && 'MT5700M' || '') }}
+      # MT5700M 已暂时禁用（2026-10-07 起），即使 API 手动传值也强制按空处理。
+      MT_MODE: ${{ inputs.MT_MODE == 'MT5700' && 'MT5700' || '' }}
       # 归组标签（WRT_VARIANT）：按「产品/配置本身」判定，不按插件内容。
       #   - NETMONITOR（H5000M 自用）优先判定 → 归「自用」，独立分类，
       #     不进入公开 MT5700；
