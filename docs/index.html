@@ -31,21 +31,21 @@
       --md-sys-color-tertiary-container: #e0e7ff;
       --md-sys-color-on-tertiary-container: #3730a3;
 
-      --md-sys-color-surface: rgba(255, 255, 255, 0.75);
-      --md-sys-color-surface-variant: rgba(241, 245, 249, 0.70);
-      --md-sys-color-card: rgba(255, 255, 255, 0.72);
-      --md-sys-color-card-hover: rgba(255, 255, 255, 0.88);
+      --md-sys-color-surface: rgba(255, 255, 255, 0.68);
+      --md-sys-color-surface-variant: rgba(241, 245, 249, 0.62);
+      --md-sys-color-card: rgba(255, 255, 255, 0.65);
+      --md-sys-color-card-hover: rgba(255, 255, 255, 0.82);
 
       --md-sys-color-on-surface: #0f172a;
       --md-sys-color-on-surface-variant: #1e293b;
-      --md-sys-color-outline: rgba(255, 255, 255, 0.92);
-      --md-sys-color-outline-variant: rgba(148, 163, 184, 0.3);
+      --md-sys-color-outline: rgba(255, 255, 255, 0.95);
+      --md-sys-color-outline-variant: rgba(255, 255, 255, 0.6);
 
-      /* MD3 Elevation Shadows */
-      --elevation-1: 0 1px 4px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
-      --elevation-2: 0 4px 18px -2px rgba(15, 23, 42, 0.07), 0 2px 6px -2px rgba(15, 23, 42, 0.04);
-      --elevation-3: 0 10px 30px -4px rgba(15, 23, 42, 0.1), 0 4px 10px -3px rgba(15, 23, 42, 0.06);
-      --elevation-4: 0 20px 40px -6px rgba(15, 23, 42, 0.14);
+      /* Glassmorphism Acrylic Shadows & Specular Highlights */
+      --elevation-1: 0 2px 8px 0 rgba(15, 23, 42, 0.04), inset 0 1px 1px rgba(255, 255, 255, 0.95);
+      --elevation-2: 0 8px 32px 0 rgba(15, 23, 42, 0.08), 0 2px 8px -2px rgba(15, 23, 42, 0.04), inset 0 1.5px 1.5px rgba(255, 255, 255, 0.95), inset 0 -1px 2px rgba(255, 255, 255, 0.35);
+      --elevation-3: 0 16px 48px -4px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.06), inset 0 2px 2px rgba(255, 255, 255, 1);
+      --elevation-4: 0 24px 60px -8px rgba(15, 23, 42, 0.16);
 
       /* Radius */
       --radius-sm: 8px;
@@ -121,32 +121,33 @@
       padding: 0 1.5rem;
     }
 
-    /* MD3 Glass Cards: Translucent White Glass allows character to shine through */
+    /* MD3 Acrylic Frosted Glass Cards (增强毛玻璃高级透质感) */
     .md-card {
-      background: var(--md-sys-color-card);
-      backdrop-filter: blur(12px) saturate(160%);
-      -webkit-backdrop-filter: blur(12px) saturate(160%);
-      border: 1px solid var(--md-sys-color-outline);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.74) 0%, rgba(255, 255, 255, 0.54) 100%);
+      backdrop-filter: blur(24px) saturate(190%) contrast(102%);
+      -webkit-backdrop-filter: blur(24px) saturate(190%) contrast(102%);
+      border: 1px solid rgba(255, 255, 255, 0.92);
       box-shadow: var(--elevation-2);
       border-radius: var(--radius-lg);
-      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s ease;
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), background 0.25s ease;
     }
 
     .md-card:hover {
       box-shadow: var(--elevation-3);
-      background: var(--md-sys-color-card-hover);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.84) 0%, rgba(255, 255, 255, 0.65) 100%);
+      transform: translateY(-2px);
     }
 
-    /* App Header */
+    /* App Header: High-blur Frosted Acrylic Glass */
     header {
       position: sticky;
       top: 0;
       z-index: 100;
-      background: rgba(255, 255, 255, 0.72);
-      backdrop-filter: blur(16px) saturate(160%);
-      -webkit-backdrop-filter: blur(16px) saturate(160%);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.75);
-      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.03);
+      background: rgba(255, 255, 255, 0.65);
+      backdrop-filter: blur(28px) saturate(200%);
+      -webkit-backdrop-filter: blur(28px) saturate(200%);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.85);
+      box-shadow: 0 4px 20px rgba(15, 23, 42, 0.04), inset 0 -1px 0 rgba(255, 255, 255, 0.6);
       transition: all 0.3s ease;
     }
 
@@ -301,20 +302,20 @@
     }
 
     .hero-capsule {
-      background: var(--md-sys-color-card);
-      backdrop-filter: blur(14px) saturate(160%);
-      -webkit-backdrop-filter: blur(14px) saturate(160%);
-      border: 1px solid rgba(255, 255, 255, 0.92);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.50) 100%);
+      backdrop-filter: blur(26px) saturate(190%) contrast(102%);
+      -webkit-backdrop-filter: blur(26px) saturate(190%) contrast(102%);
+      border: 1px solid rgba(255, 255, 255, 0.95);
       border-radius: var(--radius-xl);
       padding: 3rem 2rem 2.25rem;
       max-width: 920px;
       margin: 1rem auto 3.5rem;
-      box-shadow: var(--elevation-2);
+      box-shadow: 0 10px 40px -5px rgba(15, 23, 42, 0.08), inset 0 1.5px 2px rgba(255, 255, 255, 1);
       transition: all 0.3s ease;
     }
 
     .hero-capsule:hover {
-      box-shadow: var(--elevation-3);
+      box-shadow: 0 16px 50px -5px rgba(15, 23, 42, 0.12), inset 0 2px 2px rgba(255, 255, 255, 1);
     }
 
     .main-content-flow {
@@ -497,31 +498,35 @@
       margin-right: 0.4rem;
     }
 
-    /* MD3 Filter Chips */
+    /* MD3 Acrylic Filter Chips (毛玻璃选项卡) */
     .chip {
       padding: 0.45rem 0.95rem;
       font-size: 0.85rem;
       font-weight: 600;
       border-radius: var(--radius-full);
-      background: rgba(255, 255, 255, 0.95);
-      border: 1px solid rgba(148, 163, 184, 0.35);
-      color: #475569;
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(18px) saturate(180%);
+      -webkit-backdrop-filter: blur(18px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      color: #334155;
       cursor: pointer;
-      transition: all 0.2s ease;
-      box-shadow: var(--elevation-1);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03), inset 0 1px 1px rgba(255, 255, 255, 0.95);
     }
 
     .chip:hover {
       color: var(--md-sys-color-primary);
       border-color: var(--md-sys-color-primary);
+      background: rgba(255, 255, 255, 0.9);
       transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15);
     }
 
     .chip.active {
       background: var(--md-sys-color-primary);
       color: #ffffff;
       border-color: var(--md-sys-color-primary);
-      box-shadow: 0 3px 10px rgba(2, 132, 199, 0.35);
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
     }
 
     .search-input-box {
@@ -533,22 +538,25 @@
 
     .search-input-box input {
       width: 100%;
-      background: rgba(255, 255, 255, 0.95);
-      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(18px) saturate(180%);
+      -webkit-backdrop-filter: blur(18px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.92);
       border-radius: var(--radius-full);
       padding: 0.65rem 1.15rem 0.65rem 2.65rem;
       color: #0f172a;
       font-family: inherit;
       font-size: 0.875rem;
-      font-weight: 500;
+      font-weight: 600;
       outline: none;
-      box-shadow: var(--elevation-1);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.03);
       transition: all 0.2s ease;
     }
 
     .search-input-box input:focus {
+      background: rgba(255, 255, 255, 0.92);
       border-color: var(--md-sys-color-primary);
-      box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+      box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.18);
     }
 
     .search-input-box svg {
@@ -556,7 +564,7 @@
       left: 1rem;
       top: 50%;
       transform: translateY(-50%);
-      color: #94a3b8;
+      color: #64748b;
     }
 
     /* Meta & Acceleration Control Bar */
@@ -594,14 +602,16 @@
       gap: 0.35rem;
     }
 
-    /* MD3 Segmented Control for Acceleration */
+    /* MD3 Segmented Control for Acceleration & Opacity (毛玻璃分段胶囊) */
     .segmented-control {
       display: inline-flex;
-      background: rgba(241, 245, 249, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(255, 255, 255, 0.68);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.9);
       border-radius: var(--radius-full);
-      padding: 0.2rem;
-      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+      padding: 0.22rem;
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.03);
     }
 
     .segment-btn {
@@ -617,9 +627,9 @@
     }
 
     .segment-btn.active {
-      background: #ffffff;
+      background: rgba(255, 255, 255, 0.96);
       color: var(--md-sys-color-primary);
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), inset 0 1px 1px rgba(255, 255, 255, 1);
     }
 
     /* Firmware Grid */
@@ -685,8 +695,10 @@
     .fw-filename-box {
       font-family: var(--font-mono);
       font-size: 0.8rem;
-      background: rgba(248, 250, 252, 0.95);
-      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: rgba(255, 255, 255, 0.62);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.9);
       border-radius: var(--radius-md);
       padding: 0.6rem 0.85rem;
       margin-bottom: 1.15rem;
@@ -694,8 +706,8 @@
       align-items: center;
       justify-content: space-between;
       gap: 0.5rem;
-      color: #334155;
-      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+      color: #1e293b;
+      box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.9), 0 2px 6px rgba(0, 0, 0, 0.02);
     }
 
     .fw-filename-text {
@@ -1060,15 +1072,16 @@
       to { opacity: 0; }
     }
 
-    /* Footer */
+    /* Footer: Frosted Glass */
     footer {
-      border-top: 1px solid rgba(148, 163, 184, 0.25);
-      background: rgba(255, 255, 255, 0.85);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.65);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
       padding: 3.5rem 0 2.5rem;
-      color: #64748b;
+      color: #475569;
       font-size: 0.875rem;
+      box-shadow: 0 -8px 30px rgba(15, 23, 42, 0.03);
     }
 
     .footer-content {
@@ -1194,10 +1207,10 @@
 
       <div class="nav-actions">
         <!-- Wallpaper Translucency Selector -->
-        <div class="segmented-control" id="opacitySwitcher" style="background:rgba(255,255,255,0.85); box-shadow:var(--elevation-1);" title="调节卡片透光度">
-          <button class="segment-btn" data-opacity="58">透亮 58%</button>
-          <button class="segment-btn active" data-opacity="72">平衡 72%</button>
-          <button class="segment-btn" data-opacity="88">清晰 88%</button>
+        <div class="segmented-control" id="opacitySwitcher" style="box-shadow:var(--elevation-1);" title="调节卡片毛玻璃透光度">
+          <button class="segment-btn" data-opacity="48">水漾 48%</button>
+          <button class="segment-btn active" data-opacity="65">经典磨砂 65%</button>
+          <button class="segment-btn" data-opacity="82">微透 82%</button>
         </div>
 
         <!-- Fullscreen Wallpaper View Button -->
@@ -2329,11 +2342,18 @@
       if (!btn) return;
       document.querySelectorAll('#opacitySwitcher .segment-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      const op = btn.getAttribute('data-opacity');
-      const val = parseInt(op) / 100;
+      const op = parseInt(btn.getAttribute('data-opacity'));
+      const val = op / 100;
+      const topAlpha = Math.min(val + 0.08, 0.95).toFixed(2);
+      const bottomAlpha = Math.max(val - 0.12, 0.35).toFixed(2);
       document.documentElement.style.setProperty('--md-sys-color-card', `rgba(255, 255, 255, ${val})`);
-      document.documentElement.style.setProperty('--md-sys-color-surface', `rgba(255, 255, 255, ${Math.min(val + 0.03, 0.95)})`);
-      showToast(`已调节壁纸透光度至 ${op}%`);
+      document.documentElement.style.setProperty('--md-sys-color-surface', `rgba(255, 255, 255, ${topAlpha})`);
+      
+      // Update md-card gradient dynamically
+      document.querySelectorAll('.md-card').forEach(card => {
+        card.style.background = `linear-gradient(135deg, rgba(255, 255, 255, ${topAlpha}) 0%, rgba(255, 255, 255, ${bottomAlpha}) 100%)`;
+      });
+      showToast(`已切换毛玻璃效果：${btn.textContent}`);
     });
 
     // ===== IMMERSION WALLPAPER VIEW MODE =====
