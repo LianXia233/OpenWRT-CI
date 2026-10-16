@@ -272,6 +272,36 @@ if [ -f "$RUST_FILE" ]; then
 	fi
 fi
 
+#修复 miniupnpd 2.3.11 打补丁失败
+# 根因：上游 immortalwrt/packages 在 2026-10-16 合并 official 时只把 PKG_VERSION
+# 从 2.3.9 升到 2.3.11，却没有同步刷新 patches 目录，导致旧补丁 hunk 全部失败：
+#   - 020-descr-filter-fix / 030-allow-private-fix / 040-improve-logging 的改动
+#     其实已并入 miniupnpd 2.3.11 上游（重复打补丁必然失败）；
+#   - 900-format-xml 无法再套用（upnpsoap.c 变动过大）。
+# 处理：检测到 2.3.11 时移除这 4 个失效补丁，保留仍能干净套用的
+# 010-upnp-igdv2-compat（IGDv2 微软/苹果兼容），等价于上游 openwrt/packages
+# 的「无补丁」状态，确保 miniupnpd（nftables / iptables 两个 variant）可以编译。
+MINIUPNPD_MK="$(find "$FEEDS_PACKAGES" -maxdepth 3 -type f -wholename '*/miniupnpd/Makefile' -print -quit 2>/dev/null)"
+if [ -f "$MINIUPNPD_MK" ] && grep -q '^PKG_VERSION:=2\.3\.11' "$MINIUPNPD_MK"; then
+	echo " "
+	MINIUPNPD_PATCH_DIR="$(dirname "$MINIUPNPD_MK")/patches"
+	if [ -d "$MINIUPNPD_PATCH_DIR" ]; then
+		for STALE_PATCH in \
+			020-descr-filter-fix.patch \
+			030-allow-private-fix.patch \
+			040-improve-logging.patch \
+			900-miniupnpd-format-xml-to-make-some-app-happy.patch; do
+			if [ -f "$MINIUPNPD_PATCH_DIR/$STALE_PATCH" ]; then
+				rm -f "$MINIUPNPD_PATCH_DIR/$STALE_PATCH"
+				echo "removed stale miniupnpd patch: $STALE_PATCH"
+			fi
+		done
+		echo "miniupnpd 2.3.11 stale patches have been removed!"
+	else
+		echo "miniupnpd patches directory not found; continuing!"
+	fi
+fi
+
 #AP3000M EEPROM 自动初始化 (备份EEPROM模板 + uci-defaults)
 # 匹配所有 AP3000M 实体配置（含 FM350 / NETWIZ 等变体，WRT_CONFIG 形如
 # AP3000M-FM350 / AP3000M-NETWIZ-MT5700 ...），保证任意 AP3000M 实体机身
