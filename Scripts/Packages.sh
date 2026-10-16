@@ -214,7 +214,11 @@ FIX_HOMEPROXY_SINGBOX() {
 	echo "homeproxy: sing-box constraint (>= ${CUR_VER}) -> (>= ${SBOX_VER}) to match feed version"
 }
 FIX_HOMEPROXY_SINGBOX
-UPDATE_PACKAGE "vnt" "lmq8267/luci-app-vnt" "main"
+
+# vnt 已移除：上游 lmq8267/luci-app-vnt 仓库与账号均已删除（clone 返回 404），
+# 在 set -euo pipefail 下会导致整条构建链在导入插件步骤中止。该包未被任何
+# config/*.txt 选中，删除此项不影响固件内容。如需 VNT2，请改用维护中的
+# whzhni1/luci-app-vnt2（注意实际配置项名为 luci-app-vnt2）。
 
 # FAN789 插件及其他专用硬件插件
 UPDATE_PACKAGE "luci-app-h5000m-fancontrol" "FAN789/luci-app-h5000m-fancontrol" "main"
