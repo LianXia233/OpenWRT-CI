@@ -148,6 +148,57 @@ FIX_SINGBOX_STALE_PATCH() {
 }
 FIX_SINGBOX_STALE_PATCH
 
+# ===== miniupnpd 过时补丁清理（2026-10-16 三机型全灭根因）=====
+# immortalwrt/packages 的 miniupnpd 已升级到 2.3.11，但 feed 自带的三个补丁
+# 未随源码刷新（已在本地对 miniupnpd-2.3.11 官方源码逐一实测验证）：
+#   020-descr-filter-fix.patch —— 权限行解析器重写（iseol/get_sep，源自
+#     yangfl 的 upstream 提交）已随 2.3.11 合入官方源码，再打即报
+#     "Reversed (or previously applied) patch detected"，5/7 + 2/2 hunk 全灭；
+#   030-allow-private-fix.patch —— ALLOWPRIVATEIPV4MASK 修复同样已随 2.3.11
+#     合入（upnpsoap.c 已含该逻辑），补丁全部 hunks 已存在于源码；
+#   040-improve-logging.patch  —— 针对 2.3.10 上下文编写，2.3.11 的
+#     miniupnpd.c 已重排，4/12 hunk 无法命中，patch 直接失败。
+# OpenWrt 在 Build/Prepare 阶段按序推补丁，任一失败即中断整个固件编译
+# （今日 X86 / H5000M-MT / H5000M-NetMonitor 三个定时构建同时死在
+# "Patch failed! Please fix 020-descr-filter-fix.patch" 即此因）。
+# 保留的 010-upnp-igdv2-compat.patch 与 900-miniupnpd-format-xml-*.patch
+# 对 2.3.11 可全链干净应用（已实测），不受影响。
+# 移除均带内容/版本守卫：若上游后续刷新补丁或降版，规则自动跳过不误删。
+FIX_MINIUPNPD_STALE_PATCHES() {
+	local PATCH_DIR="../feeds/packages/net/miniupnpd"
+	[ -d "$PATCH_DIR/patches" ] || { echo "miniupnpd: feed 补丁目录不存在，跳过"; return 0; }
+
+	# 读取 feed 侧 PKG_VERSION 做版本闸门（020/030 在 < 2.3.11 的源码上仍有效）
+	local VER
+	VER=$(grep -m1 -oP '^PKG_VERSION:=\K.*' "$PATCH_DIR/Makefile" 2>/dev/null || true)
+	case "$VER" in
+		2.3.1[1-9]|2.3.[2-9][0-9]|2.[4-9].*|[3-9].*) ;;
+		*) echo "miniupnpd: feed 版本 ${VER:-未知} < 2.3.11，补丁仍适配，跳过清理"; return 0 ;;
+	esac
+
+	# 020：解析器重写已入上游，补丁冗余（仅当仍是旧版重写补丁时移除）
+	local P020="$PATCH_DIR/patches/020-descr-filter-fix.patch"
+	if [ -f "$P020" ] && grep -q "Rewrite permission line parser" "$P020"; then
+		rm -f "$P020"
+		echo "miniupnpd: 移除已合入上游的补丁 020-descr-filter-fix.patch（2.3.11 已含解析器重写）"
+	fi
+
+	# 030：ALLOWPRIVATEIPV4MASK 修复已入上游，补丁冗余
+	local P030="$PATCH_DIR/patches/030-allow-private-fix.patch"
+	if [ -f "$P030" ] && grep -q "ALLOWPRIVATEIPV4MASK" "$P030"; then
+		rm -f "$P030"
+		echo "miniupnpd: 移除已合入上游的补丁 030-allow-private-fix.patch（2.3.11 已含该修复）"
+	fi
+
+	# 040：logging 补丁未入上游但上下文已过期，无法适配 2.3.11，移除以恢复构建
+	local P040="$PATCH_DIR/patches/040-improve-logging.patch"
+	if [ -f "$P040" ]; then
+		rm -f "$P040"
+		echo "miniupnpd: 移除无法适配 $VER 的补丁 040-improve-logging.patch（4/12 hunks 失配）"
+	fi
+}
+FIX_MINIUPNPD_STALE_PATCHES
+
 # luci-app-homeproxy（viking feed）20260914-r2 起把 LUCI_EXTRA_DEPENDS 提升为
 #   sing-box (>=1.15.0)
 # 但同一 feed 的 sing-box 仅有 1.15.0_alpha3；apk 版本比较中 `_alpha3` 属
