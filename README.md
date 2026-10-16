@@ -9,8 +9,10 @@
 [![Platform: Filogic](https://img.shields.io/badge/Platform-MediaTek%20Filogic-orange)](#)
 [![Platform: x86_64](https://img.shields.io/badge/Platform-x86__64-informational)](#)
 [![Build: GitHub Actions](https://img.shields.io/badge/Build-GitHub%20Actions-success?logo=githubactions&logoColor=white)](#)
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Portal%20Online-cyan?logo=githubpages&logoColor=white)](https://lianxia233.github.io/OpenWRT-CI/)
 
 *适配 Hiveton H5000M 5G CPE（MT7986 + MT5700M）、AirPi AP3000M（MT7981B）与通用 X86_64 架构设备，全系固件由 GitHub Actions 云端编译、自动发布*
+*🌐 **在线固件下载工坊 / 文档官网**：[https://lianxia233.github.io/OpenWRT-CI/](https://lianxia233.github.io/OpenWRT-CI/)*
 
 </div>
 
