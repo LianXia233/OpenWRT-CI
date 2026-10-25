@@ -1,4 +1,25 @@
 # 更新日志
+## [2026-10-26] H5000M 风扇插件切换到 LianXia233 分支（3.2.0 原生 Rust 控制器）
+
+### 改动
+
+- `Scripts/Packages.sh`：`luci-app-h5000m-fancontrol` 的上游源由
+  `FAN789/luci-app-h5000m-fancontrol` 切换为
+  `LianXia233/luci-app-h5000m-fancontrol`（3.2.0：原生 Rust 静态控制器、
+  六标签 LuCI 页面、5G 模组温度桥接，schema v3 配置自动迁移）；
+- `.github/workflows/WRT-CORE.yml`：新增「准备 H5000M 风扇插件 Rust 交叉编译
+  目标」步骤（`contains(env.WRT_CONFIG, 'H5000M')` 时执行）——3.x 插件的
+  `src/Makefile` 在包构建内直接调 `cargo build --target
+  aarch64-unknown-linux-musl`，静态 musl 目标自带链接器，无需构建 rust/host；
+  runner 的 rustup 安装持久化，后续「编译固件」步骤直接可用；
+- `README.md`：致谢区插件链接同步更新。
+
+### 说明
+
+- 六个 H5000M 配置（WIFI-YES / NETMONITOR / FM350 / NETWIZ-MT5700 /
+  NETWIZ-MT5700M / NETWIZ-FM350）均选中该插件，统一生效；
+- 非 H5000M 机型（AP3000M / X86 / FM350 变体）构建路径不受影响。
+
 ## [2026-10-07] 暂时禁用 MT5700M 变体编译：模组方案不稳定，暂停全部 MT5700M 入口
 
 ### 背景

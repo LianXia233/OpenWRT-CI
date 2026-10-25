@@ -271,8 +271,10 @@ FIX_HOMEPROXY_SINGBOX
 # config/*.txt 选中，删除此项不影响固件内容。如需 VNT2，请改用维护中的
 # whzhni1/luci-app-vnt2（注意实际配置项名为 luci-app-vnt2）。
 
-# FAN789 插件及其他专用硬件插件
-UPDATE_PACKAGE "luci-app-h5000m-fancontrol" "FAN789/luci-app-h5000m-fancontrol" "main"
+# H5000M 风扇插件（LianXia233 分支：3.x 原生 Rust 控制器 + 六标签 LuCI 页面，
+# 由 src/Makefile 在包构建内直接调 cargo 交叉编译，见 WRT-CORE.yml 的
+# Rust 交叉编译目标准备步骤）及其他专用硬件插件
+UPDATE_PACKAGE "luci-app-h5000m-fancontrol" "LianXia233/luci-app-h5000m-fancontrol" "main"
 UPDATE_PACKAGE "luci-app-airpi-fancontrol" "LianXia233/luci-app-airpi3000m-fancontrol" "main" "all" "luci-app-airpi-fancontrol kmod-airpi-gpio-fan"
 
 # ===== MT5700M（方案 A）：luci-app-mt5700m monorepo 折叠 =====
