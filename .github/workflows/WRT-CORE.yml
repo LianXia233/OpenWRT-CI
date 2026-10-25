@@ -330,6 +330,23 @@ jobs:
           rustup target list --installed | grep -qx "$RUST_TARGET"
           rustc --version
 
+      # H5000M 变体专属：luci-app-h5000m-fancontrol 3.x 的控制器是 Rust 写的，
+      # 由包内 src/Makefile 直接调 cargo 交叉编译（aarch64-unknown-linux-musl
+      # 静态目标自带链接器，无需 OpenWrt 的 rust/host 源码构建）。runner 预装
+      # rustup 且 cargo 在全局 PATH 上；这里只需装好 musl 标准库 target——
+      # rustup 的安装持久化到 runner，后续「编译固件」步骤直接可用。
+      # 位置与 fm350 步骤相邻，纯粹便于维护，先后顺序不影响结果。
+      - name: 准备 H5000M 风扇插件 Rust 交叉编译目标（H5000M 变体）
+        if: contains(env.WRT_CONFIG, 'H5000M')
+        run: |
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal --default-toolchain stable
+          fi
+          rustup target add aarch64-unknown-linux-musl
+          rustup target list --installed | grep -qx aarch64-unknown-linux-musl
+          rustc --version
+
       # NetWiz 变体专属：拉取 luci-app-netwiz 源码放进 package/。
       # 条件为 contains NETWIZ，H5000M / AP3000M / X86 及各自 FM350 变体
       # 均不执行本步骤，既有构建路径零影响。
