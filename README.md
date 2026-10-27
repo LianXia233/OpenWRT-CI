@@ -224,6 +224,7 @@ OpenWRT-CI/
 │   ├── ApplyMTMode.sh        # MT 方案配置层组装与互斥注入
 │   ├── VerifyMTMode.sh       # 编译前 MT 驱动冲突语义校验
 │   ├── Handles.sh            # 静态资源预置与组件补丁
+│   ├── PatchRebase.py        # 上游源码漂移时自动重定基客制补丁上下文
 │   └── Settings.sh           # 默认 IP / Wi-Fi 参数编译期写入
 └── README.md
 ```
