@@ -1,4 +1,45 @@
 # 更新日志
+## [2026-10-27] 修复 firewall4 客制补丁失配导致的编译中断（新增补丁上下文自动重定基）
+
+### 背景
+
+上游 firewall4 升级到 `2026-10-26~bac1d656` 后，immortalwrt 自带的
+`001-firewall4-add-support-for-fullcone-nat.patch` 第 8 个 hunk 打不上：
+
+```
+patching file root/usr/share/ucode/fw4.uc
+Hunk #8 FAILED at 2261.
+1 out of 8 hunks FAILED
+make[3]: *** [Makefile:60: ...prepared...] Error 1
+ERROR: package/network/config/firewall4 failed to build.
+```
+
+原因是上游把 `zone.dflags.helper` 的初值由 `true` 改为 `false`（改为在 helper
+循环里按 `helper.available` 逐个置位），而补丁把该行当作上下文行，内容对不上
+即整包 prepare 失败，X86 / H5000M / AP3000M 全部变体会在开局 40 分钟处挂掉。
+
+### 改动
+
+- 新增 `Scripts/PatchRebase.py`：客制补丁上下文自动重定基工具。先用
+  `patch --dry-run` 判定补丁能否原样应用，能打的一字不改；打不上时按
+  「删除行块在目标文件中的唯一匹配」作为锚点重建 hunk 上下文（只重建上下文，
+  绝不改写 `+` / `-` 增删内容），重建结果必须整体 dry-run 通过才写回，
+  否则保持原补丁不变并非 0 退出；
+- `.github/workflows/WRT-CORE.yml`：在「保存缓存（下载源码包）」之后新增
+  「校正客制补丁上下文（上游源码漂移兜底）」步骤，对
+  `package/network/config/firewall4` 执行上述预检。耗时约 2 秒，
+  上游把补丁补齐后自动 no-op；
+- `README.md`：`Scripts/` 目录树同步补充新脚本。
+
+### 说明
+
+- 预检在 `build_dir` 解包之前完成，失败会立即中止并给出具体 hunk，
+  不再白跑完整编译；
+- 重建后的补丁经实测与人工修正版逐字节一致（`fw4.uc` 全部 8 个 hunk 通过，
+  fullcone 的 IPv4/IPv6 分支与 `auto_helper` 判定均保持原语义）；
+- 该脚本不绑定单个包，`--package` 可指向任意带 `patches/` 的包，
+  后续其它上游漂移可复用。
+
 ## [2026-10-26] H5000M 风扇插件切换到 LianXia233 分支（3.2.0 原生 Rust 控制器）
 
 ### 改动

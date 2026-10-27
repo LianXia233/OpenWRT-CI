@@ -575,6 +575,20 @@ jobs:
           path: |
             ./wrt/dl
 
+      # 上游包源码一更新，客制补丁的 context 就可能对不上，prepare 阶段报
+      # `Hunk #N FAILED` 直接中断整包编译，而补丁语义其实并没过时。
+      # 例：firewall4 2026.10.26 把 zone.dflags.helper 的初值从 true 改成 false，
+      #     fullcone 补丁第 8 个 hunk 的上下文行因此失配，X86/MT5700 全挂。
+      # 这里在 build_dir 解包之前做一次离线预检：能原样打上的补丁一字不改，
+      # 只对失配 hunk 按「删除行唯一锚点」重建上下文，重建后必须整体 dry-run
+      # 通过才写回，否则保持原样并非 0 退出（宁可在 1 分钟内报错，也不耗 40 分钟）。
+      # 上游把补丁补齐后本步骤自动 no-op，可长期保留。
+      - name: 校正客制补丁上下文（上游源码漂移兜底）
+        if: env.WRT_TEST != 'true'
+        run: |
+          python3 "$GITHUB_WORKSPACE/Scripts/PatchRebase.py" \
+            --wrt ./wrt --package package/network/config/firewall4
+
       # 关键改动 3：AP3000M 跳过 rust/host 源码构建
       #   luci-app-airpi-fancontrol 的守护进程 airpi-fanctl 是 Rust 写的，
       #   默认路径会让 OpenWrt 从源码构建整套 rust/host（rustc + cargo + LLVM），
