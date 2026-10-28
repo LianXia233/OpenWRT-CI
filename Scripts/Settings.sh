@@ -117,9 +117,16 @@ sed -i "s/timezone='.*'/timezone='CST-8'/g" "$CFG_FILE"
 sed -i "s/zonename='.*'/zonename='Asia\/Shanghai'/g" "$CFG_FILE"
 
 #配置文件修改
+# 三行与上游 VIKINGYFY/OpenWRT-CI 的 Settings.sh 保持一致：
+#   luci-theme-$WRT_THEME         主题本体（vantage/aurora/argon 均按此名命名）
+#   luci-app-$WRT_THEME           主题配套 App（vantage 为 luci-app-vantage 仪表盘）
+#   luci-app-$WRT_THEME-config    仅 aurora 等带独立配置 App 的主题存在，
+#                                 其余主题该符号不存在，由 make defconfig 自动丢弃
+# 未选中的包不会被打进固件；包未就位时 defconfig 也会丢弃该符号。
 echo "CONFIG_PACKAGE_luci=y" >> ./.config
 echo "CONFIG_LUCI_LANG_zh_Hans=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-theme-$WRT_THEME=y" >> ./.config
+echo "CONFIG_PACKAGE_luci-app-$WRT_THEME=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-app-$WRT_THEME-config=y" >> ./.config
 
 #引入私有扩展配置
