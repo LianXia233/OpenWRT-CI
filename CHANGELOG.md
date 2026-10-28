@@ -1,4 +1,53 @@
 # 更新日志
+## [2026-10-28] 默认主题切换为 Vantage（aurora 保留）；viking 包组新增 UPnP 插件
+
+### 背景
+
+上游 VIKINGYFY/OpenWRT-CI 于 2026-10-27 将默认主题由 aurora 切换为
+vantage（`anothaDev/luci-theme-vantage`），并在 `VIKINGYFY/packages` 的
+viking 包组中新增 `miniupnpd` 与 `luci-app-upnp`（UPnP IGD / PCP /
+NAT-PMP 端口自动映射）。本仓库作为其 fork，同步该配置，使固件默认界面
+与上游保持一致，并具备 UPnP 端口自动映射能力。
+
+### 改动
+
+- `Scripts/Settings.sh`：
+  - `WRT_THEME` 内置兜底默认值由 `aurora` 改为 `vantage`；
+  - 「配置文件修改」段补上上游同款的 `CONFIG_PACKAGE_luci-app-$WRT_THEME=y`
+    （与上游一致的三行写法），`WRT_THEME=vantage` 时即启用
+    `luci-app-vantage`（Vantage 仪表盘首页）；
+- `Scripts/Packages.sh`：
+  - 新增主题源
+    `UPDATE_PACKAGE "vantage" "anothaDev/luci-theme-vantage" "main"`；
+  - `aurora` / `aurora-config` 主题源**保留未动**（`Scripts/Handles.sh`
+    的 aurora 菜单样式修复同步保留），仅不再作为默认主题；
+  - viking 包组清理名单追加 `miniupnpd`、`luci-app-upnp`；
+- `.github/workflows/`：7 个调用方的 `WRT_THEME` 由 `aurora` 改为
+  `vantage`（AP3000M-MT-AUTO / FM350-AUTO / H5000M-MT-AUTO /
+  H5000M-NETMONITOR-AUTO / NetWiz-AUTO / WRT-BUILD / X86-MT-AUTO）。
+
+### 说明
+
+- `luci-app-upnp` 的编译配置无需改动：`Config/GENERAL.txt` 已含
+  `CONFIG_PACKAGE_luci-app-upnp=y`（与上游同款写法，全部机型叠加）；
+  `miniupnpd` 由该插件的 `LUCI_DEPENDS:=+miniupnpd` 自动选中，上游同样
+  不单独设置该符号；
+- 依赖版本约束 `LUCI_EXTRA_DEPENDS:=miniupnpd (>=20261027-r7)` 与
+  `VIKINGYFY/packages` 的 `PKG_VERSION:=20261027` / `PKG_RELEASE:=7`
+  正好吻合，不会复现 homeproxy 那类版本约束不满足导致的 world 安装失败；
+- 该源的 `miniupnpd/patches/` 仅含 `010-upnp-igdv2-compat.patch` 与
+  `900-miniupnpd-format-xml-to-make-some-app-happy.patch`，正是
+  `FIX_MINIUPNPD_STALE_PATCHES` 注释中注明「对 2.3.11 可全链干净应用」的
+  两个，不会触发补丁失配导致的编译中断；
+- `anothaDev/luci-theme-vantage` 一个仓库同时提供 `luci-theme-vantage` 与
+  `luci-app-vantage` 两个包，`Packages.sh` 整仓克隆后由 feed 扫描自动
+  发现，主题与配套 App 一次克隆即可编入；
+- `luci-app-$WRT_THEME-config` 一行保持不变：仅 aurora 等带独立配置 App
+  的主题存在该包，vantage 下该符号不存在，由 `make defconfig` 静默丢弃
+  （上游同样保留此行）；
+- aurora 切回方法：将各工作流的 `WRT_THEME` 与 `Settings.sh` 的兜底默认值
+  改回 `aurora` 即可，主题源与菜单样式修复均已在位。
+
 ## [2026-10-27] 修复 firewall4 客制补丁失配导致的编译中断（新增补丁上下文自动重定基）
 
 ### 背景
