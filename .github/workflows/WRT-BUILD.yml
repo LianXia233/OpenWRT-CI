@@ -76,7 +76,7 @@ jobs:
     uses: ./.github/workflows/WRT-CORE.yml
     with:
       WRT_CONFIG: ${{inputs.CONFIG}}
-      WRT_THEME: aurora
+      WRT_THEME: vantage
       WRT_REPO: https://github.com/${{inputs.SOURCE}}.git
       WRT_BRANCH: ${{inputs.BRANCH}}
       WRT_SOURCE: ${{inputs.SOURCE}}

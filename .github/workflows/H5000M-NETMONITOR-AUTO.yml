@@ -56,7 +56,7 @@ jobs:
     with:
       WRT_CONFIG: ${{ matrix.CONFIG }}
 
-      WRT_THEME: aurora
+      WRT_THEME: vantage
 
       WRT_REPO: https://github.com/${{ matrix.SOURCE }}.git
       WRT_BRANCH: ${{ matrix.BRANCH }}
