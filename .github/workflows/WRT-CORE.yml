@@ -892,8 +892,10 @@ jobs:
           BODY_DL="${{env.WRT_TAG_GROUP}}_dl.md"
           BODY="${{env.WRT_TAG_GROUP}}_body.md"
 
-          # ① 头部说明。heredoc 定界符加引号：${{...}} 表达式已在脚本注入前
-          #    被 GHA 文本替换，之后不能再让 bash 做变量展开
+          # ① 头部说明。heredoc 定界符加引号：脚本里的 GHA 表达式（双花括号
+          #    那种占位写法，注意注释里都不能出现字面写法，否则整个工作流
+          #    文件会被 GHA 判为非法）已在脚本注入前被文本替换，之后不能再
+          #    让 bash 做变量展开
           cat > "$BODY_HEAD" <<'EOF'
           > 同一天内全部机型的 **${{env.WRT_TAG_GROUP}}** 分类固件汇聚于此，下方「下载一览」按机型分节。本仓库 Releases 按「产品/配置本身」分类，认准组名下载即可。
 
