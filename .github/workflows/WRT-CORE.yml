@@ -862,21 +862,39 @@ jobs:
       # Tag 按产品/变体分类归组：<组名>-<YY.MM.DD>。同组同一天的多个机型 job
       # 共享同一 Tag，产物追加进同一个 Release，Releases 页面即按
       # NetWiz / MT5700 / MT5700M / FM350 / 自用 / BASE 天然归类。
-      # body 为结构化 Markdown：组别速查、文件名解读、默认参数、构建信息。
-      # 注意：多机型产物追加进同一 Release 时，后完成 job 会用本 job 的 body
-      # 覆盖既有说明，因此「本批构建信息」一节必须标注「为最后完成机型的数据」，
-      # 避免读者误以为是全组唯一值。插件清单用折叠块（details）呈现。
+      # body 为结构化 Markdown，分四段：
+      #   ① 头部说明（本组定位）；
+      #   ② 📦 下载一览 —— 产物上传完成后从 Release 现有资产反向生成、按机型
+      #      （H5000M / AP3000M / X86 / 通用）分节，带下载链接、体积与用途。
+      #      读取 Release 全量资产而非本 job 的 upload 目录：无论同组多机型
+      #      job 谁最后完成，body 都能列出全部机型产物索引，从根上避免
+      #      「后完成 job 覆盖 body 后只见自己文件」；
+      #   ③ 🗂️ 组别速查 / ⚙️ 默认出厂参数 / 🔧 本批构建信息（后者为最后
+      #      完成机型的数据，已显式标注）；
+      #   ④ 插件清单折叠块（details）。
+      # Release 标题同步美化：<组名中文释义> · <日期>，Releases 列表页不再
+      # 直接裸奔 tag 名。产物 → 机型的映射与打包阶段的重命名规则一一对应。
       - name: 发布固件到 Release
         if: env.WRT_TEST != 'true'
         env:
           GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
         run: |
           set -euo pipefail
+          BODY_HEAD="${{env.WRT_TAG_GROUP}}_head.md"
+          BODY_TAIL="${{env.WRT_TAG_GROUP}}_tail.md"
+          BODY_DL="${{env.WRT_TAG_GROUP}}_dl.md"
           BODY="${{env.WRT_TAG_GROUP}}_body.md"
-          cat > "$BODY" <<'EOF'
-          > 同一天内全部机型的 **${{env.WRT_TAG_GROUP}}** 分类固件汇聚于此。本仓库 Releases 按「产品/配置本身」分类，认准组名下载即可。
 
-          ## 组别速查
+          # ① 头部说明。heredoc 定界符加引号：${{...}} 表达式已在脚本注入前
+          #    被 GHA 文本替换，之后不能再让 bash 做变量展开
+          cat > "$BODY_HEAD" <<'EOF'
+          > 同一天内全部机型的 **${{env.WRT_TAG_GROUP}}** 分类固件汇聚于此，下方「下载一览」按机型分节。本仓库 Releases 按「产品/配置本身」分类，认准组名下载即可。
+
+          EOF
+
+          # ② 尾部静态说明
+          cat > "$BODY_TAIL" <<'EOF'
+          ## 🗂️ 组别速查
 
           | 组名 | 适用场景 |
           | :--- | :--- |
@@ -887,15 +905,7 @@ jobs:
           | `自用` | 个人自用配置（H5000M + NetMonitor 网络监控 + Taygedo 签到，MT5700 方案，不进入公开 MT5700 分类） |
           | `BASE` | 无变体基础构建（手动触发） |
 
-          ## 文件名解读
-
-          ```
-          <设备>-<产品/方案>-<固件类型>.<扩展名>
-          ```
-
-          设备：`H5000M` / `AP3000M` / `X86`；产品/方案：`NetWiz-MT5700` 等（NetWiz 家族）或 `MT5700` / `MT5700M` / `FM350`（普通配置）；固件类型：`sysupgrade` / `factory` / `initramfs` / `recovery` / `efi` / `combined` / `rootfs`。全系带开源硬件加速。
-
-          ## 默认出厂参数
+          ## ⚙️ 默认出厂参数
 
           | 项目 | 值 |
           | :--- | :--- |
@@ -903,7 +913,7 @@ jobs:
           | 后台密码 | `${{env.WRT_PW}}` |
           | Wi-Fi | `${{env.WRT_SSID}}` / `${{env.WRT_WORD}}`（WPA 混合加密） |
 
-          ## 本批构建信息
+          ## 🔧 本批构建信息
 
           > 多机型产物追加进同一 Release 时，本节为最后完成机型的数据，仅作参考。
 
@@ -919,14 +929,17 @@ jobs:
           </details>
           EOF
 
-          # Release/Tag 已存在（同组同日多 job 追加）→ 复用；不存在 → 创建
+          # ③ 创建 / 复用 Release（同组同日多 job 追加：已存在则复用）。
+          #    先以「头部 + 尾部」占位并创建，产物上传完成后④再重写完整 body ——
+          #    即使本 job 上传中途失败，页面也保留完整的组别说明。
+          cat "$BODY_HEAD" "$BODY_TAIL" > "$BODY"
           if gh release view "$WRT_RELEASE_TAG" >/dev/null 2>&1; then
             echo "Release 已存在（$WRT_RELEASE_TAG），追加产物"
           else
             gh release create "$WRT_RELEASE_TAG" --notes-file "$BODY"
           fi
 
-          # 单文件串行上传 + 失败重试（最多 5 次，间隔 5s），规避服务端断连
+          # 产物上传：单文件串行 + 失败重试（最多 5 次，间隔 5s），规避服务端断连
           for f in ./wrt/upload/*.*; do
             [ -f "$f" ] || continue
             attempt=0
@@ -941,6 +954,85 @@ jobs:
             done
           done
 
-          # body 以最后完成机型（本 job）为准，与旧 action 行为一致
-          gh release edit "$WRT_RELEASE_TAG" --notes-file "$BODY"
-          rm -f "$BODY"
+          # ④ 下载一览：从 Release 现有资产反向生成，按机型分节（含同组其他
+          #    job 已追加的产物）。资产名 → 机型 / 用途的映射见下方两个 case。
+          : > "$BODY_DL"
+          {
+            echo "## 📦 下载一览（按机型）"
+            echo
+            echo "> 文件命名：\`<设备>-<产品/方案>-<固件类型>.<扩展名>\`，与「用途」列对照选择即可。"
+            echo
+          } >> "$BODY_DL"
+
+          declare -A ROWS=()
+          while IFS=$'\t' read -r NAME SIZE URL; do
+            [ -n "${NAME:-}" ] || continue
+            case "$NAME" in
+              H5000M-*|Config-H5000M-*)        DEV=H5000M ;;
+              AP3000M-*|Config-AP3000M-*)      DEV=AP3000M ;;
+              X86-*|Config-X86-*|immortalwrt-x86-64*) DEV=X86 ;;
+              *)                               DEV=通用 ;;
+            esac
+            # 用途识别顺序即优先级：明确刷机类型 → rootfs / kernel（含
+            # rootfs.img.gz 等，必须先于 .img.gz / .iso 等扩展名兜底判断）→
+            # 安装镜像 / 虚拟盘 → 辅助文本
+            case "$NAME" in
+              *sysupgrade*)  USE="sysupgrade 升级包（保留配置）" ;;
+              *factory*)     USE="factory 全新刷机包" ;;
+              *initramfs*)   USE="initramfs 临时引导" ;;
+              *recovery*)    USE="recovery 救砖包" ;;
+              *rootfs*)      USE="rootfs 根文件系统" ;;
+              *kernel*)      USE="内核镜像" ;;
+              *-efi.iso)     USE="UEFI 安装镜像（光盘 / U 盘）" ;;
+              *.iso)         USE="BIOS/Legacy 安装镜像（光盘 / U 盘）" ;;
+              *-efi.vmdk)    USE="UEFI 虚拟盘（VMware）" ;;
+              *.vmdk)        USE="BIOS/Legacy 虚拟盘（VMware）" ;;
+              *-efi.img.gz)  USE="UEFI 磁盘镜像（balenaEtcher / dd 写入）" ;;
+              *.img.gz)      USE="BIOS/Legacy 磁盘镜像（balenaEtcher / dd 写入）" ;;
+              *-efi*)        USE="UEFI 镜像" ;;
+              *combined*)    USE="BIOS/Legacy 磁盘镜像" ;;
+              Config-*)      USE="编译配置（可复现）" ;;
+              *.manifest)    USE="内置插件清单" ;;
+              *)             USE="固件文件" ;;
+            esac
+            # 体积：≥1MB 显示 MB（一位小数），<1MB 显示 KB（manifest 等小文件）
+            if [ "$SIZE" -lt 1048576 ]; then
+              SZ="$(( SIZE / 1024 )) KB"
+            else
+              SZ="$(awk -v s="$SIZE" 'BEGIN{printf "%.1f", s/1048576}') MB"
+            fi
+            ROWS[$DEV]+="| [\`$NAME\`]($URL) | ${SZ} | ${USE} |"$'\n'
+          done < <(gh release view "$WRT_RELEASE_TAG" --json assets \
+                     --jq '.assets | sort_by(.name) | .[] | [.name, (.size | tostring), .downloadUrl] | @tsv')
+
+          for DEV in H5000M AP3000M X86 通用; do
+            [ -n "${ROWS[$DEV]:-}" ] || continue
+            case "$DEV" in
+              H5000M)  HEADING="H5000M（Hiveton 5G CPE · MT7987A）" ;;
+              AP3000M) HEADING="AP3000M（AirPi · MT7981B）" ;;
+              X86)     HEADING="X86（x86_64 虚拟机 / 软路由）" ;;
+              *)       HEADING="通用" ;;
+            esac
+            {
+              echo "### ${HEADING}"
+              echo
+              echo "| 文件 | 大小 | 用途 |"
+              echo "| :--- | ---: | :--- |"
+              printf '%s' "${ROWS[$DEV]}"
+              echo
+            } >> "$BODY_DL"
+          done
+
+          # ⑤ 组装完整 body 并更新；标题同步美化（Releases 列表页显示中文组名）
+          case "$WRT_TAG_GROUP" in
+            NetWiz)  TITLE="NetWiz 网络配置向导" ;;
+            MT5700)  TITLE="MT5700 模组方案" ;;
+            MT5700M) TITLE="MT5700M 模组方案" ;;
+            FM350)   TITLE="FM350 模组方案" ;;
+            自用)    TITLE="自用构建" ;;
+            BASE)    TITLE="基础构建" ;;
+            *)       TITLE="$WRT_TAG_GROUP" ;;
+          esac
+          cat "$BODY_HEAD" "$BODY_DL" "$BODY_TAIL" > "$BODY"
+          gh release edit "$WRT_RELEASE_TAG" --title "${TITLE} · ${WRT_RELEASE_TAG#*-}" --notes-file "$BODY"
+          rm -f "$BODY_HEAD" "$BODY_TAIL" "$BODY_DL" "$BODY"
