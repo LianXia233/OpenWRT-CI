@@ -11,7 +11,7 @@
 [![Build: GitHub Actions](https://img.shields.io/badge/Build-GitHub%20Actions-success?logo=githubactions&logoColor=white)](#)
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Portal%20Online-cyan?logo=githubpages&logoColor=white)](https://lianxia233.github.io/OpenWRT-CI/)
 
-*适配 Hiveton H5000M 5G CPE（MT7986 + MT5700M）、AirPi AP3000M（MT7981B）与通用 X86_64 架构设备，全系固件由 GitHub Actions 云端编译、自动发布*
+*适配 Hiveton H5000M 5G CPE（MT7987A + MT5700M）、AirPi AP3000M（MT7981B）与通用 X86_64 架构设备，全系固件由 GitHub Actions 云端编译、自动发布*
 *🌐 **在线固件下载工坊 / 文档官网**：[https://lianxia233.github.io/OpenWRT-CI/](https://lianxia233.github.io/OpenWRT-CI/)*
 
 </div>
@@ -66,7 +66,7 @@
 
 | 目标配置 | 硬件平台 / SoC | 适配机型 | 源码 | Wi-Fi | 镜像格式 |
 | :--- | :--- | :--- | :--- | :---: | :--- |
-| `H5000M-WIFI-YES` | MediaTek Filogic (MT7986) | Hiveton H5000M 5G CPE | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) (`owrt`) | ✅ | Sysupgrade / Factory |
+| `H5000M-WIFI-YES` | MediaTek Filogic (MT7987A) | Hiveton H5000M 5G CPE | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) (`owrt`) | ✅ | Sysupgrade / Factory |
 | `AP3000M` | MediaTek Filogic (MT7981B) | AirPi AP3000M | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) (`owrt`) | ✅ | Sysupgrade / Factory |
 | `X86` | 标准 x86_64 处理器 | 通用 PC / 工控机 / 软路由 | [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) (`master`) | — | ISO / EFI / GRUB / VMDK |
 
