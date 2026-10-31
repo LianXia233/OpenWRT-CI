@@ -77,7 +77,7 @@
       position: fixed;
       inset: 0;
       z-index: -2;
-      background-image: url('bg.jpg');
+      background-image: url('https://files.seeusercontent.com/2026/10/31/aE1a/145952531_p1.jpg');
       background-position: center 20%; /* Precision focus on character face and twin-tails */
       background-size: cover;
       background-repeat: no-repeat;
@@ -1331,9 +1331,176 @@
         gap: 0.85rem;
       }
     }
+  
+    /* 纯享壁纸模式 (Zen Mode) */
+    body.zen-mode .main-content-flow {
+      opacity: 0 !important;
+      pointer-events: none;
+      transform: scale(0.98);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+    body.zen-mode .bg-overlay-layer {
+      background: rgba(0, 0, 0, 0.02) !important;
+    }
+    body.zen-mode #zenExitHint {
+      display: flex !important;
+    }
+
+    /* 浮动壁纸控制面板 */
+    .wallpaper-control-panel {
+      position: fixed;
+      top: 76px;
+      right: 20px;
+      z-index: 200;
+      width: 320px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(15, 23, 42, 0.05);
+      padding: 18px;
+    }
+    .wallpaper-control-panel.hidden {
+      display: none !important;
+    }
+    @media (max-width: 640px) {
+      .wallpaper-control-panel {
+        left: 12px;
+        right: 12px;
+        width: auto;
+        top: 68px;
+      }
+    }
+
+    /* 优化 4 大保姆级刷机指南 Tab 在 PC 和手机端的排版 */
+    .tutorial-tabs {
+      background: #f1f5f9;
+      padding: 5px;
+      border-radius: 16px;
+      border: 1px solid rgba(226, 232, 240, 0.9);
+      margin-bottom: 1.5rem;
+    }
+    .tut-tab-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      min-height: 42px;
+      border-radius: 11px;
+      border: 1px solid transparent;
+      background: transparent;
+      font-weight: 600;
+      color: #475569;
+      cursor: pointer;
+      box-shadow: none;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .tut-tab-btn:hover {
+      background: rgba(255, 255, 255, 0.6);
+      color: #0f172a;
+      transform: none;
+    }
+    .tut-tab-btn.active {
+      background: #ffffff;
+      color: var(--md-sys-color-primary);
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.16), 0 1px 3px rgba(0, 0, 0, 0.05);
+      font-weight: 700;
+      border-color: rgba(2, 132, 199, 0.2);
+    }
+
+    @media (min-width: 768px) {
+      .tutorial-tabs {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        width: 100%;
+      }
+      .tut-tab-btn {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 767px) {
+      .tutorial-tabs {
+        display: flex;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        flex-wrap: nowrap;
+        gap: 6px;
+      }
+      .tutorial-tabs::-webkit-scrollbar {
+        display: none;
+      }
+      .tut-tab-btn {
+        flex-shrink: 0;
+        white-space: nowrap;
+        padding: 8px 16px;
+        font-size: 0.85rem;
+      }
+      .tut-scroll-hint {
+        display: flex !important;
+      }
+    }
+
+    .tut-scroll-hint {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #64748b;
+      margin-bottom: 12px;
+      padding: 0 4px;
+    }
+
   </style>
 </head>
 <body>
+
+  <!-- 纯享壁纸退出提示 (Zen Mode) -->
+  <div id="zenExitHint" style="display:none; position:fixed; inset:0; z-index:999; align-items:center; justify-content:center; cursor:pointer; background:rgba(0,0,0,0.1); backdrop-filter:blur(1px);" onclick="toggleZenMode()">
+    <div style="background:rgba(255,255,255,0.92); padding:12px 24px; border-radius:30px; display:flex; align-items:center; gap:10px; font-size:14px; font-weight:600; color:#0f172a; box-shadow:0 20px 40px rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.9);">
+      <span style="width:10px; height:10px; border-radius:50%; background:#0284c7;"></span>
+      🖼️ 正在纯享高清壁纸 · 单击屏幕任意处或按 ESC 恢复
+    </div>
+  </div>
+
+  <!-- 浮动壁纸控制面板 -->
+  <div id="wallpaperControlPanel" class="wallpaper-control-panel hidden">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding-bottom:12px; margin-bottom:12px; border-bottom:1px solid rgba(226,232,240,0.8);">
+      <div style="display:flex; align-items:center; gap:8px; font-weight:700; font-size:14px; color:#0f172a;">
+        <span>🎛️</span>
+        <span>壁纸透视与毛玻璃调节</span>
+      </div>
+      <button id="closeWallpaperPanel" style="border:none; background:transparent; font-size:20px; color:#94a3b8; cursor:pointer; line-height:1; padding:2px;">&times;</button>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#475569; margin-bottom:6px;">
+          <span>卡片透光度 (壁纸可见度)</span>
+          <span id="opacityValLabel" style="font-family:monospace; color:#0284c7; font-weight:700;">68%</span>
+        </div>
+        <input type="range" id="opacitySlider" min="40" max="96" value="68" style="width:100%; height:6px; accent-color:#0284c7; cursor:pointer;">
+        <div style="display:flex; justify-content:space-between; font-size:10px; color:#94a3b8; margin-top:4px;">
+          <span>超通透 (40%)</span>
+          <span>磨砂 (68%)</span>
+          <span>实白 (96%)</span>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#475569; margin-bottom:6px;">
+          <span>背景微虚化 (景深感)</span>
+          <span id="blurValLabel" style="font-family:monospace; color:#0284c7; font-weight:700;">0 px</span>
+        </div>
+        <input type="range" id="blurSlider" min="0" max="10" value="0" step="1" style="width:100%; height:6px; accent-color:#0284c7; cursor:pointer;">
+      </div>
+      <button onclick="toggleZenMode()" style="width:100%; padding:10px; border-radius:12px; background:linear-gradient(135deg, #0284c7, #6366f1); border:none; color:#ffffff; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 4px 12px rgba(2,132,199,0.25);">
+        <span>🖼️</span> 一键纯享全屏壁纸
+      </button>
+    </div>
+  </div>
+
 
   <!-- Fixed Wallpaper Layers -->
   <div class="bg-wallpaper-layer"></div>
@@ -1372,6 +1539,13 @@
       </ul>
 
       <div class="nav-actions">
+
+        <!-- 壁纸控制开关 -->
+        <button class="btn btn-secondary btn-sm" id="toggleWallpaperMenu" title="调节壁纸透度与毛玻璃">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+          <span class="hidden-xs">透视</span>
+        </button>
+
         <!-- Wallpaper Translucency Selector -->
         <div class="segmented-control" id="opacitySwitcher" style="box-shadow:var(--elevation-1);" title="调节卡片毛玻璃透光度">
           <button class="segment-btn" data-opacity="48">水漾 48%</button>
@@ -1828,6 +2002,10 @@
         </p>
       </div>
 
+      <div class="tut-scroll-hint">
+        <span>👈 左右滑动查看 4 大刷机指南 👉</span>
+        <span style="font-family:monospace; font-size:10px; background:#e2e8f0; padding:1px 6px; border-radius:4px;">4 Tabs</span>
+      </div>
       <div class="tutorial-tabs">
         <button class="tut-tab-btn active" data-tab="tab-sysupgrade">网页在线升级 (Sysupgrade)</button>
         <button class="tut-tab-btn" data-tab="tab-uboot">H5000M / AP3000M U-Boot 救砖</button>
@@ -2437,7 +2615,10 @@
       `
     };
 
-    function renderTutorial(tabId) {
+    function renderTutorial(tabId, el) {
+      if (el && el.scrollIntoView) {
+        el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
       const container = document.getElementById('tutorialContainer');
       container.innerHTML = TUTORIAL_DATA[tabId] || '';
     }
@@ -2550,6 +2731,69 @@
       renderTutorial('tab-sysupgrade');
       fetchReleases();
     });
-  </script>
+  
+    // --- Wallpaper Control Panel Logic ---
+    const toggleWallpaperMenu = document.getElementById('toggleWallpaperMenu');
+    const wallpaperControlPanel = document.getElementById('wallpaperControlPanel');
+    const closeWallpaperPanel = document.getElementById('closeWallpaperPanel');
+    const opacitySlider = document.getElementById('opacitySlider');
+    const opacityValLabel = document.getElementById('opacityValLabel');
+    const blurSlider = document.getElementById('blurSlider');
+    const blurValLabel = document.getElementById('blurValLabel');
+
+    if (toggleWallpaperMenu && wallpaperControlPanel) {
+      toggleWallpaperMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        wallpaperControlPanel.classList.toggle('hidden');
+      });
+      if (closeWallpaperPanel) {
+        closeWallpaperPanel.addEventListener('click', () => {
+          wallpaperControlPanel.classList.add('hidden');
+        });
+      }
+      document.addEventListener('click', (e) => {
+        if (!wallpaperControlPanel.contains(e.target) && e.target !== toggleWallpaperMenu) {
+          wallpaperControlPanel.classList.add('hidden');
+        }
+      });
+    }
+
+    if (opacitySlider) {
+      opacitySlider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        const dec = (val / 100).toFixed(2);
+        document.documentElement.style.setProperty('--md-sys-color-surface', `rgba(255, 255, 255, ${dec})`);
+        document.documentElement.style.setProperty('--md-sys-color-card', `rgba(255, 255, 255, ${dec})`);
+        opacityValLabel.textContent = `${val}%`;
+      });
+    }
+
+    if (blurSlider) {
+      blurSlider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        const layer = document.querySelector('.bg-wallpaper-layer');
+        if (layer) layer.style.filter = `blur(${val}px)`;
+        blurValLabel.textContent = `${val} px`;
+      });
+    }
+
+    // --- Zen Mode Toggle ---
+    function toggleZenMode() {
+      document.body.classList.toggle('zen-mode');
+      if (wallpaperControlPanel) wallpaperControlPanel.classList.add('hidden');
+    }
+
+    const viewWallpaperBtn = document.getElementById('viewWallpaperBtn');
+    if (viewWallpaperBtn) {
+      viewWallpaperBtn.addEventListener('click', toggleZenMode);
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.body.classList.contains('zen-mode')) {
+        document.body.classList.remove('zen-mode');
+      }
+    });
+
+</script>
 </body>
 </html>
