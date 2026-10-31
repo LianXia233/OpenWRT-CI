@@ -1,4 +1,57 @@
 # 更新日志
+## [2026-10-31] 默认主题 vantage 补齐：Aurora 保留可选 + 修复默认样式不生效
+
+### 背景
+
+本仓库此前已把默认主题切到 `anothaDev/luci-theme-vantage`（7 个工作流的
+`WRT_THEME: vantage`、`Packages.sh` 的 vantage 克隆、`Settings.sh` 的
+`${WRT_THEME:-vantage}` 兜底），但保留 Aurora 与"真的生效"这两件事没做全：
+
+1. `Settings.sh` 仍按上游写法无条件写三行
+   `luci-theme-$WRT_THEME` / `luci-app-$WRT_THEME` / `luci-app-$WRT_THEME-config`。
+   对 vantage，第三行是并不存在的 `luci-app-vantage-config`，defconfig 阶段被
+   静默丢弃——`.config` 与真实产物不一致，排障时无法区分"没编进去"与"本来没有"。
+2. Aurora 只是被 `Packages.sh` 克隆下来，`.config` 里没有任何 `luci-theme-aurora`，
+   集合依赖又已换成 vantage，因此 Aurora **根本没编进固件**，与"保留但不默认"
+   的预期相反。
+3. 默认样式不由集合依赖决定。/etc/config/luci 的 `luci.main.mediaurlbase` 是
+   conffile，sysupgrade 保留旧配置时仍指向 `/luci-static/aurora`；而 Aurora 已不在
+   固件里，该路径直接是死链，LuCI 只能靠自身的主题回退逻辑兜底，落到哪个主题
+   取决于 `/www/luci-static` 的枚举顺序。
+
+### 变更
+
+- `Scripts/Settings.sh`：主题配套包改为白名单映射（aurora →
+  `luci-app-aurora-config`、vantage → `luci-app-vantage`、argon →
+  `luci-app-argon-config`），不再盲拼 `-config` 后缀；`WRT_THEME != aurora` 时
+  追加 `luci-theme-aurora` + `luci-app-aurora-config`，让 Aurora 随固件编入、
+  在「系统 → 语言和界面」可切换；新增「默认主题种子」段，构建期生成
+  `files/etc/uci-defaults/40-luci-default-theme`（字典序排在 `30_luci-theme-*`
+  之后），首启动把 `mediaurlbase` 指向 `/luci-static/$WRT_THEME`，并用
+  `luci.main.theme_seeded` 记录已种子的默认主题：同一代主题只种一次，用户
+  自选主题不会被每次升级重置，日后更换默认主题时该值不等、种子重新生效。
+  主题目录不存在（未编入）时脚本直接退出，不留坏路径。
+- `Scripts/Handles.sh`：新增 vantage 进度条标签字体修复
+  （`anothaDev/luci-theme-vantage#52`，与上游 CI 同一 sed）：把
+  `.cbi-progressbar::before` 的 `font: 500 var(--fs-micro)/1.2 var(--mono)` 改为
+  `font: inherit; line-height: normal`，避免取值标签用等宽字体在窄屏/中文下被截断。
+  补丁前统计目标串出现次数，命中与否都写日志，上游自行修正后自动跳过。
+
+工作流的 `WRT_THEME: vantage`、`Packages.sh` 的四个主题源均无需改动。
+
+### 验证
+
+- `Settings.sh` 主题段在 `vantage` / `aurora` / `argon` 三组取值下隔离实跑：
+  vantage → `luci-theme-vantage` + `luci-app-vantage` + `luci-theme-aurora` +
+  `luci-app-aurora-config`；aurora → 仅主题 + 配置 App（不重复叠加）；
+  argon → `luci-theme-argon` + `luci-app-argon-config` + aurora 两项。
+- 种子脚本用桩 `uci` + 临时 `www/luci-static` 复现三种情形：未种子 → 依次写
+  `luci.themes.<Name>` / `mediaurlbase` / `theme_seeded` 并 commit；已种子 →
+  零写操作；主题未编入 → 零写操作。
+- vantage CSS 补丁对上游 v1.0.11 的 `vantage.css` dry-run：仅目标 `font:` 一行
+  被替换，其余零改动。
+- `bash -n` 两个脚本通过；改动文件全 LF。
+
 ## [2026-10-30] 修复 homeproxy ucode 模块导出缺失（hasForceProxyRules）
 
 ### 背景
