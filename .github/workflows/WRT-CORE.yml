@@ -608,19 +608,26 @@ jobs:
             exit 1
           fi
 
-          # 预编译资产必须已在 dl/ 就位：Build/Prepare 见到文件会跳过 curl，
-          # 所以这里同时验证「取包阶段的版本对齐确实落到了包 Makefile 上」。
+          # 两种模式的前置条件不同：源码模式看「Rust 工程是否就位且 Makefile
+          # 支持本地产物优先」，预编译模式看「Release 资产是否已落到 dl/」。
           # 用 glob 而不是重算 triple，避免与脚本里的架构推导逻辑分叉。
-          # 后缀必须是 -openwrt：无后缀那份是自带 WebUI 的通用版，取错等于
-          # 把已从 OpenWrt 产物里移除的 WebUI 又塞回路由器。
-          TG_ASSET=$(ls ./dl/taygedo-rs-*-openwrt.tar.gz 2>/dev/null | head -n1 || true)
-          if [ -z "$TG_ASSET" ]; then
-            echo "::error::dl/ 中没有 taygedo-rs-*-openwrt.tar.gz：预编译二进制未就位，固件会缺少 /usr/bin/taygedo-rs"
-            ls -l ./dl/ 2>/dev/null | grep -i taygedo || echo "（dl/ 中无任何 taygedo 相关文件）"
-            exit 1
+          if [ -f ./package/luci-app-taygedo/rust/Cargo.toml ]; then
+            if ! grep -q 'TAYGEDO_LOCAL_BIN' ./package/luci-app-taygedo/Makefile; then
+              echo "::error::包 Makefile 未声明 TAYGEDO_LOCAL_BIN：本地产物会被忽略，源码编译白做"
+              exit 1
+            fi
+            echo "luci-app-taygedo 已就位、已被 .config 选中，Rust 工程在 rust/ 就绪（源码编译模式）"
+          else
+            # 后缀必须是 -openwrt：无后缀那份是自带 WebUI 的通用版，取错等于
+            # 把已从 OpenWrt 产物里移除的 WebUI 又塞回路由器。
+            TG_ASSET=$(ls ./dl/taygedo-rs-*-openwrt.tar.gz 2>/dev/null | head -n1 || true)
+            if [ -z "$TG_ASSET" ]; then
+              echo "::error::dl/ 中没有 taygedo-rs-*-openwrt.tar.gz：预编译二进制未就位，固件会缺少 /usr/bin/taygedo-rs"
+              ls -l ./dl/ 2>/dev/null | grep -i taygedo || echo "（dl/ 中无任何 taygedo 相关文件）"
+              exit 1
+            fi
+            echo "luci-app-taygedo 已就位、已被 .config 选中，预编译资产 $(basename "$TG_ASSET") 在 dl/ 就绪（预编译模式）"
           fi
-
-          echo "luci-app-taygedo 已就位、已被 .config 选中，预编译资产 $(basename "$TG_ASSET") 在 dl/ 就绪"
 
       - name: 预下载源码包
         if: env.WRT_TEST != 'true'
@@ -725,6 +732,40 @@ jobs:
             sed -i '/^AIRPI_PREBUILT:=1$/d; /^AIRPI_PREBUILT_BIN:=/d' "$PKG_DIR/Makefile"
             rm -rf "$PREBUILT_DIR"
           fi
+
+      # luci-app-taygedo：从源码交叉编译 Rust 后端（openwrt feature 形态）。
+      #
+      # 为什么放在这里而不是「导入插件」阶段：
+      #   make toolchain/install 要求 .config 已生成（即 defconfig 之后），而
+      #   固件编译本身也要这份工具链，提前构建只是调换顺序、不增加总时长；
+      #   放在 defconfig 之前反而会因为不知道目标架构而无法定位 triple。
+      #
+      # 与上面「预编译 AirPi Rust 后端」是同一套思路：宿主机 rustup + OpenWrt
+      # staging_dir 里自带的 <arch>-openwrt-linux-musl-gcc 作链接器。区别在于
+      # taygedo 依赖 ring（含 C 与汇编），脚本内置 cross（Docker）兜底，避免
+      # rustc 自带 musl 与 OpenWrt sysroot 的差异把整条固件构建拖死。
+      #
+      # 产物落在 package/luci-app-taygedo/local/taygedo-rs，包 Makefile 见到
+      # 即跳过 Release 下载，install 段不变。
+      - name: 编译 luci-app-taygedo Rust 后端（源码交叉编译）
+        if: env.WRT_TAYGEDO == 'true' && env.WRT_TEST != 'true'
+        run: |
+          cd ./wrt/
+
+          if [ ! -f "$GITHUB_WORKSPACE/Scripts/Build-Taygedo.sh" ]; then
+            echo "::error::Scripts/Build-Taygedo.sh 缺失：源码编译模式无法执行"
+            exit 1
+          fi
+
+          $GITHUB_WORKSPACE/Scripts/Build-Taygedo.sh ./package/luci-app-taygedo
+
+          # 二次确认：脚本退出码为 0 但产物缺失同样视为失败，避免「编译全绿、
+          # 固件里没有 taygedo-rs」的静默降级。
+          if [ ! -s ./package/luci-app-taygedo/local/taygedo-rs ]; then
+            echo "::error::package/luci-app-taygedo/local/taygedo-rs 不存在：源码编译未产出二进制"
+            exit 1
+          fi
+          ls -l ./package/luci-app-taygedo/local/
 
       - name: 编译固件
         if: env.WRT_TEST != 'true'
