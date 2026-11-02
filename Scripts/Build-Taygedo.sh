@@ -126,9 +126,14 @@ fi
 if [ -z "$LINKER" ] && [ "${TAYGEDO_SKIP_TOOLCHAIN:-0}" != "1" ]; then
 	# staging_dir 里还没有交叉 gcc：先构建工具链。固件编译本来也要这一步，
 	# 这里只是把顺序提前，命中缓存时几秒完成。
-	say "staging_dir 未找到 ${ARCH} musl 交叉 gcc，先执行 make toolchain/install"
-	make toolchain/install -j"$(nproc)" >/dev/null 2>&1 \
-		|| warn "make toolchain/install 返回非零（继续尝试探测）"
+	# 日志落盘而不是 /dev/null：工具链构建失败时，只看一句 "返回非零" 无法
+	# 定位（缺依赖 / 磁盘满 / 上游补丁冲突），必须把尾部输出带出来。
+	TC_LOG="$(mktemp -t taygedo-toolchain.XXXXXX.log)"
+	say "staging_dir 未找到 ${ARCH} musl 交叉 gcc，先执行 make toolchain/install（日志 ${TC_LOG}）"
+	if ! make toolchain/install -j"$(nproc)" > "$TC_LOG" 2>&1; then
+		warn "make toolchain/install 返回非零，尾部输出："
+		tail -n 25 "$TC_LOG" || true
+	fi
 	LINKER="$(find_linker)"
 fi
 
@@ -182,6 +187,10 @@ build_with_cross() {
 		}
 	fi
 	say "回退 cross（Docker 容器内交叉编译）"
+	# 清掉宿主机路径设置的一整套 CC/AR/LINKER：cross 走自己的镜像工具链，
+	# 宿主机的 OpenWrt gcc 路径在容器里不存在，留着只会让 cc crate 直接报
+	# "failed to find tool"。
+	unset CC AR "CC_${TRIPLE_U}" "AR_${TRIPLE_U}" "CARGO_TARGET_${TRIPLE_UC}_LINKER" "CFLAGS_${TRIPLE_U}"
 	[ -d "$SRC_DIR" ] || die "工程目录不存在：${SRC_DIR}"
 	cd "$SRC_DIR"
 	cross build --release --locked --target "$TRIPLE" \
