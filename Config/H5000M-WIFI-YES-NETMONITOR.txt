@@ -63,15 +63,18 @@ CONFIG_PACKAGE_ucode-mod-uloop=y
 #
 # 包来源：https://github.com/LianXia233/taygedo-CI（分支 main）。
 # 构成：LuCI JS 前端（服务 → 塔吉多签到）+ Rust 后端 /usr/bin/taygedo-rs。
-# 后端为上游预编译 musl 静态二进制：包 Makefile 的 Build/Prepare 阶段从
-# GitHub Release 下载 taygedo-rs-aarch64-unknown-linux-musl-openwrt.tar.gz
-# （aarch64_cortex-a53），不经 OpenWrt rust/host 源码构建，耗时可控。
 #
-# 导入由 Scripts/Packages-Taygedo.sh 负责（配置驱动：本文件写了下面这行就
-# 会导入，与机型名无关）。该脚本会在取包阶段校验资产可达性并做版本对齐，
-# 因此上游改版本号后本文件无需同步 —— 只需保证上游确实发布了
-# *-openwrt.tar.gz（双形态拆分的 OpenWrt 专用产物；无后缀那份自带 WebUI，
-# 装进路由器等于把已移除的 WebUI 又塞回去，脚本会显式拒绝）。
+# 后端**从源码交叉编译**（不经 OpenWrt 的 lang/rust feed，避免连 rustc 一起
+# 编 1.5~3 小时）：
+#   1. defconfig 之前，Scripts/Packages-Taygedo.sh 把包与 Rust 工程放进
+#      package/luci-app-taygedo/（Rust 工程在 rust/）；
+#   2. defconfig 之后，Scripts/Build-Taygedo.sh 用宿主机 rustup +
+#      OpenWrt staging_dir 的 aarch64-openwrt-linux-musl-gcc 编译
+#      `--no-default-features --features openwrt`，产物落到包目录 local/。
+#
+# 导入由配置文件驱动（本文件写了下面这行就会导入，与机型名无关）。
+# 包 Makefile 见到 local/taygedo-rs 即跳过 GitHub Release 下载；只有源码
+# 编译不可用时才回退预编译资产（TAYGEDO_PREBUILT=1）。
 #
 # DEPENDS: +ca-bundle +luci-base +curl（luci-base 已在 GENERAL.txt 选中；
 # ca-bundle 在 GENERAL.txt 中被注释，故此处显式选中）。

@@ -1,30 +1,33 @@
 #!/bin/bash
 # SPDX-License-Identifier: MIT
-# luci-app-taygedo 取包：从 LianXia233/taygedo-CI 提取 OpenWrt 包，并把
-# 「包内声明的 Release 资产」与「上游实际已发布的资产」对齐。
+# luci-app-taygedo 取包：从 LianXia233/taygedo-CI 提取 OpenWrt 包与 Rust 源码。
 #
 # 用法（在 OpenWrt 源码树的 package/ 目录下执行）：
 #   $GITHUB_WORKSPACE/Scripts/Packages-Taygedo.sh
 #
 # 环境变量（均可选）：
-#   TAYGEDO_REPO     上游仓库，默认 LianXia233/taygedo-CI
-#   TAYGEDO_BRANCH   上游分支，默认 main
-#   TAYGEDO_ARCH     目标架构，仅 x86_64 / aarch64；留空按 WRT_TARGET 推导
-#   TAYGEDO_TAG      强制指定 Release tag（vX.Y.Z 或 nightly），跳过自动对齐
+#   TAYGEDO_REPO      上游仓库，默认 LianXia233/taygedo-CI
+#   TAYGEDO_BRANCH    上游分支/tag，默认 main
+#   TAYGEDO_ARCH      目标架构，仅 x86_64 / aarch64；留空按 WRT_TARGET 推导
+#   TAYGEDO_PREBUILT  1 = 走预编译 Release 下载（旧行为）；默认 0 = 源码编译
+#   TAYGEDO_TAG       预编译模式下强制指定 Release tag
 #
-# ── 为什么要有这个脚本（而不是把逻辑塞进 Packages-NetMonitor.sh）─────────────
+# ── 两种模式 ────────────────────────────────────────────────────────────────
+# 源码编译（默认）：把仓库的 Rust 工程复制到包目录 src/，随后由
+#   Scripts/Build-Taygedo.sh 在固件编译前交叉编译，产物落到包目录 local/。
+#   优点：与固件同工具链、同 musl、同 feature，不依赖跨仓库发版节奏。
+#
+# 预编译下载（TAYGEDO_PREBUILT=1）：保持原逻辑，把 Release 里的
+#   `taygedo-rs-<triple>-openwrt.tar.gz` 预下载到 dl/。
+#   作为源码编译不可用时的回退（例如 runner 缺 Docker 且工具链异常）。
+#
+# ── 为什么取包要独立成脚本 ──────────────────────────────────────────────────
 # taygedo 早期只服务 H5000M 自用配置，取包逻辑与 luci-app-netmonitor 共处
 # 一个脚本、由 contains(WRT_CONFIG,'NETMONITOR') 触发，并把资产名硬编码为
-# `taygedo-rs-aarch64-unknown-linux-musl.tar.gz`。
-#
-# 上游 2026-11-03 起把 Rust 后端拆成 webui / openwrt 两个**编译期互斥**的
-# 产物，OpenWrt 侧必须用 `*-openwrt.tar.gz`；无后缀的那份是自带 WebUI 的
-# 通用版，装进路由器等于把已删掉的 WebUI 又塞回去。硬编码旧名会让取包
-# 静默下错文件（或 404），所以这里改成：从包 Makefile 的 TAYGEDO_ARCHIVE
-# 模板解析真实资产名，再拿它去探测 Release。
-#
-# 同时改为**配置驱动**：任何 Config/*.txt 只要写 CONFIG_PACKAGE_luci-app-taygedo=y
-# 就会导入，不再要求机型名里带 NETMONITOR。
+# `taygedo-rs-aarch64-unknown-linux-musl.tar.gz`。上游把 Rust 后端拆成
+# webui / openwrt 两个编译期互斥产物后，无后缀的那份是自带 WebUI 的通用版，
+# 装进路由器等于把已删掉的 WebUI 又塞回去，所以必须按后缀区分。现在改为
+# **配置驱动**：任何 Config/*.txt 写了 CONFIG_PACKAGE_luci-app-taygedo=y 就导入。
 set -euo pipefail
 
 PKG="luci-app-taygedo"
@@ -32,6 +35,7 @@ REPO="${TAYGEDO_REPO:-LianXia233/taygedo-CI}"
 BRANCH="${TAYGEDO_BRANCH:-main}"
 UPSTREAM_DIR=".${PKG}-upstream"
 MK="./${PKG}/Makefile"
+MODE="${TAYGEDO_PREBUILT:-0}"
 
 say() { echo "==> $*"; }
 die() { echo "::error::$*" >&2; exit 1; }
@@ -39,9 +43,9 @@ die() { echo "::error::$*" >&2; exit 1; }
 # ===========================================================================
 # 0) 目标架构 → Rust musl triple
 # ===========================================================================
-# 上游 Makefile 只映射 x86_64 与 aarch64 两个 $(ARCH)（见其架构映射注释），
-# 其余架构在包内 Build/Prepare 才会 fail-fast。这里提前判定，让「架构不支持」
-# 在取包阶段就带着清晰的 triple 说明失败，而不是等到固件编译中期。
+# 上游 Makefile 只映射 x86_64 / aarch64；其余架构在预编译路径下包内
+# Build/Prepare 会 fail-fast。这里提前判定，让「架构不支持」在取包阶段就带着
+# 清晰的 triple 说明失败，而不是等到固件编译中期。
 TG_ARCH="${TAYGEDO_ARCH:-}"
 if [ -z "$TG_ARCH" ]; then
 	case "${WRT_TARGET:-}" in
@@ -66,7 +70,7 @@ fi
 case "$TG_ARCH" in
 	x86_64)  TG_TRIPLE="x86_64-unknown-linux-musl" ;;
 	aarch64) TG_TRIPLE="aarch64-unknown-linux-musl" ;;
-	*) die "${PKG}: 不支持的目标架构 '${TG_ARCH}'（上游仅产出 x86_64 / aarch64 的 musl 预编译二进制）" ;;
+	*) die "${PKG}: 不支持的目标架构 '${TG_ARCH}'（上游仅支持 x86_64 / aarch64 的 musl 构建）" ;;
 esac
 say "目标架构 ${TG_ARCH} → ${TG_TRIPLE}"
 
@@ -78,6 +82,8 @@ rm -rf "./${PKG}" "./${UPSTREAM_DIR}"
 git clone --depth=1 --single-branch --branch "${BRANCH}" \
 	"https://github.com/${REPO}.git" "./${UPSTREAM_DIR}"
 
+SRC_REV="$(git -C "./${UPSTREAM_DIR}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+
 # 布局断言：上游若调整 monorepo 结构，显式失败而不是产出缺文件的包
 if [ ! -d "./${UPSTREAM_DIR}/openwrt/${PKG}" ]; then
 	echo "::error::${UPSTREAM_DIR}/openwrt/${PKG} 不存在：上游仓库布局可能已变更"
@@ -85,15 +91,13 @@ if [ ! -d "./${UPSTREAM_DIR}/openwrt/${PKG}" ]; then
 	exit 1
 fi
 mv "./${UPSTREAM_DIR}/openwrt/${PKG}" "./${PKG}"
-rm -rf "./${UPSTREAM_DIR}"
 
 [ -f "$MK" ] || die "${MK} 不存在：期望的 taygedo Makefile 未就位"
 
 # ===========================================================================
-# 2) Makefile 自检（防上游回归）
+# 2) Makefile 自检（防上游回归，两种模式都做）
 # ===========================================================================
-# 以下四项均为历史上真实踩过的坑（详见 Packages-NetMonitor.sh 旧注释与上游
-# v0.5.1 修复记录），上游已原生修复，这里只做回归守卫：
+# 以下四项均为历史上真实踩过的坑，上游已原生修复，这里只做回归守卫：
 #   a) CONFIG_ARCH —— 包上下文里该变量为空，分支全落空会下错架构；
 #   b) download.pl —— 参数签名不匹配，缺参直接 exit 255；
 #   c) $(TARGET_STRIP) —— 宿主执行目标架构 ELF，报 cannot execute binary file；
@@ -112,10 +116,55 @@ if grep -E '^[[:space:]]*[^#].*\$\(error' "$MK"; then
 	die "${MK} 含解析期 \$(error) 分支：会导致元数据扫描丢弃本包、.config 未选中"
 fi
 
-# e) 新增守卫：OpenWrt 形态必须是 -openwrt 后缀产物
-#    上游双形态拆分后，无后缀的 taygedo-rs-<triple>.tar.gz 是 **webui** 形态
-#    （自带首页/登录/改密/静态资源）。下错文件不会编译失败，只会把本应被
-#    移除的 WebUI 悄悄带回路由器 —— 这是最危险的一类回归，必须显式拦截。
+# ===========================================================================
+# 3) 源码编译模式：落位 Rust 工程
+# ===========================================================================
+if [ "$MODE" != "1" ]; then
+	# Makefile 必须支持「本地产物优先」，否则脚本白编：二进制放好了但包仍然
+	# 去下载 Release，等于源码编译没生效且没有任何报错。
+	grep -q 'TAYGEDO_LOCAL_BIN' "$MK" \
+		|| die "${MK} 未声明 TAYGEDO_LOCAL_BIN：上游 Makefile 尚不支持本地产物优先（源码编译模式无法生效）。
+  可临时改用预编译模式：TAYGEDO_PREBUILT=1"
+
+	for F in Cargo.toml Cargo.lock; do
+		[ -f "./${UPSTREAM_DIR}/${F}" ] || die "上游缺少 ${F}：无法源码编译"
+	done
+	[ -d "./${UPSTREAM_DIR}/src" ] || die "上游缺少 src/：无法源码编译"
+
+	# 目录名必须是 rust/ 而不是 src/：Rust 工程自己就有 src/，若把
+	# Cargo.toml 和它平铺到包目录的 src/ 下，`path = "src/main.rs"` 会解析成
+	# `<pkg>/src/src/main.rs` 而实际文件在 `<pkg>/src/main.rs`，cargo 报
+	# "couldn't read src/main.rs" —— 目录层级一错，整个编译直接失败。
+	RUST_DIR="./${PKG}/rust"
+	say "源码编译模式：复制 Rust 工程 → ${PKG}/rust"
+	mkdir -p "$RUST_DIR"
+	cp -a "./${UPSTREAM_DIR}/Cargo.toml" "./${UPSTREAM_DIR}/Cargo.lock" "$RUST_DIR/"
+	cp -a "./${UPSTREAM_DIR}/src" "$RUST_DIR/src"
+	[ -d "./${UPSTREAM_DIR}/.cargo" ] && cp -a "./${UPSTREAM_DIR}/.cargo" "$RUST_DIR/.cargo"
+	# static/ 只在 webui feature 下被 include_str! 引用，openwrt 形态不会展开；
+	# 仍一并复制，避免上游把某个资源共享到两种形态时编译期缺文件。
+	[ -d "./${UPSTREAM_DIR}/static" ] && cp -a "./${UPSTREAM_DIR}/static" "$RUST_DIR/static"
+	[ -f "./${UPSTREAM_DIR}/LICENSE" ] && cp -a "./${UPSTREAM_DIR}/LICENSE" "$RUST_DIR/LICENSE"
+	printf '%s\n' "$SRC_REV" > "$RUST_DIR/.taygedo-src-rev"
+
+	rm -rf "./${UPSTREAM_DIR}"
+
+	# 源码变更后旧产物必须失效：Build-Taygedo.sh 靠 BUILD-INFO 里的 src_rev
+	# 判断复用，这里顺手清掉本地二进制，避免「改了代码仍打旧包」。
+	rm -rf "./${PKG}/local"
+
+	say "工程就位：$(cd "$RUST_DIR" && ls | tr '\n' ' ')"
+else
+
+# ===========================================================================
+# 4) 预编译模式：Release 资产对齐 + 预下载
+# ===========================================================================
+rm -rf "./${PKG}/local" "./${PKG}/rust"
+
+# e) OpenWrt 形态必须是 -openwrt 后缀产物
+#    无后缀的 taygedo-rs-<triple>.tar.gz 是 webui 形态（自带首页/登录/改密/
+#    静态资源）。下错文件不会编译失败，只会把本应被移除的 WebUI 悄悄带回
+#    路由器 —— 最危险的一类回归，必须显式拦截。
 TG_ARCHIVE_TPL=$(sed -n 's/^[[:space:]]*TAYGEDO_ARCHIVE:=[[:space:]]*\(.*\)$/\1/p' "$MK" | head -n1)
 if [ -z "$TG_ARCHIVE_TPL" ]; then
 	die "${MK} 未声明 TAYGEDO_ARCHIVE：无法解析预编译资产名"
@@ -146,61 +195,58 @@ TG_REPO_URL=$(sed -n 's/^[[:space:]]*TAYGEDO_REPO:=[[:space:]]*\([^[:space:]]*\)
 CUR_VER=$(sed -n 's/^[[:space:]]*PKG_VERSION:=[[:space:]]*\([0-9][0-9.]*\).*/\1/p' "$MK" | head -n1)
 [ -n "$CUR_VER" ] || die "${MK} 未声明 PKG_VERSION"
 
-# ===========================================================================
-# 3) Release 版本对齐
-# ===========================================================================
 # 背景：上游先 bump PKG_VERSION 再发 tag 是常态，存在「代码版本领先于实际
-# Release」的时间窗；反过来（本次）也会出现「tag 已发但资产是旧命名」——
-# v0.7.1 发布于双形态拆分之前，Release 里只有无后缀的通用版 tar.gz。
-# 两种情况都会让 Build/Prepare 的 curl 在深层编译期报
+# Release」的时间窗；反过来也会出现「tag 已发但资产是旧命名」。两种情况都会让
+# Build/Prepare 的 curl 在深层编译期报
 #   make[3]: [.../.prepared_...] Error 22   （curl 22 = HTTP 404）
 # 信息晦涩且要等几十分钟才暴露。这里把探测提前到取包阶段。
-probe() { curl -fsSIL -o /dev/null --max-time 20 "$1" >/dev/null 2>&1; }
+#
+# 实现方式：**一次性拉 Release 列表，在本地按 assets 名字匹配**，而不是对每个
+# 候选 tag 发 HEAD。实测 GitHub 对「不存在的 release 资产」并不稳定返回 404，
+# 常见表现是连接挂起直到超时（curl exit 28）；HEAD 做否定判断既慢又不可靠。
 asset_url() { printf '%s/releases/download/%s/%s' "$TG_REPO_URL" "$1" "$TG_ARCHIVE"; }
 
-TAG="${TAYGEDO_TAG:-v${CUR_VER}}"
-if probe "$(asset_url "$TAG")"; then
-	say "Release 资产可达：${TAG}/${TG_ARCHIVE}"
-else
-	say "Release ${TAG} 无 ${TG_ARCHIVE}，改为按已发布资产反查可用 tag"
+API="https://api.github.com/repos/${REPO}/releases?per_page=100"
+# 鉴权说明：Actions 里的 env GITHUB_TOKEN 是**当前仓库**的 installation token，
+# 拿它去调另一个仓库的 API 会 404/403。因此这里默认匿名访问（公开仓库的
+# Release 列表匿名可读，单次构建只调一次）。若 runner IP 被共享限流，可在
+# 仓库 Secrets 里配 TAYGEDO_TOKEN（对 taygedo-CI 只读的 PAT）提额。
+AUTH=()
+if [ -n "${TAYGEDO_TOKEN:-}" ]; then
+	AUTH=(-H "Authorization: Bearer ${TAYGEDO_TOKEN}")
+fi
 
-	API="https://api.github.com/repos/${REPO}/releases?per_page=100"
-	# 鉴权说明（这里踩过一次坑）：
-	#   Actions 里的 env GITHUB_TOKEN 是**当前仓库**的 installation token，
-	#   拿它去调另一个仓库（taygedo-CI）的 API 会 404/403 —— 不是权限不够，
-	#   而是它对目标仓库根本不可见。因此这里**默认匿名访问**（公开仓库的
-	#   Release 列表匿名可读，单次构建只调一次，60 次/小时的额度足够）。
-	#   若 runner IP 被共享限流，可在仓库 Secrets 里配 TAYGEDO_TOKEN（对
-	#   taygedo-CI 有只读权限的 PAT）来提额，无需改脚本。
-	AUTH=()
-	if [ -n "${TAYGEDO_TOKEN:-}" ]; then
-		AUTH=(-H "Authorization: Bearer ${TAYGEDO_TOKEN}")
-	fi
+if [ -n "${TAYGEDO_TAG:-}" ]; then
+	TAG="$TAYGEDO_TAG"
+	say "使用显式指定的 tag：${TAG}"
+else
 	JSON=$(curl -fsSL --retry 3 --max-time 40 "${AUTH[@]}" \
 		-H "Accept: application/vnd.github+json" "$API") \
 		|| die "${PKG}: 无法读取 ${REPO} 的 Release 列表（网络或 GitHub 匿名限流）。
-  可在仓库 Secrets 配置 TAYGEDO_TOKEN（对 ${REPO} 有只读权限的 PAT）后重试。"
+  可在仓库 Secrets 配置 TAYGEDO_TOKEN（对 ${REPO} 有只读权限的 PAT）后重试，
+  或用 TAYGEDO_TAG=<tag> 直接指定。"
 
-	# 只认「确实带目标资产」的 tag：单纯按时间取最新 tag 会挑到没有该架构
-	# 产物的构建（例如只出了 x86_64），仍然 404。
-	FOUND_TAG=""
-	while IFS= read -r T; do
-		[ -n "$T" ] || continue
-		if probe "$(asset_url "$T")"; then
-			FOUND_TAG="$T"
-			break
-		fi
-	done < <(printf '%s' "$JSON" | jq -r --arg a "$TG_ARCHIVE" \
-		'.[] | select([.assets[]?.name] | index($a)) | .tag_name')
+	# 匹配规则：优先「包内声明的版本 tag」，否则取列表中最新的、确实带该资产
+	# 的 tag。只认带目标资产的 release —— 单纯按时间取最新 tag 会挑到没有该
+	# 架构产物的构建（例如只出了 x86_64），仍然 404。
+	TAG=$(printf '%s' "$JSON" | jq -r --arg a "$TG_ARCHIVE" --arg pref "v${CUR_VER}" '
+		[ .[] | select([.assets[]?.name] | index($a)) ] as $hits
+		| ($hits | map(.tag_name)) as $tags
+		| if ($tags | index($pref)) then $pref
+		  elif ($tags | length) > 0 then $tags[0]
+		  else "" end')
 
-	[ -n "$FOUND_TAG" ] || die "${PKG}: ${REPO} 的任何 Release 都不含 ${TG_ARCHIVE}。
-  上游很可能尚未在双形态拆分后重新发版。处理方式（任选其一）：
-    1) 在 ${REPO} 打新 tag（vX.Y.Z）触发 build-release，产出 *-openwrt.tar.gz；
-    2) 手动触发 workflow_dispatch 生成 nightly（同样含 -openwrt 资产）；
+	[ -n "$TAG" ] || die "${PKG}: ${REPO} 的任何 Release 都不含 ${TG_ARCHIVE}。
+  处理方式（任选其一）：
+    1) 改回源码编译模式（去掉 TAYGEDO_PREBUILT=1）；
+    2) 在 ${REPO} 打新 tag（vX.Y.Z）触发 build-release；
     3) 设置 TAYGEDO_TAG=<含该资产的 tag> 强制指定。"
 
-	TAG="$FOUND_TAG"
-	say "已对齐到含目标资产的 tag：${TAG}"
+	if [ "$TAG" = "v${CUR_VER}" ]; then
+		say "Release 资产命中声明版本：${TAG}/${TG_ARCHIVE}"
+	else
+		say "声明版本 v${CUR_VER} 无 ${TG_ARCHIVE}，已对齐到含该资产的 tag：${TAG}"
+	fi
 fi
 
 # 把对齐结果写回 Makefile
@@ -220,7 +266,6 @@ if [ "$TAG" != "v${CUR_VER}" ]; then
 			say "非语义化 tag（${TAG}），仅覆盖下载 tag，PKG_VERSION 保持 ${CUR_VER}"
 			;;
 	esac
-	# TAYGEDO_VER 默认写的是 `v$(PKG_VERSION)`，直接钉成实际 tag
 	if grep -qE '^[[:space:]]*TAYGEDO_VER:=' "$MK"; then
 		sed -i "s|^\([[:space:]]*TAYGEDO_VER:=\).*|\1${TAG}|" "$MK"
 	else
@@ -229,30 +274,48 @@ if [ "$TAG" != "v${CUR_VER}" ]; then
 	say "TAYGEDO_VER → ${TAG}"
 fi
 
-# ===========================================================================
-# 4) 预下载 + 归档内容校验
-# ===========================================================================
-# 提前把资产落到 dl/，包内 Build/Prepare 见到文件即跳过 curl（其逻辑是
-# `if [ ! -f "$(TAYGEDO_DL)" ]`），因此这一步等价于「把 404 和坏归档提前到
-# 取包阶段」。同时校验压缩包内确实有 taygedo-rs 可执行文件，防止上游改了
-# 打包布局（例如多套一层目录）导致 install 阶段 cp 失败。
+# 预下载 + 归档内容校验：Build/Prepare 见到文件即跳过 curl，因此这一步等价于
+# 「把 404 和坏归档提前到取包阶段」。同时校验压缩包内确实有 taygedo-rs。
+#
+# 复用陷阱：资产名里**不含版本号**，而 dl/ 被 actions/cache 跨构建持久化。
+# 若只按「文件存在就复用」，发版前落进去的 nightly 二进制会一直被当成正式版
+# 打进固件，且没有任何报错。因此另外记一个来源标记。
 DL_DIR="../dl"
 mkdir -p "$DL_DIR"
 DL_FILE="${DL_DIR}/${TG_ARCHIVE}"
 DL_URL="$(asset_url "$TAG")"
+STAMP="${DL_DIR}/.taygedo-source"
 
-if [ -f "$DL_FILE" ] && [ -s "$DL_FILE" ]; then
+case "$TAG" in
+	v[0-9]*.[0-9]*.[0-9]*)
+		REUSE=1
+		if [ -f "$STAMP" ] && [ "$(cat "$STAMP" 2>/dev/null)" != "$TAG" ]; then
+			rm -f "$DL_FILE"
+			say "来源 tag 变更（$(cat "$STAMP" 2>/dev/null) → ${TAG}），丢弃 dl/ 中的旧资产"
+		fi
+		;;
+	*)
+		REUSE=0
+		say "滚动 tag（${TAG}）不复用缓存，强制重新下载"
+		;;
+esac
+
+if [ "$REUSE" = "1" ] && [ -s "$DL_FILE" ] && [ "$(cat "$STAMP" 2>/dev/null)" = "$TAG" ]; then
 	say "复用已下载资产：${DL_FILE}"
 else
 	say "下载 ${DL_URL}"
 	curl -fsSL --retry 3 --retry-all-errors --max-time 300 -o "${DL_FILE}.part" "$DL_URL" \
 		|| { rm -f "${DL_FILE}.part"; die "${PKG}: 下载 ${DL_URL} 失败"; }
 	mv -f "${DL_FILE}.part" "$DL_FILE"
+	printf '%s\n' "$TAG" > "$STAMP"
 fi
 
 tar tzf "$DL_FILE" 2>/dev/null | grep -qx 'taygedo-rs' \
 	|| die "${DL_FILE} 内未找到顶层 taygedo-rs：上游打包布局可能已变更（当前内容：$(tar tzf "$DL_FILE" 2>/dev/null | head -5 | tr '\n' ' ')）"
 say "归档校验通过：$(du -h "$DL_FILE" | cut -f1) ${TG_ARCHIVE}"
+
+rm -rf "./${UPSTREAM_DIR}"
+fi
 
 # ===========================================================================
 # 5) 行尾归一化（CRLF → LF）+ 可执行位补齐
@@ -261,7 +324,7 @@ say "归档校验通过：$(du -h "$DL_FILE" | cut -f1) ${TG_ARCHIVE}"
 # 归一化，防止 runner 环境漂移或上游改动 .gitattributes 时 CR 残留：
 #   - Makefile 的 include 路径带 \r → "No such file or directory"；
 #   - init.d 的 shebang 变成 "#!/bin/sh /etc/rc.common\r" → procd 起不来。
-# 只处理文本文件：逐字节判定是否含 NUL（二进制），避免 sed 破坏二进制。
+# 只处理文本文件：逐字节判定是否含 NUL（二进制），避免 sed 破坏二进制与图片。
 mapfile -t ALL_FILES < <(find "./${PKG}" -type f)
 TXT_FILES=()
 for F in "${ALL_FILES[@]}"; do
@@ -295,5 +358,14 @@ for FILE in "./${PKG}/root/etc/init.d/taygedo"; do
 	fi
 done
 
-say "${PKG} 就位：$(cd "./${PKG}" && ls | tr '\n' ' ')"
-say "版本 ${TAG} · 架构 ${TG_ARCH} · 资产 ${TG_ARCHIVE}"
+# ===========================================================================
+# 6) 摘要
+# ===========================================================================
+if [ "$MODE" = "1" ]; then
+	say "${PKG} 就位（预编译模式）：$(cd "./${PKG}" && ls | tr '\n' ' ')"
+	say "架构 ${TG_ARCH} · 资产 ${TG_ARCHIVE} · tag ${TAG}"
+else
+	say "${PKG} 就位（源码编译模式）：$(cd "./${PKG}" && ls | tr '\n' ' ')"
+	say "架构 ${TG_ARCH} · triple ${TG_TRIPLE} · 上游 ${REPO}@${BRANCH} (${SRC_REV})"
+	say "下一步由 Scripts/Build-Taygedo.sh 交叉编译 → ${PKG}/local/taygedo-rs"
+fi

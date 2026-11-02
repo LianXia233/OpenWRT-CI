@@ -70,10 +70,16 @@
 
 > **关于 `taygedo`**：该包自 2026-11 起改为**配置驱动**——任何 `Config/*.txt`
 > 只要写一行 `CONFIG_PACKAGE_luci-app-taygedo=y`，`Scripts/Packages-Taygedo.sh`
-> 就会在 `defconfig` 之前把包放进 `package/`，无需改动工作流，也不再与
-> `H5000M-WIFI-YES-NETMONITOR` 变体绑定。脚本会按目标架构（`x86_64` /
-> `aarch64`）从上游 Release 取 `*-openwrt.tar.gz` 预编译二进制，并做版本对齐
-> 与归档校验，避免「编译全绿、固件里没有二进制」。
+> 就会在 `defconfig` 之前把包与 Rust 源码放进 `package/luci-app-taygedo/`，
+> 无需改动工作流，也不再与 `H5000M-WIFI-YES-NETMONITOR` 变体绑定。
+>
+> 二进制**从源码交叉编译**：`defconfig` 之后由 `Scripts/Build-Taygedo.sh`
+> 用宿主机 rustup + OpenWrt `staging_dir` 里的 `<arch>-openwrt-linux-musl-gcc`
+> 编出 `--no-default-features --features openwrt` 形态的静态 musl 可执行文件，
+> 落到 `package/luci-app-taygedo/local/taygedo-rs`，包 Makefile 见到即跳过
+> 网络下载。与「预编译 AirPi Rust 后端」共用同一套工具链思路；编译失败时
+> 自动回退 `cross`（Docker），仍失败可设 `TAYGEDO_PREBUILT=1` 退回 Release
+> 预编译资产。
 
 ---
 
