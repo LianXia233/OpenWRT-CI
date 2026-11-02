@@ -62,10 +62,18 @@
 | 5G 模组管理 `mt5700m`（方案 A · 经典） | 🟡 可选 | — | — | ✅ | — | — |
 | FM350 模组管理 `fm350` | — | ✅ | — | — | ✅ | — |
 | NetWiz 配网向导 `netwiz` | — | — | ✅ | ✅ | ✅ | — |
-| 网络监控 `netmonitor` / 签到 `taygedo` | — | — | — | — | — | ✅ |
+| 网络监控 `netmonitor` | — | — | — | — | — | ✅ |
+| 每日签到 `taygedo` | 🟡 可选 | 🟡 可选 | 🟡 可选 | 🟡 可选 | 🟡 可选 | ✅ |
 | 硬件风扇温控 `h5000m/airpi-fancontrol` | H5000M / AP3000M | 包含 | 包含 | 包含 | 包含 | 包含 |
 
 > `✅` 固件默认内置　`🟡` 由编译参数动态决定　`—` 不包含
+
+> **关于 `taygedo`**：该包自 2026-11 起改为**配置驱动**——任何 `Config/*.txt`
+> 只要写一行 `CONFIG_PACKAGE_luci-app-taygedo=y`，`Scripts/Packages-Taygedo.sh`
+> 就会在 `defconfig` 之前把包放进 `package/`，无需改动工作流，也不再与
+> `H5000M-WIFI-YES-NETMONITOR` 变体绑定。脚本会按目标架构（`x86_64` /
+> `aarch64`）从上游 Release 取 `*-openwrt.tar.gz` 预编译二进制，并做版本对齐
+> 与归档校验，避免「编译全绿、固件里没有二进制」。
 
 ---
 
