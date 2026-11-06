@@ -41,8 +41,10 @@ runner）整段只用 2 分 53 秒，`upstream rc=0`。结论：托管 runner �
 ### 验证
 
 - 临时诊断工作流在同一份命令序列上实跑：`upstream rc=0`、`[SUCCESS] All
-  dependencies have been installed.`，整段 2 分 53 秒（run 42142596533）。
-- 改动后的命令序列在 PR 分支用探针工作流逐段复跑，rc=0（见 PR 描述）。
+  dependencies have been installed.`，整段 2 分 53 秒（run 42212196533）。
+- 改动后的命令序列在本分支上用探针工作流逐段复跑：12:06:44 → 12:10:15
+  （3 分 31 秒），同样输出 `[SUCCESS] All dependencies have been installed.`
+  （run 42215163749，验证后已删除该探针）。
 - 定时编译工作流只由 `workflow_run`（自动清理完成）与 `workflow_dispatch`
   触发，普通 PR 不会触发整条构建；守护逻辑的等效验证是下一次定时运行。
 
