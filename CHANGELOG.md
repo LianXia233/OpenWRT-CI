@@ -1,4 +1,51 @@
 # 更新日志
+## [2026-11-06] 修复定时编译全部卡在「初始化编译环境」：apt 下载卡死改为有界重试
+
+### 背景
+
+2026-11-06 的 6 个定时编译工作流（H5000M / H5000M 自用 / AP3000M / X86 /
+NetWiz / FM350，共 12 个 job）全部失败，同一时段的 `H5000M-CI-Qmodem`（8 个
+job）与 `OpenWRT-CI-H5000M`（2 个 job）也一样，共 18 个 job。三仓库 HEAD
+（`ddba852` / `fb3c1de` / `d0060cd`）与 11-05 成功那次完全一致，runner 镜像也
+没变（ubuntu-24.04 / `20261101.360.1`），上游
+`init_build_environment.sh` 的 `Last-Modified` 仍是 2026-10-29，因此不是仓库
+代码、也不是上游脚本漂移。
+
+用 API 取 job 日志时，失败 job 的日志 blob 一律 `BlobNotFound`（整运行的
+日志 zip 只有 22 字节空包，对比 11-05 成功运行同端点 150 KB / 810 KB 正常），
+即 runner 在挂死时被终止、日志根本没上传。check-run 注解只留下
+`The hosted runner lost communication with the server`。
+
+复跑同一个 job（`42142545093` attempt 2）拿到了日志，定位到真实卡点：整段
+`初始化编译环境` 从 11:16:51 一直跑到被取消的 11:58（41 分钟仍未走完），日志
+里是一条条 `Get: http://azure.archive.ubuntu.com/...` 的依赖下载，单包间隔
+20 s / 40 s / 174 s / 186 s / **549 s**，其中 `texlive-bibtex-extra` 单个包
+79.1 MB、`texlive-base` 21.7 MB。同一批命令在诊断探针里（11:42 的另一台
+runner）整段只用 2 分 53 秒，`upstream rc=0`。结论：托管 runner 的 Ubuntu 镜像
+偶发单包卡死，把 3.5 分钟的步骤拖成 40 分钟以上，最终触发 runner 通信超时。
+
+### 变更
+
+- `.github/workflows/WRT-CORE.yml`「初始化编译环境」：
+  - 所有 apt 调用加 `APT_OPTS`（`Acquire::http::Timeout=30`、
+    `Acquire::https::Timeout=30`、`Acquire::Retries=3`），单包卡住 30 s 后
+    放弃并重试，不再无限等待；
+  - 上游 `init_build_environment.sh` 由 `bash <(curl -sL ...)` 改为
+    `curl -fsSL --connect-timeout 15 --max-time 180` 先落盘再执行，下载失败
+    直接失败（原写法在下载失败时会执行空脚本并"成功"退出）；
+  - 上游脚本外包 `timeout 1800`：正常 3~5 分钟，超过 30 分钟按镜像异常处理，
+    立即失败并保留完整日志，而不是挂到数小时被 runner 终止、日志全丢。
+
+不删任何校验步骤、不提高超时阈值，只把"无限等待"改成"有界失败 + 可查日志"。
+
+### 验证
+
+- 临时诊断工作流在同一份命令序列上实跑：`upstream rc=0`、`[SUCCESS] All
+  dependencies have been installed.`，整段 2 分 53 秒（run 42142596533）。
+- 改动后的命令序列在 PR 分支用探针工作流逐段复跑，rc=0（见 PR 描述）。
+- 定时编译工作流只由 `workflow_run`（自动清理完成）与 `workflow_dispatch`
+  触发，普通 PR 不会触发整条构建；守护逻辑的等效验证是下一次定时运行。
+
 ## [2026-10-31] 默认主题 vantage 补齐：Aurora 保留可选 + 修复默认样式不生效
 
 ### 背景

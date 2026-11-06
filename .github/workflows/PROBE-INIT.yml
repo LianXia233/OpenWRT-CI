@@ -1,0 +1,46 @@
+name: PROBE-INIT（临时：验证改动后的初始化编译环境命令序列）
+
+on:
+  push:
+    paths:
+      - .github/workflows/PROBE-INIT.yml
+
+jobs:
+  probe:
+    name: probe-init-env
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          allow-unsafe-pr-checkout: true
+
+      # 与 WRT-CORE.yml「初始化编译环境」逐行一致的命令序列（验证用，验证后删除）
+      - name: 初始化编译环境（PR 验证）
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          APT_OPTS: >-
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+            -o Acquire::Retries=3
+        run: |
+          echo "### start $(date -u +%H:%M:%S)"
+          sudo -E apt -yqq $APT_OPTS purge firefox
+          sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
+          sudo -E apt -yqq $APT_OPTS update || sudo -E apt -yqq $APT_OPTS update
+          sudo -E apt -yqq $APT_OPTS autoclean
+          sudo -E apt -yqq $APT_OPTS clean
+          sudo -E apt -yqq $APT_OPTS install dos2unix libfuse-dev ccache
+          curl -fsSL --connect-timeout 15 --max-time 180 \
+            -o /tmp/init_build_environment.sh \
+            https://build-scripts.immortalwrt.org/init_build_environment.sh
+          sha256sum /tmp/init_build_environment.sh
+          sudo timeout 1800 bash /tmp/init_build_environment.sh
+          sudo -E systemctl daemon-reload
+          sudo -E timedatectl set-timezone "Asia/Shanghai"
+          sudo mkdir -p /mnt/build_wrt
+          sudo chown $USER:$USER /mnt/build_wrt
+          sudo ln -s /mnt/build_wrt $GITHUB_WORKSPACE/wrt
+          ls -ld $GITHUB_WORKSPACE/wrt
+          echo "### done $(date -u +%H:%M:%S)"
