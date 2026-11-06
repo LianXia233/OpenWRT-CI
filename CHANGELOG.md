@@ -3,9 +3,10 @@
 
 ### 背景
 
-2026-11-06 的 6 个定时编译工作流（H5000M / H5000M 自用 / AP3000M / X86 /
-NetWiz / FM350，共 12 个 job）全部失败，同一时段的 `H5000M-CI-Qmodem`（8 个
-job）与 `OpenWRT-CI-H5000M`（2 个 job）也一样，共 18 个 job。三仓库 HEAD
+2026-11-06 的 6 个定时编译工作流（H5000M 双配置 / H5000M 自用 / AP3000M / X86 /
+NetWiz / FM350，共 13 个 job）全部失败，同一时段的 `H5000M-CI-Qmodem`
+（OWRT-ALL 失败 2 个 job、MTK-AUTO 被取消）与 `OpenWRT-CI-H5000M`（MTK-AUTO
+失败 2 个 job）也一样，三仓库共 17 个 job。三仓库 HEAD
 （`ddba852` / `fb3c1de` / `d0060cd`）与 11-05 成功那次完全一致，runner 镜像也
 没变（ubuntu-24.04 / `20261101.360.1`），上游
 `init_build_environment.sh` 的 `Last-Modified` 仍是 2026-10-29，因此不是仓库
