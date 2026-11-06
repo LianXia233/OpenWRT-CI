@@ -113,19 +113,36 @@ jobs:
       - name: 初始化编译环境
         env:
           DEBIAN_FRONTEND: noninteractive
+          # 托管 runner 的 apt 镜像（azure.archive.ubuntu.com）偶发单包卡死：
+          # 2026-11-06 定时编译的 18 个 job 全部停在依赖下载阶段（实测单个包
+          # 等待 549 s，整步 40 分钟以上，而正常仅 3.5 分钟），最终被 runner
+          # 通信超时终止、连日志都没留下。这里给 apt 显式超时与重试，卡住的
+          # 连接 30 s 后放弃并重试，不再无限等待。
+          APT_OPTS: >-
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+            -o Acquire::Retries=3
         run: |
-          sudo -E apt -yqq purge firefox
+          sudo -E apt -yqq $APT_OPTS purge firefox
           # 移除 runner 预置的 google-chrome apt 源：其镜像偶发哈希不一致
           # （File has unexpected size / Mirror sync in progress?），会导致
           # `apt update` 返回非零并中断整个初始化步骤。
           sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
-          sudo -E apt -yqq update || sudo -E apt -yqq update
+          sudo -E apt -yqq $APT_OPTS update || sudo -E apt -yqq $APT_OPTS update
           # 不做 full-upgrade / autoremove：托管 runner 每次全量升级要数分钟，
           # 对 OpenWrt 编译零收益，属于纯耗时项
-          sudo -E apt -yqq autoclean
-          sudo -E apt -yqq clean
-          sudo -E apt -yqq install dos2unix libfuse-dev ccache
-          sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+          sudo -E apt -yqq $APT_OPTS autoclean
+          sudo -E apt -yqq $APT_OPTS clean
+          sudo -E apt -yqq $APT_OPTS install dos2unix libfuse-dev ccache
+          # 上游脚本先落盘再执行（原来用 `bash <(curl -sL ...)`，curl 无超时、
+          # 下载失败时组装的空脚本也会“成功”退出）。--fail 让 4xx/5xx 立即失败，
+          # --max-time 防挂死。
+          curl -fsSL --connect-timeout 15 --max-time 180 \
+            -o /tmp/init_build_environment.sh \
+            https://build-scripts.immortalwrt.org/init_build_environment.sh
+          # 依赖安装正常 3~5 分钟。超过 30 分钟即视为镜像/网络异常：直接失败并
+          # 保留完整日志，避免整步挂到一两个小时、最后被 runner 终止且无日志可查。
+          sudo timeout 1800 bash /tmp/init_build_environment.sh
           sudo -E systemctl daemon-reload
           sudo -E timedatectl set-timezone "Asia/Shanghai"
 
