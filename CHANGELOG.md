@@ -1,4 +1,111 @@
 # 更新日志
+## [2026-11-06] 修复编译固件失败：luci-app-mt5700 的 ring 交叉链接改走 .cargo/config.toml
+
+### 背景
+
+`X86-FM350` 之外的 4 个 job 停在「编译固件」，`luci-app-mt5700` 报：
+
+```
+error: linking with `cc` failed: exit status: 1
+  = note: /usr/bin/ld: unrecognized option '--fix-cortex-a53-843419'
+make[4]: *** [Makefile:86: compile] Error 101
+ERROR: package/luci-app-mt5700 failed to build.
+```
+
+`--fix-cortex-a53-843419` 是 aarch64 专属选项，宿主 x86 的 BFD ld 不认；它由 `ring` 的
+build.rs 经 `cargo:rustc-link-arg` 注入。`ring` 是今天才进入依赖树的：上游
+`luci-app-mt5700` 在 18:01 CST 的 PR #46 给 `src/rust` 引入 `tokio-tungstenite` + rustls，
+12:30 UTC 的构建刚好赶上，日志里随即出现 `Compiling ring v0.17.14`。11-05 成功那次
+日志里一条 `Compiling` 都没有 —— 也就是说这条路径此前从未真正链接过 ring。
+
+之所以落到宿主 `cc` 链接，是因为缓解它的 `RUSTFLAGS` 压根到不了 cargo。
+ImmortalWrt `include/toplevel.mk` 有一条：
+
+```make
+unexport $(foreach v,$(filter CARGO CARGO_% RUST% SCCACHE_%,$(.VARIABLES)), \
+	$(if $(filter environment,$(origin $(v))),$(v)))
+```
+
+凡来自环境的 `RUST*` / `CARGO_*` 都会在包构建前被摘掉。所以 `SETUP_RUST_FOR_MT5700`
+写进 `GITHUB_ENV` 的 `RUSTFLAGS=-C link-self-contained=yes -C linker=rust-lld` 是
+**结构性无效**的：失败日志里该变量确实出现在「编译固件」步骤环境中，cargo 却仍用 `cc`
+链接，与此完全吻合。这个机制从建立起就没生效过，只是过去没有 ring 而不暴露。
+
+### 变更
+
+- **`Scripts/Packages.sh`：`SETUP_RUST_FOR_MT5700` 不再写 `RUSTFLAGS` 环境变量**，
+  改为向 crate 目录写 `src/rust/.cargo/config.toml`：
+
+  ```toml
+  [target.aarch64-unknown-linux-musl]
+  linker = "aarch64-openwrt-linux-musl-gcc"
+  ```
+
+  config.toml 由 cargo 自己读取，make 无从剥离，是唯一可靠的通道。链接器取交叉 gcc
+  而非 `rust-lld`：rust-lld 不是编译器驱动，接不住 ring 传来的 `-Wl,` 前缀参数；
+  `<arch>-openwrt-linux-musl-gcc` 与固件同一份 musl，其 ld 认得这个 erratum 选项
+  （`Build-Taygedo.sh` 处理 ring 用的就是它）。失败日志里该名字被裸名调用 1378 次，
+  证明包构建期间它确实在 PATH 上。
+- 写成 `[target.<triple>]` 段而不是全局 `build.rustflags`：proc-macro 与 build.rs
+  必须继续用宿主链接器，全局段会让它们一起变成交叉链接而失败。上游若已自带
+  config.toml 则保留不覆盖。
+- 目标三元组按 `WRT_TARGET` 映射（x86 → `x86_64-...`），crate 目录缺失时显式报错退出，
+  不再静默走回坏路径。
+
+### 验证
+
+- `SETUP_RUST_FOR_MT5700` 产物实测：aarch64 与 x86 两种 `WRT_TARGET` 生成的 config.toml
+  均可被 TOML 解析器读回；重复执行不会覆盖已有配置。
+- ring 的实际交叉链接只能在 CI 上验证，需在 fix 分支跑一轮非 TEST 构建确认。
+
+## [2026-11-06] 修复初始化编译环境：apt 镜像按真实批量吞吐择优，传输超时落盘到 apt.conf.d
+
+### 背景
+
+上一笔「初始化编译环境改为有界重试」（PR #14）合入后，当天 12:30 UTC 的一轮里
+`X86-FM350` 仍停在 `Process completed with exit code 124`（被 `timeout` 判超时）。
+日志显示 661 MB 依赖里 `texlive-binaries` 单个 8.5 MB 走了 3 分钟，即约 50 kB/s；
+同一时段 `deb.nodesource.com` 的 39.5 MB 一秒内下完，同批 job 里也确实有几个全绿
+—— 不是全网抖动，是 `azure.archive.ubuntu.com` 按 runner 随机命中的吞吐退化。
+超时与重试只会把「慢」变成「失败」，不会让它变快。
+
+上游脚本自己调 apt，读不到步骤里那串 `-o Acquire::*` 参数，所以真正会卡死的
+661 MB 下载始终没有任何传输超时。
+
+同类问题在兄弟仓库还多一层：`timeout --kill-after=N sudo <cmd>` 这种顺序下，超时信号
+发给 `sudo` 所在的进程组，`sudo` 被 SIGKILL 后已无力再转发信号，它拉起的 `apt` 成孤儿
+继续持有 `/var/lib/dpkg/lock-frontend`。`OpenWRT-CI-H5000M` 的 MT5700M job 就是这样
+连续 3 轮 `It is held by process 10001 (apt)`，空烧 30 分钟后 exit 1。本仓库的
+`sudo timeout ...` 顺序本来是对的，但缺重试后的可续传保障。
+
+### 变更
+
+- **新增「选择 apt 镜像」步骤**：按实测吞吐在 `azure.archive.ubuntu.com` 与
+  `archive.ubuntu.com` 之间择优。测速目标用 `universe/.../Packages.xz`（15.0 MB，
+  apt 自己就要下载）配 `Range` 只取前 8 MB。小文件测的是连接建立而不是持续吞吐：
+  `OpenWRT-CI-H5000M` run 124 用 1.76 MB 的 `Packages.gz` 探测，实测输出
+  `azure=45627172 archive=1045578`，把退化镜像判成快 44 倍，而几分钟后同一个 azure
+  下 bulk `.deb` 只有约 50 kB/s。新探测下这种退化必然现形：8 MB 在 50 kB/s 时要 160 秒，
+  直接顶穿 `--max-time 25`；azure 正常时 8 MB 不到 1 秒，保持默认。
+  代号取自 `/etc/os-release`，runner 换版后目标 404 会让两边都测到 0，判定退回
+  「保持默认」，属安全降级而非误切换。备用镜像走 `https://`。
+- **写入 `/etc/apt/apt.conf.d/99-ci-transfer-guard`**：传输超时与 `DPkg::Lock::Timeout`
+  移到 apt 自己的配置里，对上游脚本内部的 apt 调用同样生效 —— 这正是上一笔只加在
+  `APT_OPTS` 命令行 `-o` 参数上覆盖不到的部分。既然 conf.d 已覆盖本步骤全部 apt 调用，
+  `APT_OPTS` 就删掉了，超时机制只留一处，不再有两套互相重叠、改一处漏一处的配置。
+- **`init_build_environment.sh` 最多跑两次**：apt 已下载的 .deb 留在
+  `/var/cache/apt/archives`，第二次只补缺的部分，等于断点续传。保持 `sudo` 在前、
+  `timeout` 在后（顺序颠倒就会留下持锁孤儿 apt，见上），并加注释说明原因；
+  失败时 `pgrep -a apt` 把持锁者留在日志里。
+
+### 验证
+
+- 工作流 YAML 通过解析，全部 `run:` 块通过 `bash -n`。
+- 镜像判定逻辑用桩 `curl` 跑五个场景：azure 退化（切换）、两者都正常（不切换）、
+  两边都慢（保持默认）、azure 更快（不降级）、探测失败返回 0（切换）—— 结论均符合预期。
+- 两个探测目标 URL 实测存在、支持 Range，本机批量测速返回量级合理。
+- 实际初始化耗时需在 fix 分支的 CI 上确认。
+
 ## [2026-11-06] 修复定时编译全部卡在「初始化编译环境」：apt 下载卡死改为有界重试
 
 ### 背景
