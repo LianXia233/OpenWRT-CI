@@ -110,39 +110,110 @@ jobs:
           echo "::error::MT5700M 变体已暂时禁用（2026-10-07 起，原因：不稳定）。如需恢复，请移除本守卫步骤并恢复各入口的 MT5700M 配置项。"
           exit 1
 
+      - name: 选择 apt 镜像
+        # 托管 runner 的 azure.archive.ubuntu.com 会间歇性退化到几十 kB/s，而且不报错：
+        # 内置 /etc/apt/apt-mirrors.txt 只在「镜像出错」时降级，慢而不失败永远不触发它。
+        # 2026-11-06 的初始化失败全是这一形态 —— 上游脚本要下 661 MB 依赖，实测 50 kB/s
+        # 时单个 8.5 MB 的 texlive-binaries 就走掉 3 分钟，任何时间预算都兜不住。
+        timeout-minutes: 5
+        run: |
+          # 测速必须带真实体积：上一版探的是 1.76 MB 的 main/Packages.gz，小文件测的是
+          # 连接建立而不是持续吞吐。run 124 的实测输出是 azure=45627172 / archive=1045578
+          # —— 探测把慢镜像判成快 44 倍，而几分钟后同一个 azure 下 bulk .deb 只有约
+          # 50 kB/s。小文件探测不只是测不出退化，它会主动把慢镜像选进来。
+          # 这里改用 universe 的 Packages.xz（15.0 MB，apt 自己就要下载）并用 Range
+          # 只取前 8 MB：50 kB/s 时 8 MB 要 160 秒，必然超过 --max-time 而现形。
+          probe() {
+            local sp
+            sp=$(curl -sSL -r 0-8388607 -o /dev/null --connect-timeout 10 --max-time 25 \
+              -w '%{speed_download}' "$1" 2>/dev/null || true)
+            echo "${sp:-0}" | cut -d. -f1
+          }
+          # 代号取自 runner 镜像，避免 runner 升级后探测目标 404（404 会让两边都测到 0，
+          # 判定退回「保持默认」，属安全降级而不是误切换）
+          . /etc/os-release 2>/dev/null || true
+          IDX="dists/${VERSION_CODENAME:-noble}/universe/binary-amd64/Packages.xz"
+          AZ=$(probe "http://azure.archive.ubuntu.com/ubuntu/${IDX}")
+          ALT=$(probe "https://archive.ubuntu.com/ubuntu/${IDX}")
+          AZ=${AZ:-0}
+          ALT=${ALT:-0}
+          echo "apt 批量吞吐实测（字节/秒）：azure=${AZ} archive=${ALT}"
+
+          # 只在 azure 确实慢、且官方 archive 明显更快时切换；两边都快或都快不动时
+          # 保持原配置，避免把正常环境改坏。
+          if [ "$AZ" -lt 300000 ] && [ "$ALT" -ge $((AZ * 2)) ] && [ "$ALT" -ge 300000 ]; then
+            echo "azure 吞吐低于 300 kB/s 且 archive 明显更快，改为 archive.ubuntu.com 优先"
+            printf '%s\t%s\n' \
+              'https://archive.ubuntu.com/ubuntu/' 'priority:1' \
+              'https://security.ubuntu.com/ubuntu/' 'priority:2' \
+              'http://azure.archive.ubuntu.com/ubuntu/' 'priority:3' \
+              | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+            # mirrorlist 只覆盖走 apt-mirrors.txt 的条目；硬编码 azure 的 sources 一并替换，
+            # 否则未接 mirrorlist 的源仍会打到慢镜像。
+            sudo sed -i \
+              's|http://azure\.archive\.ubuntu\.com/ubuntu/|https://archive.ubuntu.com/ubuntu/|g' \
+              /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+          else
+            echo "保持 runner 默认镜像配置"
+          fi
+
       - name: 初始化编译环境
         env:
           DEBIAN_FRONTEND: noninteractive
-          # 托管 runner 的 apt 镜像（azure.archive.ubuntu.com）偶发单包卡死：
-          # 2026-11-06 定时编译的 18 个 job 全部停在依赖下载阶段（实测单个包
-          # 等待 549 s，整步 40 分钟以上，而正常仅 3.5 分钟），最终被 runner
-          # 通信超时终止、连日志都没留下。这里给 apt 显式超时与重试，卡住的
-          # 连接 30 s 后放弃并重试，不再无限等待。
-          APT_OPTS: >-
-            -o Acquire::http::Timeout=30
-            -o Acquire::https::Timeout=30
-            -o Acquire::Retries=3
         run: |
-          sudo -E apt -yqq $APT_OPTS purge firefox
+          # 托管 runner 的 apt 镜像（azure.archive.ubuntu.com）偶发单包卡死：
+          # 2026-11-06 定时编译的 job 大量停在依赖下载阶段（实测单个包等待 549 s，
+          # 整步 40 分钟以上，而正常仅 3.5 分钟），最终被 runner 通信超时终止、
+          # 连日志都没留下。卡住的连接 30 s 后放弃并重试，不再无限等待。
+          #
+          # 必须写进 apt.conf.d 而不是只加在命令行 -o 参数上：上游
+          # init_build_environment.sh 自己调 apt，读不到本步骤的参数，那 661 MB
+          # 的依赖下载才是真正会卡死的地方。
+          sudo tee /etc/apt/apt.conf.d/99-ci-transfer-guard >/dev/null <<'EOF'
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          Acquire::Retries "3";
+          Acquire::http::Pipeline-Depth "0";
+          DPkg::Lock::Timeout "120";
+          EOF
+          sudo -E apt -yqq purge firefox
           # 移除 runner 预置的 google-chrome apt 源：其镜像偶发哈希不一致
           # （File has unexpected size / Mirror sync in progress?），会导致
           # `apt update` 返回非零并中断整个初始化步骤。
           sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
-          sudo -E apt -yqq $APT_OPTS update || sudo -E apt -yqq $APT_OPTS update
+          sudo -E apt -yqq update || sudo -E apt -yqq update
           # 不做 full-upgrade / autoremove：托管 runner 每次全量升级要数分钟，
           # 对 OpenWrt 编译零收益，属于纯耗时项
-          sudo -E apt -yqq $APT_OPTS autoclean
-          sudo -E apt -yqq $APT_OPTS clean
-          sudo -E apt -yqq $APT_OPTS install dos2unix libfuse-dev ccache
+          sudo -E apt -yqq autoclean
+          sudo -E apt -yqq clean
+          sudo -E apt -yqq install dos2unix libfuse-dev ccache
           # 上游脚本先落盘再执行（原来用 `bash <(curl -sL ...)`，curl 无超时、
           # 下载失败时组装的空脚本也会“成功”退出）。--fail 让 4xx/5xx 立即失败，
           # --max-time 防挂死。
           curl -fsSL --connect-timeout 15 --max-time 180 \
             -o /tmp/init_build_environment.sh \
             https://build-scripts.immortalwrt.org/init_build_environment.sh
-          # 依赖安装正常 3~5 分钟。超过 30 分钟即视为镜像/网络异常：直接失败并
-          # 保留完整日志，避免整步挂到一两个小时、最后被 runner 终止且无日志可查。
-          sudo timeout 1800 bash /tmp/init_build_environment.sh
+          # 依赖安装正常 3~5 分钟。单次上限 30 分钟即视为镜像/网络异常。
+          # 超时后重试一次：apt 已下好的 .deb 留在 /var/cache/apt/archives，
+          # 第二次从缺的包继续下，是断点续传而不是从头再来。
+          # 注意 `sudo timeout` 的顺序不能颠倒：`timeout` 必须是 sudo 的子进程，
+          # 这样它才和 apt 同属一个进程组，超时能真正杀掉 apt。写成
+          # `timeout ... sudo apt` 时超时只杀死 sudo，apt 变孤儿继续持有 dpkg 锁，
+          # 后续重试会全部卡在锁上（2026-11-06 的另一形态失败就是这么来的）。
+          INIT_OK=0
+          for i in 1 2; do
+            if sudo timeout --kill-after=30 1800 bash /tmp/init_build_environment.sh; then
+              INIT_OK=1
+              break
+            fi
+            echo "init_build_environment 第 ${i} 次失败或超时" >&2
+            pgrep -a apt || true
+            sleep 10
+          done
+          if [ "$INIT_OK" != "1" ]; then
+            echo "::error::init_build_environment 连续失败，终止以避免后续编译无谓耗时"
+            exit 1
+          fi
           sudo -E systemctl daemon-reload
           sudo -E timedatectl set-timezone "Asia/Shanghai"
 
