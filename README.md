@@ -106,7 +106,7 @@
 - 正则不含中文 flavor：自用版 `WRT_FLAVOR` 是「自用」，GitHub 上传资产时会把非 ASCII 字节化（实测 `H5000M-.-sysupgrade.bin`），写死 flavor 反而匹配不到。
 - **X86 引导方式需人工确认**：预设按 UEFI 取 `efi.img.gz`。BIOS/Legacy 引导的机器必须把 `firmware_pattern` 改成 `^X86-.*-combined\.img\.gz$` —— 两者分区表不同，混用会导致升级后无法引导。
 - 尚未发布过的归组（例如当前没有 `BASE-*` Release）不会报错，只是检查更新时返回「无新版本」，等对应构建出包后自动生效。
-- **构建期修正上游一处过期守卫**：[`Scripts/Packages-OnlineUpgrade.sh`](Scripts/Packages-OnlineUpgrade.sh) 会把 `root/etc/uci-defaults/90-online-upgrade-auto` 里的 `/usr/bin/online-upgrade.sh` 统一改成 `/usr/bin/online-upgrade`（v1 遗留路径）。不改的话，刷机后首启会误判「插件丢失」，去第三方仓库下载 `.apk` 并用 `apk add --allow-untrusted` 覆盖本仓库自己构建的二进制；改后仅在二进制真的缺失时才触发重装。
+- **v2 二进制路径三方对齐（构建期断言）**：上游 `root/etc/uci-defaults/90-online-upgrade-auto` 曾判定 v1 的 `/usr/bin/online-upgrade.sh`，已于上游 `98a966a` 修复为 `[ -x /usr/bin/online-upgrade ]`。[`Scripts/Packages-OnlineUpgrade.sh`](Scripts/Packages-OnlineUpgrade.sh) 现在**按内容判定、幂等**：只在检测到 v1 路径时才改写，上游已修复则一行不动；随后断言文件内没有 `online-upgrade.sh`、守卫判定的就是 `/usr/bin/online-upgrade` —— 与 `Makefile` 安装项、WRT-CORE 预编译落点三者一致，任一处漂移即构建失败。
 
 **预设的配置项（键名取自上游代码，非推测）**
 

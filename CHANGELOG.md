@@ -21,11 +21,13 @@
   直连失败回退 `https://gh.acg2.mom/` 镜像；清掉 `.git` / `.github`；
   文本文件统一转 LF 并按字节复核；四段结构断言（`feeds/luci/luci.mk` 引用、
   `./root/usr/bin/online-upgrade` 安装项、`rust/Cargo.toml`、默认 UCI 配置）
-  任一不满足即失败，避免上游改布局后静默产出坏包。同时修正
-  `root/etc/uci-defaults/90-online-upgrade-auto` 里 v1 遗留的存在性守卫
-  （`/usr/bin/online-upgrade.sh` → `/usr/bin/online-upgrade`）：不修的话
-  每次刷机后首启都会误判「插件丢失」，去第三方仓库下载 `.apk` 覆盖本仓库
-  自己构建的二进制。
+  任一不满足即失败，避免上游改布局后静默产出坏包。另做 v2 二进制路径
+  三方对齐断言：上游 `90-online-upgrade-auto` 曾判定 v1 的
+  `/usr/bin/online-upgrade.sh`，该缺陷已在上游 `98a966a` 修复为
+  `[ -x /usr/bin/online-upgrade ]`，因此脚本改为按内容判定、幂等 ——
+  仅检测到 v1 路径时才改写，上游已修复则一行不动；最终断言文件内无
+  `online-upgrade.sh`、守卫判定的就是 `/usr/bin/online-upgrade`，
+  与 `Makefile` 安装项、WRT-CORE 预编译落点三者一致。
 - `Scripts/OnlineUpgradePreset.sh`：按机型生成 `./files/etc/config/online-upgrade`
   （overlay 约定路径，打进 rootfs）。设备→固件名正则：
   `X86` → `^X86-.*-efi\.img\.gz$`，`H5000M`/`AP3000M` →
@@ -56,7 +58,9 @@
 - `WRT-CORE.yml` YAML 解析通过；`.config` 键名与上游 `Makefile` 的
   `BuildPackage` 包名一致。
 - `Scripts/Packages-OnlineUpgrade.sh` 在本地实跑通过：clone 成功、20 个文本
-  文件行尾复核为 LF、四段结构断言通过、守卫修正已落盘（`grep` 无 `.sh` 残留）。
+  文件行尾复核为 LF、四段结构断言通过；上游守卫已是 v2 路径，脚本未改写并
+  通过一致性断言。另用构造用例验证了「检测到 v1 → 改写」与「守卫路径不符
+  → 构建失败」两个分支。
 - 未验证：完整固件构建需 ubuntu runner + OpenWrt 交叉工具链，本地无法执行；
   X86 取 UEFI（`efi.img.gz`）而非 BIOS（`combined.img.gz`）需按实际刷机方式确认。
 

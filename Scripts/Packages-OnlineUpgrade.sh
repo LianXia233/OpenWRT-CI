@@ -116,21 +116,44 @@ grep -q './root/usr/bin/online-upgrade' "./${PKG_NAME}/Makefile" || {
 	exit 1
 }
 
-# ===== 上游缺陷修正：90-online-upgrade-auto 的存在性守卫过期 =====
-# 该脚本本意是「仅在插件确实缺失时尝试重装」，但守卫判的是 v1 的
-# /usr/bin/online-upgrade.sh；v2 只安装 /usr/bin/online-upgrade，且同包的
-# 99-online-upgrade 还会 rm -f 那个 .sh。按原样打包，每次刷机后首启都会
-# 判定「插件丢失」，转而向 gooyjq/luci-app-online-upgrade 下载 .apk 并
-# apk add --allow-untrusted —— 可能把本仓库自己构建的二进制换掉。
-# 只把该文件里的路径统一改成 v2 实际路径，其余逻辑保持上游原样。
+# ===== 一致性守卫：v2 二进制路径三方对齐 =====
+# 历史上 90-online-upgrade-auto 的存在性守卫判的是 v1 的
+# /usr/bin/online-upgrade.sh，而 v2 只安装 /usr/bin/online-upgrade
+# （99-online-upgrade 还会 rm -f 掉那个 .sh）。按原样打包，每次刷机首启都会
+# 误判「插件丢失」，去上游仓库下载 .apk 并 apk add --allow-untrusted，
+# 把本仓库自己构建的二进制换掉。
+#
+# 上游已在 98a966a 修复（守卫改为 [ -x /usr/bin/online-upgrade ]）。
+# 因此本段不再无条件改写，改为「按内容判定 + 幂等」：
+#   - 仍检测到 v1 路径 → 改写为 v2 路径（只在命中时执行）
+#   - 上游已修复 → 一行不改，只做断言
+# 无论走哪条分支，最终都必须满足：文件里没有 online-upgrade.sh，
+# 且守卫判定的就是 /usr/bin/online-upgrade —— 与 Makefile 安装项、
+# WRT-CORE 预编译落点三者对齐。
+ONLINE_UPGRADE_BIN="/usr/bin/online-upgrade"
 AUTO_UCI="./${PKG_NAME}/root/etc/uci-defaults/90-online-upgrade-auto"
 if [ -f "$AUTO_UCI" ]; then
-	sed -i 's#/usr/bin/online-upgrade\.sh#/usr/bin/online-upgrade#g' "$AUTO_UCI"
 	if grep -q 'online-upgrade\.sh' "$AUTO_UCI"; then
-		echo "::error::${AUTO_UCI} 仍残留 v1 路径 /usr/bin/online-upgrade.sh，守卫修正未生效"
+		echo "==> ${AUTO_UCI} 仍引用 v1 路径 online-upgrade.sh，改写为 ${ONLINE_UPGRADE_BIN}"
+		sed -i "s#/usr/bin/online-upgrade\.sh#${ONLINE_UPGRADE_BIN}#g" "$AUTO_UCI"
+	else
+		echo "==> ${AUTO_UCI} 已是 v2 路径（上游已修复），不改写"
+	fi
+
+	if grep -q 'online-upgrade\.sh' "$AUTO_UCI"; then
+		echo "::error::${AUTO_UCI} 仍残留 v1 路径 online-upgrade.sh"
+		grep -n 'online-upgrade\.sh' "$AUTO_UCI" || true
 		exit 1
 	fi
-	echo "==> 已修正 ${AUTO_UCI} 的 v1 路径引用（.sh → 无后缀二进制）"
+
+	# 守卫必须真的判定 /usr/bin/online-upgrade（存在性检查，-f 或 -x 均可）
+	grep -qE "\[ -[fx] ${ONLINE_UPGRADE_BIN} \]" "$AUTO_UCI" || {
+		echo "::error::${AUTO_UCI} 未按 ${ONLINE_UPGRADE_BIN} 判定插件是否存在"
+		grep -n 'online-upgrade' "$AUTO_UCI" || echo "（文件中无 online-upgrade 相关行）"
+		exit 1
+	}
+
+	echo "==> 一致性核对通过：安装项=./root/usr/bin/online-upgrade，守卫=${ONLINE_UPGRADE_BIN}"
 else
 	echo "::warning::${AUTO_UCI} 缺失：上游目录结构可能已调整"
 fi
