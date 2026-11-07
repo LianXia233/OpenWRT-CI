@@ -1,4 +1,90 @@
 # 更新日志
+## [2026-11-07] 全部 Rust 插件改走官方 Rust SDK 交叉编译 + cargo 缓存提速
+
+### 背景
+
+11-06 的 mt5700 链接修复（`.cargo/config.toml`）解决了「能不能编过」，但三个 Rust
+插件 —— `luci-app-mt5700`（at-webserver，含 tokio/rustls/ring）、
+`luci-app-h5000m-fancontrol`（零依赖）、`luci-app-fm350`（fm350d）—— 仍然把 cargo
+埋在包内 Makefile 里，随「编译固件」在 build_dir 里编译：
+
+- build_dir 每轮 CI 清空，Rust 依赖树每次从零构建。mt5700 单包 ~90 秒，fm350d
+  依赖更重，全在固件编译中段排队，串行吃掉总时长；
+- 这条链路依赖 buildroot 对 `CARGO_HOME`/`PATH` 的透传。`toplevel.mk` 会剥离环境里的
+  `CARGO*`/`RUST*`，11-06 五个工作流全红证明这条透传链有多脆弱 —— 修复只是把
+  配置换成了 make 剥不掉的通道，cargo 依然跑在 buildroot 里；
+- 产物到了固件编译中后期才暴露问题（坏链接器、坏架构都要等到 make 编到该包）。
+
+而 taygedo / airpi 早已是「runner 侧 rustup 官方工具链预编译 → 注入产物」的形态，
+稳定运行已久。三个滞留包是历史欠账。
+
+### 变更
+
+- **新增 `Scripts/Build-Rust-Prebuilt.sh`**：统一 Rust 后端预编译器，在 runner 侧
+  （buildroot 外）用 rustup 官方工具链交叉编译，rustc/cargo 始终来自官方 SDK，
+  全程不触发 OpenWrt 的 `rust/host` 源码构建。要点：
+  - 架构取 defconfig 后的 `.config`（`CONFIG_TARGET_ARCH_PACKAGES`），映射到
+    `<arch>-unknown-linux-musl` triple；
+  - 链接器用 `staging_dir` 里与固件同源的 `<arch>-openwrt-linux-musl-gcc`（缺失时
+    先 `make toolchain/install`，命中工具链缓存秒过；零依赖 crate 无链接器时回退
+    rustc 自带 self-contained musl）；
+  - `CC_<triple>` / `AR_<triple>` / `CARGO_TARGET_<TRIPLE>_LINKER` 三套并设，覆盖
+    ring 的 `cc` crate 与 cargo 各自的读取习惯；包内 rsproxy 镜像配置临时清空
+    （runner 在境外，直连 crates.io 更快）；
+  - `cargo build --locked --release --target <triple>`，产物先过尺寸/静态性
+    （无 INTERP）/架构（`file`）三重自检再落盘；
+  - **cargo 目标目录固定在 `./wrt/.rust-build/<包名>/target`** —— 这是提速的关键：
+    配合 CI 缓存，依赖不变时只增量重编业务 crate（秒级），依赖树不再每次从零构建；
+  - 幂等：BUILD-INFO 记录 src_rev + triple，同源同靶直接复用产物。
+- **注入 `CI-RUST-PREBUILT` 守卫块**：编译成功后向包 Makefile 追加守卫（fm350 为
+  `$(eval` 之前插入，重指 `RUST_OUT` 并把 `Build/Compile` 换成存在性校验；luci.mk
+  型包覆盖 `compile` 目标取用 `<包>/prebuilt/<bin>`）。产物缺失时 wildcard 守卫
+  自动失效，回退原始 cargo 路径 —— `Packages.sh` 写入的 `.cargo/config.toml`
+  链接器兜底（11-06 修复）原样保留，形成双保险。注入不识别包结构时显式告警跳过，
+  绝不瞎改。
+- **`WRT-CORE.yml` 新增三个步骤**：
+  - 「计算 Rust 依赖缓存键」：所有包 `Cargo.lock` 内容做 sha1 指纹，绑定缓存 key
+    （与 OpenWrt 上游 commit 解耦：上游漂移不使 Rust 缓存失效）；
+  - 「恢复/保存缓存（Rust 交叉编译产物 & cargo 注册表）」：`./wrt/.rust-build`、
+    airpi / taygedo 的既有目标目录、`~/.cargo/registry`、`~/.cargo/git` 一次收齐，
+    airpi 与 taygedo 的既有预编译步骤一并向缓存迁移（不改动其脚本本身）；
+  - 「预编译全部 Rust 后端（官方 Rust SDK 交叉编译）」：按 `.config` 实选状态逐包
+    驱动统一脚本，任一失败步骤红掉（不做静默回退）。
+- **删除 fm350 / h5000m-fancontrol 两个 rustup target 准备步骤**：rustup 安装与
+  target 添加由统一脚本自含，不再散落。
+
+### 迁移后的 Rust 包全景
+
+| 包 | 之前 | 现在 |
+|---|---|---|
+| luci-app-mt5700 | buildroot 内 cargo（固件编译期，每次冷编） | runner 预编译 + 守卫注入 + 缓存 |
+| luci-app-h5000m-fancontrol | buildroot 内 cargo | 同上 |
+| luci-app-fm350 | buildroot 内 cargo | 同上 |
+| luci-app-airpi-fancontrol | runner 预编译（无缓存） | 既有脚本 + 注册表/目标目录缓存 |
+| luci-app-taygedo | runner 预编译（无缓存） | 同上 |
+| luci-app-mt5700m（FOLD） | runner 侧 rust-lld，零依赖秒级 | 不变 |
+
+任何包的 buildroot 内 cargo 路径此后只在守卫回退（预编译产物缺失）时才会触发。
+
+### 验证
+
+- `bash -n` 与工作流 YAML 解析通过；新脚本纯 LF。
+- 注入逻辑用三个上游包的真实 Makefile 做 fixture 实测：
+  - fm350 型守卫块准确插在 `$(eval $(call BuildPackage…))` 之前，`RUST_OUT` 重指
+    与 `Build/Compile` 覆盖就位；
+  - mt5700 / h5000m 型守卫分别命中 `$(BIN)` / `$(BINARY)` 变量；
+  - GNU make 实测：产物在位时 `make -n compile` 展开为守卫的 `cp` 路径，产物缺席
+    时回退原始 cargo 配方；`install: compile` 依赖链不受影响；
+  - 重复注入幂等（第二次识别 marker 跳过）。
+- 缓存键计算、恢复/保存步骤的路径与 key 组装经 YAML 解析复核。
+- 沙箱端到端实测（x86_64 宿主 + 真实 cargo）：统一脚本从 `.config` 推导 triple、
+  rustup 装靶（镜像缺件自动回退官方分发源）、cargo 构建至 `.rust-build/<包>/target`、
+  产物自检（静态 pie / 已 strip / 架构匹配）、落盘 `src/prebuilt/`、写入 BUILD-INFO
+  并注入守卫块，全链路通过；注入后的 Makefile 在 `make clean && make install` 下
+  由守卫直接取用产物装配到 DESTDIR，全程零 cargo 调用。
+- 端到端效果（缓存命中后的实际提速、守卫在真实 build_dir 中的取用）待本轮
+  CI 运行确认；当天 6 个定时编译（跑在 11-06 两个修复之后的 main 上）进行中。
+
 ## [2026-11-06] 修复编译固件失败：luci-app-mt5700 的 ring 交叉链接改走 .cargo/config.toml
 
 ### 背景
