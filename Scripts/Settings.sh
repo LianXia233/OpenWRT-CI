@@ -121,6 +121,19 @@ echo "CONFIG_PACKAGE_luci=y" >> ./.config
 echo "CONFIG_LUCI_LANG_zh_Hans=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-theme-$WRT_THEME=y" >> ./.config
 
+# ===== 在线升级插件（全机型内置）=====
+# 包本体由 Scripts/Packages-OnlineUpgrade.sh 放进 package/luci-app-online-upgrade/，
+# Rust 后端由 WRT-CORE「预编译 Rust 后端」交叉编译后落到包内 root/usr/bin/；
+# 这里负责在 .config 里选中它，并按当前机型的产物生成升级源预设
+# （files/etc/config/online-upgrade，规则见 Scripts/OnlineUpgradePreset.sh）。
+echo "CONFIG_PACKAGE_luci-app-online-upgrade=y" >> ./.config
+ONLINE_UPGRADE_PRESET="$(cd "$(dirname "$0")" && pwd)/OnlineUpgradePreset.sh"
+if [ -x "$ONLINE_UPGRADE_PRESET" ]; then
+	"$ONLINE_UPGRADE_PRESET"
+else
+	echo "::warning::未找到 $ONLINE_UPGRADE_PRESET，跳过在线升级预设生成"
+fi
+
 # ===== 主题配套包 =====
 # 默认主题由 WRT_THEME 决定（当前 vantage）；集合依赖里的 luci-theme-bootstrap
 # 已在上面被替换成 luci-theme-$WRT_THEME，故未安装的主题不会抢占默认样式。

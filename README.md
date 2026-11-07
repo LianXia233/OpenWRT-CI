@@ -64,6 +64,7 @@
 | NetWiz 配网向导 `netwiz` | — | — | ✅ | ✅ | ✅ | — |
 | 网络监控 `netmonitor` | — | — | — | — | — | ✅ |
 | 每日签到 `taygedo` | 🟡 可选 | 🟡 可选 | 🟡 可选 | 🟡 可选 | 🟡 可选 | ✅ |
+| 在线升级 `online-upgrade` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 硬件风扇温控 `h5000m/airpi-fancontrol` | H5000M / AP3000M | 包含 | 包含 | 包含 | 包含 | 包含 |
 
 > `✅` 固件默认内置　`🟡` 由编译参数动态决定　`—` 不包含
@@ -80,6 +81,49 @@
 > 网络下载。与「预编译 AirPi Rust 后端」共用同一套工具链思路；编译失败时
 > 自动回退 `cross`（Docker），仍失败可设 `TAYGEDO_PREBUILT=1` 退回 Release
 > 预编译资产。
+
+### 3. 在线升级 `luci-app-online-upgrade`（全机型内置）
+
+[`LianXia233/luci-app-online-upgrade`](https://github.com/LianXia233/luci-app-online-upgrade) 是一条「检查 → 下载 → 调 `sysupgrade`」的在线升级链路：LuCI 前端 + `rpcd` ucode 后端 + Rust 静态二进制 `/usr/bin/online-upgrade`（分片并发下载、断点续传、Release 资产正则匹配）。
+
+**接入方式**
+
+- 上游仓库是「包即仓库根」形态（`Makefile` / `root/` / `rust/` 都在根目录），不是 feeds 布局，因此不挂 `src-git` feed；由 [`Scripts/Packages-OnlineUpgrade.sh`](Scripts/Packages-OnlineUpgrade.sh) 在 `defconfig` 之前 clone 进 `package/luci-app-online-upgrade/`。
+- 上游 `Build/Prepare` 与 `Build/Compile` 均为空，安装段直接取 `./root/usr/bin/online-upgrade`，即二进制必须外部预置。本仓库在 [`WRT-CORE.yml`](.github/workflows/WRT-CORE.yml)「预编译 Rust 后端」第 ④ 段用官方 Rust SDK + OpenWrt musl 交叉链接器编译，产物落到包内该路径（`RUST_NO_INJECT=1`，不改上游 Makefile）。
+- [`Scripts/Settings.sh`](Scripts/Settings.sh) 对**全部** `Config/*.txt` 统一打开 `CONFIG_PACKAGE_luci-app-online-upgrade=y`，新增机型无需再逐份改配置。运行期依赖 `rpcd-mod-ucode`、`ucode-mod-fs`、`ucode-mod-uci` 由包 `DEPENDS` 自动拉取。
+
+**各机型预设配置**
+
+预设由 [`Scripts/OnlineUpgradePreset.sh`](Scripts/OnlineUpgradePreset.sh) 在构建期按 `WRT_DEVICE` / `WRT_TAG_GROUP` 生成，落在 `files/etc/config/online-upgrade`（`$(TOPDIR)/files` 会被并入 rootfs），覆盖包自带同名 conffile，首次开机即指向本机型自己的产物：
+
+| 机型 | `firmware_pattern`（正则） | 匹配的实际资产 |
+| :--- | :--- | :--- |
+| H5000M | `^H5000M-.*sysupgrade\.bin$` | `H5000M-MT5700-sysupgrade.bin`、`H5000M-FM350-sysupgrade.bin`、自用版 `H5000M-.-sysupgrade.bin` |
+| AP3000M | `^AP3000M-.*sysupgrade\.bin$` | `AP3000M-MT5700-sysupgrade.bin` 等 |
+| X86 | `^X86-.*-efi\.img\.gz$` | `X86-NETWIZ-MT5700-efi.img.gz` 等（UEFI 引导） |
+
+- `tag` 统一为 `latest@^<归组>-`，归组取 `BASE` / `MT5700` / `MT5700M` / `FM350` / `NetWiz` / `自用`，与 Release 的 Tag 前缀一致（如 `latest@^MT5700-` 只在 `MT5700-26.11.07` 这类 Tag 里找最新）。同一归组下三个机型共用 Release，靠 `firmware_pattern` 的设备前缀区分，不会互相取错。
+- 正则不含中文 flavor：自用版 `WRT_FLAVOR` 是「自用」，GitHub 上传资产时会把非 ASCII 字节化（实测 `H5000M-.-sysupgrade.bin`），写死 flavor 反而匹配不到。
+- **X86 引导方式需人工确认**：预设按 UEFI 取 `efi.img.gz`。BIOS/Legacy 引导的机器必须把 `firmware_pattern` 改成 `^X86-.*-combined\.img\.gz$` —— 两者分区表不同，混用会导致升级后无法引导。
+- 尚未发布过的归组（例如当前没有 `BASE-*` Release）不会报错，只是检查更新时返回「无新版本」，等对应构建出包后自动生效。
+- **构建期修正上游一处过期守卫**：[`Scripts/Packages-OnlineUpgrade.sh`](Scripts/Packages-OnlineUpgrade.sh) 会把 `root/etc/uci-defaults/90-online-upgrade-auto` 里的 `/usr/bin/online-upgrade.sh` 统一改成 `/usr/bin/online-upgrade`（v1 遗留路径）。不改的话，刷机后首启会误判「插件丢失」，去第三方仓库下载 `.apk` 并用 `apk add --allow-untrusted` 覆盖本仓库自己构建的二进制；改后仅在二进制真的缺失时才触发重装。
+
+**预设的配置项（键名取自上游代码，非推测）**
+
+| 配置项 | 预设值 | 含义 |
+| :--- | :--- | :--- |
+| `repo` | `LianXia233/OpenWRT-CI` | 升级源仓库（GitHub `owner/repo`） |
+| `tag` | `latest@^<归组>-` | `latest` 取最新 Release；`latest@<正则>` 限定 Tag 范围 |
+| `firmware_pattern` | 见上表 | 对 Release 资产名做**正则**匹配，决定下载哪个文件 |
+| `min_size_mb` | `15` | 下载完整性下限（MB），低于即判为截断 |
+| `proxy` | `https://gh.acg2.mom/` | 下载加速前缀，直连 GitHub 不稳时使用 |
+| `expected_sha256` | 留空 | 留空则使用 Release 资产自带校验；填值则强制校验该哈希 |
+| `dl_workers` | `6` | 分片并发数 |
+| `dl_chunk_mb` | `4` | 单分片大小（MB） |
+| `dl_stall_sec` | `30` | 无进展判定超时（秒），超时后重试该分片 |
+| `dl_retries` | `3` | 分片重试次数 |
+
+> 上游默认配置里还有 `enabled`、`keep_config` 两项，本版本 Rust 与 `rpcd` 代码均未读取，因此预设不写入，避免出现「配了却不起作用」的假象。升级成功后配置由包内 `/lib/upgrade/keep.d/online-upgrade` 保留。
 
 ---
 
