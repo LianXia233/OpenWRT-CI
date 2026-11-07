@@ -579,6 +579,33 @@ jobs:
 
           $GITHUB_WORKSPACE/Scripts/Packages-Taygedo.sh
 
+      # luci-app-online-upgrade（在线升级）：全机型无条件导入，不按机型名分支。
+      #
+      # 上游仓库是「包即仓库根」形态（Makefile / root/ / rust/ 都在根目录），
+      # 不是 feeds 布局，因此不能挂 src-git feed，只能 clone 进 package/。
+      # 加机型 = 不需要动这里，Settings.sh 已对全部配置统一打开
+      # CONFIG_PACKAGE_luci-app-online-upgrade=y。
+      #
+      # 必须早于 defconfig：包未就位时该符号是孤立符号，会被 defconfig 连依赖
+      # 一起丢弃，结果是「编译全绿、固件里没有这个插件」。也必须在
+      # 「更新 feeds 软件源」之后 —— 上游 Makefile 走 feeds/luci/luci.mk。
+      #
+      # 包内 Rust 后端不在这里编译：见下方「预编译 Rust 后端」第 ④ 段，
+      # 产物落到 package/luci-app-online-upgrade/root/usr/bin/online-upgrade，
+      # 正是上游 Makefile 安装段读取的路径。
+      - name: 导入 luci-app-online-upgrade（全机型）
+        run: |
+          cd ./wrt/package/
+
+          $GITHUB_WORKSPACE/Scripts/Packages-OnlineUpgrade.sh
+
+          LUCI_MK="$(pwd)/../feeds/luci/luci.mk"
+          if [ ! -f "$LUCI_MK" ]; then
+            echo "::error::未找到 $LUCI_MK：feeds 未更新或 luci feed 未展开"
+            exit 1
+          fi
+          echo "luci.mk 就位：$LUCI_MK"
+
       - name: 生成配置并执行 defconfig
         run: |
           cd ./wrt/
@@ -762,6 +789,57 @@ jobs:
             echo "luci-app-taygedo 已就位、已被 .config 选中，预编译资产 $(basename "$TG_ASSET") 在 dl/ 就绪（预编译模式）"
           fi
 
+      # 防回归：luci-app-online-upgrade 全机型内置，因此本校验无 if 条件。
+      # 四层断言对应四类真实失败形态：
+      #   1. 包目录缺失 —— 导入步骤没跑 / clone 失败；
+      #   2. .config 未选中 —— 包在 defconfig 之后才就位，符号被静默丢弃；
+      #   3. Makefile 安装段路径变了 —— 预编译产物落点会失效（源码在
+      #      Build/Compile 为空，二进制完全依赖外部预置）；
+      #   4. 预设与机型不匹配 —— 例如 H5000M 的资产正则跑到 X86 固件里，
+      #      表现为设备上「检查更新一直找不到资产」，编译却全绿。
+      # 二进制本体由「预编译 Rust 后端」④ 产出，那一步已有架构核验，不在此重复。
+      - name: 校验 luci-app-online-upgrade 已选中且预设有对应机型
+        run: |
+          cd ./wrt/
+
+          if [ ! -d ./package/luci-app-online-upgrade ]; then
+            echo "::error::package/luci-app-online-upgrade 不存在：Packages-OnlineUpgrade.sh 未执行或 clone 失败"
+            exit 1
+          fi
+
+          if ! grep -qx 'CONFIG_PACKAGE_luci-app-online-upgrade=y' ./.config; then
+            echo "::error::.config 未选中 luci-app-online-upgrade：包是否在 make defconfig 之前就位？"
+            grep -i 'online-upgrade' ./.config || echo "（.config 中无任何 online-upgrade 相关行）"
+            exit 1
+          fi
+
+          if ! grep -q './root/usr/bin/online-upgrade' ./package/luci-app-online-upgrade/Makefile; then
+            echo "::error::包 Makefile 的安装段不再读取 ./root/usr/bin/online-upgrade，预编译产物落点需同步调整"
+            exit 1
+          fi
+
+          PRESET=./files/etc/config/online-upgrade
+          if [ ! -f "$PRESET" ]; then
+            echo "::error::$PRESET 不存在：Scripts/OnlineUpgradePreset.sh 未执行"
+            exit 1
+          fi
+
+          # 设备前缀必须与本次构建产物一致（WRT_DEVICE 由 WRT_CONFIG 推导）
+          if ! grep -qF "option firmware_pattern '^${WRT_DEVICE}-" "$PRESET"; then
+            echo "::error::$PRESET 的 firmware_pattern 与本机型 ${WRT_DEVICE} 不匹配"
+            grep 'firmware_pattern' "$PRESET" || true
+            exit 1
+          fi
+
+          # Release 归组同理：tag 必须落在本机型本次构建的组里
+          if ! grep -qF "option tag 'latest@^${WRT_TAG_GROUP}-'" "$PRESET"; then
+            echo "::error::$PRESET 的 tag 与本次构建归组 ${WRT_TAG_GROUP} 不匹配"
+            grep 'option tag' "$PRESET" || true
+            exit 1
+          fi
+
+          echo "luci-app-online-upgrade 已就位、已被 .config 选中，升级预设匹配机型 ${WRT_DEVICE} / 归组 ${WRT_TAG_GROUP}"
+
       - name: 预下载源码包
         if: env.WRT_TEST != 'true'
         run: |
@@ -860,6 +938,33 @@ jobs:
             && grep -qx 'CONFIG_PACKAGE_luci-app-fm350=y' ./.config; then
             echo "::group::③ luci-app-fm350（fm350d）"
             bash "$SCRIPT" ./package/luci-app-fm350 rust fm350d || RC=1
+            echo "::endgroup::"
+          fi
+
+          # ④ luci-app-online-upgrade（在线升级后端，全机型）
+          #
+          # 与上面三个包不同：上游 Makefile 的 Build/Prepare 与 Build/Compile
+          # 都是空实现，安装段直接 INSTALL_BIN ./root/usr/bin/online-upgrade。
+          # 即二进制必须由外部预置，buildroot 不会替我们编译。因此这里用
+          # RUST_NO_INJECT=1（不改上游 Makefile，避免下次换上游版本时注入块漂移），
+          # 并把产物直接落到安装段读取的路径。
+          #
+          # 包内 rust/ 依赖 ring（rustls），必须用 OpenWrt 的 musl 交叉链接器，
+          # 因此必须放在工具链就绪之后 —— 当前位置满足（①②③ 已拉通同一链路）。
+          # 失败不在此静默：RC=1 会让本步骤红掉，避免带着缺二进制的包继续编译，
+          # 到安装阶段才报「online-upgrade: No such file」。
+          if [ -f ./package/luci-app-online-upgrade/rust/Cargo.toml ] \
+            && grep -qx 'CONFIG_PACKAGE_luci-app-online-upgrade=y' ./.config; then
+            echo "::group::④ luci-app-online-upgrade（online-upgrade）"
+            RUST_NO_INJECT=1 \
+              RUST_OUT_BIN="$(pwd)/package/luci-app-online-upgrade/root/usr/bin/online-upgrade" \
+              bash "$SCRIPT" ./package/luci-app-online-upgrade rust online-upgrade || RC=1
+            # 落点复核：脚本成功但文件不在预期位置（例如上传/复制被跳过）时，
+            # 安装阶段才会报「online-upgrade: No such file」，这里先拦。
+            if [ ! -s ./package/luci-app-online-upgrade/root/usr/bin/online-upgrade ]; then
+              echo "::error::预编译产物未落到 package/luci-app-online-upgrade/root/usr/bin/online-upgrade"
+              RC=1
+            fi
             echo "::endgroup::"
           fi
 

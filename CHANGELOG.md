@@ -1,4 +1,65 @@
 # 更新日志
+## [2026-11-08] 全机型内置 `luci-app-online-upgrade` 并按机型预设升级配置
+
+### 背景
+
+仓库里的「机型」由 `Config/*.txt` 配置片段 + `WRT-CORE.yml` 运行期变量
+（`WRT_DEVICE` / `WRT_FLAVOR` / `WRT_TAG_GROUP`）共同决定：3 个硬件机型
+（H5000M / AP3000M / X86）各带 5~6 种变体，合计 16 份设备配置。
+在线升级插件此前不在任何机型的构建里，用户升级只能手动下载固件。
+
+插件的检查/下载/刷写全部由 Rust 二进制 `online-upgrade` 完成，Makefile 的
+`Build/Prepare` 与 `Build/Compile` 为空，因此**必须在构建阶段把二进制预编译好**
+放到 `root/usr/bin/online-upgrade`，否则包会装出一个没有可执行文件的空壳。
+
+### 变更
+
+新增脚本：
+
+- `Scripts/Packages-OnlineUpgrade.sh`：全机型无条件把插件源码 clone 到
+  `package/luci-app-online-upgrade/`。仓库不是 feeds 布局，走 tree 内 clone；
+  直连失败回退 `https://gh.acg2.mom/` 镜像；清掉 `.git` / `.github`；
+  文本文件统一转 LF 并按字节复核；四段结构断言（`feeds/luci/luci.mk` 引用、
+  `./root/usr/bin/online-upgrade` 安装项、`rust/Cargo.toml`、默认 UCI 配置）
+  任一不满足即失败，避免上游改布局后静默产出坏包。同时修正
+  `root/etc/uci-defaults/90-online-upgrade-auto` 里 v1 遗留的存在性守卫
+  （`/usr/bin/online-upgrade.sh` → `/usr/bin/online-upgrade`）：不修的话
+  每次刷机后首启都会误判「插件丢失」，去第三方仓库下载 `.apk` 覆盖本仓库
+  自己构建的二进制。
+- `Scripts/OnlineUpgradePreset.sh`：按机型生成 `./files/etc/config/online-upgrade`
+  （overlay 约定路径，打进 rootfs）。设备→固件名正则：
+  `X86` → `^X86-.*-efi\.img\.gz$`，`H5000M`/`AP3000M` →
+  `^<设备>-.*sysupgrade\.bin$`；发布通道归组取 `latest@^<WRT_TAG_GROUP>-`；
+  其余 8 项（`repo` / `min_size_mb` / `proxy` / `expected_sha256` /
+  `dl_workers` / `dl_chunk_mb` / `dl_stall_sec` / `dl_retries`）写固定默认值。
+  生成后自检键数与 tag 一致性。
+
+改动：
+
+- `Scripts/Settings.sh`：无条件追加 `CONFIG_PACKAGE_luci-app-online-upgrade=y`，
+  并调用 `OnlineUpgradePreset.sh` 生成预设。
+- `.github/workflows/WRT-CORE.yml`：
+  - defconfig 之前新增「导入 luci-app-online-upgrade（全机型）」；
+  - 「预编译全部 Rust 后端」新增第 ④ 段，用 `RUST_NO_INJECT=1` +
+    `RUST_OUT_BIN` 把二进制直接落到包内安装路径，并校验产物非空；
+  - 「预下载源码包」之前新增校验步骤，断言包已导入、`.config` 已选中、
+    Makefile 安装项仍在、预设 `firmware_pattern` / `tag` 与本机型一致。
+- `README.md`：插件矩阵补一行；新增「在线升级」小节，含各机型预设、
+  X86 UEFI/BIOS 需人工确认的提醒、10 个配置项含义表。
+
+### 验证
+
+- 两个新脚本 `bash -n` 通过；按 H5000M / AP3000M / X86 × MT5700 / FM350 /
+  NetWiz / 自用 / BASE 组合模拟生成预设，10 个键齐全且正则可匹配实测
+  Release 资产名（`H5000M-MT5700-sysupgrade.bin`、`AP3000M-MT5700-sysupgrade.bin`、
+  `X86-NETWIZ-MT5700-efi.img.gz`）。
+- `WRT-CORE.yml` YAML 解析通过；`.config` 键名与上游 `Makefile` 的
+  `BuildPackage` 包名一致。
+- `Scripts/Packages-OnlineUpgrade.sh` 在本地实跑通过：clone 成功、20 个文本
+  文件行尾复核为 LF、四段结构断言通过、守卫修正已落盘（`grep` 无 `.sh` 残留）。
+- 未验证：完整固件构建需 ubuntu runner + OpenWrt 交叉工具链，本地无法执行；
+  X86 取 UEFI（`efi.img.gz`）而非 BIOS（`combined.img.gz`）需按实际刷机方式确认。
+
 ## [2026-11-07] 修复定时编译全部卡在「初始化编译环境」：镜像切换重试 + 步骤硬超时
 
 ### 背景
