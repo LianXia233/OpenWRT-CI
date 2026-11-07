@@ -153,11 +153,19 @@ jobs:
             sudo sed -i \
               's|http://azure\.archive\.ubuntu\.com/ubuntu/|https://archive.ubuntu.com/ubuntu/|g' \
               /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+            echo "APT_MIRROR=archive" >> "$GITHUB_ENV"
           else
             echo "保持 runner 默认镜像配置"
+            # 记录当前主镜像，供「初始化编译环境」失败重试时切到另一个源。
+            echo "APT_MIRROR=azure" >> "$GITHUB_ENV"
           fi
 
       - name: 初始化编译环境
+        # 上游依赖约 661 MB，正常 3~5 分钟。2026-11-07 的失败形式是：镜像探测
+        # 时吞吐正常，随后 bulk 下载断连，job 拖到 60~106 分钟后被 runner 判定
+        # 通信超时，日志整段丢失（连失败点都看不到）。这里给 step 一个硬上限，
+        # 宁可早失败保留日志，也不让它无界挂死。
+        timeout-minutes: 60
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
@@ -172,10 +180,55 @@ jobs:
           sudo tee /etc/apt/apt.conf.d/99-ci-transfer-guard >/dev/null <<'EOF'
           Acquire::http::Timeout "30";
           Acquire::https::Timeout "30";
-          Acquire::Retries "3";
+          Acquire::http::Connection-Timeout "15";
+          Acquire::Retries "5";
           Acquire::http::Pipeline-Depth "0";
           DPkg::Lock::Timeout "120";
           EOF
+
+          # 失败重试时换一条链路：探测只反映步骤开始那一瞬的吞吐，
+          # 2026-11-07 的故障正是「探测正常、随后 bulk 下载断连」，
+          # 只在开始时择优一次覆盖不了这种退化。
+          switch_apt_mirror() {
+            local target
+            if [ "${APT_MIRROR:-azure}" = "archive" ]; then
+              target="azure"
+            else
+              target="archive"
+            fi
+            echo "切换 apt 主镜像：${APT_MIRROR:-azure} → ${target}" >&2
+            if [ "$target" = "archive" ]; then
+              printf '%s\t%s\n' \
+                'https://archive.ubuntu.com/ubuntu/' 'priority:1' \
+                'https://security.ubuntu.com/ubuntu/' 'priority:2' \
+                'http://azure.archive.ubuntu.com/ubuntu/' 'priority:3' \
+                | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+              sudo sed -i \
+                's|http://azure\.archive\.ubuntu\.com/ubuntu/|https://archive.ubuntu.com/ubuntu/|g' \
+                /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+            else
+              printf '%s\t%s\n' \
+                'http://azure.archive.ubuntu.com/ubuntu/' 'priority:1' \
+                'https://archive.ubuntu.com/ubuntu/' 'priority:2' \
+                'https://security.ubuntu.com/ubuntu/' 'priority:3' \
+                | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+              sudo sed -i \
+                's|https://archive\.ubuntu\.com/ubuntu/|http://azure.archive.ubuntu.com/ubuntu/|g' \
+                /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+            fi
+            echo "APT_MIRROR=${target}" >> "$GITHUB_ENV"
+          }
+
+          # `timeout` 只给直接子进程（bash）发信号，脚本里的 apt/dpkg 会成为
+          # 孤儿继续持锁并占用日志管道 —— 2026-11-07 的 60~106 分钟挂死正是
+          # 这种形态。重试前必须按名字清掉，否则第二次会卡在 dpkg 锁上。
+          kill_stalled_init() {
+            sudo pkill -9 -f '/tmp/init_build_environment.sh' 2>/dev/null || true
+            sudo pkill -9 -x apt 2>/dev/null || true
+            sudo pkill -9 -x apt-get 2>/dev/null || true
+            sudo pkill -9 -x dpkg 2>/dev/null || true
+          }
+
           sudo -E apt -yqq purge firefox
           # 移除 runner 预置的 google-chrome apt 源：其镜像偶发哈希不一致
           # （File has unexpected size / Mirror sync in progress?），会导致
@@ -193,21 +246,34 @@ jobs:
           curl -fsSL --connect-timeout 15 --max-time 180 \
             -o /tmp/init_build_environment.sh \
             https://build-scripts.immortalwrt.org/init_build_environment.sh
-          # 依赖安装正常 3~5 分钟。单次上限 30 分钟即视为镜像/网络异常。
-          # 超时后重试一次：apt 已下好的 .deb 留在 /var/cache/apt/archives，
+          # 上游脚本第一步是 `apt full-upgrade -y`：每天全量升级宿主，下载量大、
+          # 版本还随镜像漂移，而托管 runner 镜像本身已是近期更新，apt install
+          # 也会按需升级依赖，这一步对编译零收益却放大失败面。命中则注释掉，
+          # 未命中（上游改写法）则保留原行为并告警，不硬失败。
+          if grep -qE '^[[:space:]]*apt full-upgrade -y' /tmp/init_build_environment.sh; then
+            sed -i -E \
+              's|^([[:space:]]*)apt full-upgrade -y|\1# [CI] 跳过 full-upgrade（见 WRT-CORE.yml）: apt full-upgrade -y|' \
+              /tmp/init_build_environment.sh
+            echo "已在初始化脚本中禁用 apt full-upgrade"
+          else
+            echo "::warning::未在 init_build_environment.sh 中定位到 apt full-upgrade，保留上游行为"
+          fi
+          # 依赖安装正常 3~5 分钟。单次上限 25 分钟即视为镜像/网络异常：
+          # 661 MB 在 450 kB/s 以上都能下完，更慢的链路即使跑完也会拖垮总时长，
+          # 第二次换镜像更划算。apt 已下好的 .deb 留在 /var/cache/apt/archives，
           # 第二次从缺的包继续下，是断点续传而不是从头再来。
-          # 注意 `sudo timeout` 的顺序不能颠倒：`timeout` 必须是 sudo 的子进程，
-          # 这样它才和 apt 同属一个进程组，超时能真正杀掉 apt。写成
-          # `timeout ... sudo apt` 时超时只杀死 sudo，apt 变孤儿继续持有 dpkg 锁，
-          # 后续重试会全部卡在锁上（2026-11-06 的另一形态失败就是这么来的）。
           INIT_OK=0
           for i in 1 2; do
-            if sudo timeout --kill-after=30 1800 bash /tmp/init_build_environment.sh; then
+            if sudo timeout --kill-after=30 1500 bash /tmp/init_build_environment.sh; then
               INIT_OK=1
               break
             fi
             echo "init_build_environment 第 ${i} 次失败或超时" >&2
+            kill_stalled_init
             pgrep -a apt || true
+            if [ "$i" = "1" ]; then
+              switch_apt_mirror
+            fi
             sleep 10
           done
           if [ "$INIT_OK" != "1" ]; then

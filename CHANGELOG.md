@@ -1,4 +1,53 @@
 # 更新日志
+## [2026-11-07] 修复定时编译全部卡在「初始化编译环境」：镜像切换重试 + 步骤硬超时
+
+### 背景
+
+2026-11-07 05:04 UTC 一轮定时编译中，NetWiz / FM350 / X86 三组共 7 个 job 全部
+失败在「初始化编译环境」，同批 2 个 job 成功。对比两边：
+
+- 成功 job 该步骤耗时 3 分 28 秒（05:04:16 → 05:07:43），全程走
+  `azure.archive.ubuntu.com`，46.5 MB 的包 0.8 秒下完；
+- 失败 job 该步骤从 05:04 一直跑到 06:06~06:50（62~106 分钟），最终被 runner
+  判定通信超时；这批 job 的日志在 API 侧整段缺失
+  （`/actions/jobs/<id>/logs` 返回 `BlobNotFound`），只剩步骤状态可见。
+
+也就是说 11-06 加入的「探测择优 + 有界重试」没有覆盖今天的形态：探测发生在
+步骤开始那一瞬，判定 azure 正常；随后 bulk 下载断连，而 `timeout` 只给直接
+子进程（bash）发信号，脚本里的 apt/dpkg 变成孤儿继续持锁并占用日志管道，
+step 迟迟不结束，直到 runner 失联、日志一并丢失。另外上游脚本第一步就是
+`apt full-upgrade -y`，每天拉一遍全量升级，进一步放大了下载量。
+
+### 变更
+
+`.github/workflows/WRT-CORE.yml`：
+
+- **「初始化编译环境」增加 `timeout-minutes: 60`**：宁可早失败并保留日志，
+  也不让镜像黑洞把 job 拖到 runner 失联。
+- **「选择 apt 镜像」输出 `APT_MIRROR`**：记录本次判定的主镜像，供重试时切换。
+- **重试改为换链路**：单次上限 1800 s → 1500 s；第二次尝试前调用
+  `switch_apt_mirror`，在 `azure.archive.ubuntu.com` 与 `archive.ubuntu.com`
+  之间互换（同时重写 `apt-mirrors.txt` 与 `sources.list.d/*.sources`）。
+  探测正常但随后断连的场景由此获得一次真正换源的机会。
+- **重试前清理孤儿进程**：`kill_stalled_init` 按名字清掉残留的
+  `init_build_environment.sh` / `apt` / `apt-get` / `dpkg`，避免第二次
+  卡在 dpkg 锁上，也避免管道被孤儿进程占住导致 step 不结束。
+- **收紧传输参数**：新增 `Acquire::http::Connection-Timeout "15"`（原只有
+  数据空闲超时，建连黑洞不受控），`Acquire::Retries` 3 → 5。
+- **禁用上游脚本的 `apt full-upgrade -y`**：托管 runner 镜像本身已是近期更新，
+  `apt install` 也会按需升级依赖，全量升级对编译零收益却显著放大下载量。
+  用 sed 注释该行并校验命中；上游改写法未命中时输出 warning 并保留原行为，
+  不静默跳过、也不硬失败。
+
+### 验证
+
+- `yaml.safe_load` 解析通过，`core` 共 36 个步骤；两个改动步骤的 `run` 块
+  经 `bash -n` 语法检查通过。
+- full-upgrade 补丁在真实上游脚本（2026-10-29 版）上实测：命中第 228 行并
+  注释为 `# [CI] 跳过 full-upgrade …: apt full-upgrade -y $BPO_FLAG`，
+  补丁后脚本 `bash -n` 通过。
+- 实际提速与重试切换行为待本轮 `TEST=true` 手动编译确认。
+
 ## [2026-11-07] 全部 Rust 插件改走官方 Rust SDK 交叉编译 + cargo 缓存提速
 
 ### 背景
