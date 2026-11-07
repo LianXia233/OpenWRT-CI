@@ -418,34 +418,13 @@ jobs:
 
           $GITHUB_WORKSPACE/Scripts/Packages-FM350.sh
 
-          # fm350d 由包内 Makefile 直接调 cargo 交叉编译，不走 OpenWrt 的
-          # rust/host 源码构建（那套要 1.5~3 小时），因此只需 runner 侧
-          # 存在对应 target 的标准库。架构取自配置里解析出的 WRT_TARGET。
-          case "$WRT_TARGET" in
-            x86) RUST_TARGET=x86_64-unknown-linux-musl ;;
-            *)   RUST_TARGET=aarch64-unknown-linux-musl ;;
-          esac
-          echo "Rust target: $RUST_TARGET"
-          rustup target add "$RUST_TARGET"
-          rustup target list --installed | grep -qx "$RUST_TARGET"
-          rustc --version
+          # fm350d 的交叉编译由下方「预编译全部 Rust 后端」步骤统一处理
+          # （官方 Rust SDK + CI 缓存产物）；本步骤只负责把包放进 package/，
+          # 让 defconfig 能选中、make download 能预取依赖。
 
-      # H5000M 变体专属：luci-app-h5000m-fancontrol 3.x 的控制器是 Rust 写的，
-      # 由包内 src/Makefile 直接调 cargo 交叉编译（aarch64-unknown-linux-musl
-      # 静态目标自带链接器，无需 OpenWrt 的 rust/host 源码构建）。runner 预装
-      # rustup 且 cargo 在全局 PATH 上；这里只需装好 musl 标准库 target——
-      # rustup 的安装持久化到 runner，后续「编译固件」步骤直接可用。
-      # 位置与 fm350 步骤相邻，纯粹便于维护，先后顺序不影响结果。
-      - name: 准备 H5000M 风扇插件 Rust 交叉编译目标（H5000M 变体）
-        if: contains(env.WRT_CONFIG, 'H5000M')
-        run: |
-          if ! command -v rustup >/dev/null 2>&1; then
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-              | sh -s -- -y --profile minimal --default-toolchain stable
-          fi
-          rustup target add aarch64-unknown-linux-musl
-          rustup target list --installed | grep -qx aarch64-unknown-linux-musl
-          rustc --version
+      # H5000M 变体专属：luci-app-h5000m-fancontrol 的控制器是 Rust 写的。
+      # 其交叉编译同样由下方「预编译全部 Rust 后端」步骤统一处理
+      # （官方 Rust SDK），不再单独准备 rustup target。
 
       # NetWiz 变体专属：拉取 luci-app-netwiz 源码放进 package/。
       # 条件为 contains NETWIZ，H5000M / AP3000M / X86 及各自 FM350 变体
@@ -750,6 +729,78 @@ jobs:
           python3 "$GITHUB_WORKSPACE/Scripts/PatchRebase.py" \
             --wrt ./wrt --package package/network/config/firewall4
 
+      # ── Rust 后端统一预编译（官方 Rust SDK，buildroot 外交叉编译）──────────
+      # luci-app-mt5700 / luci-app-h5000m-fancontrol / luci-app-fm350 过去把
+      # cargo 埋在包内 Makefile，随固件编译在 build_dir 里每次冷编（build_dir
+      # 每轮清空），且依赖 buildroot 环境的 CARGO_HOME/PATH 透传 —— 2026-11-06
+      # 五个工作流全红正是这条链路（链接器回退 cc）。现在统一在 runner 侧用
+      # rustup 官方工具链交叉编译（同 taygedo / airpi 的既有路径），产物放回
+      # 包目录，包 Makefile 里的 CI-RUST-PREBUILT 守卫块直接取用；
+      # rustc/cargo 始终来自官方 SDK，绝不触发 OpenWrt 的 rust/host 源码构建。
+      #
+      # 缓存：Cargo.lock 指纹做 key，.rust-build/<包>/target 与 cargo 注册表
+      # 整体缓存 —— 依赖不变时只增量重编业务 crate（秒级），这是本轮编译
+      # 速度优化的主要来源。
+      - name: 计算 Rust 依赖缓存键
+        if: env.WRT_TEST != 'true'
+        run: |
+          mkdir -p ./wrt/.rust-build
+          H="$(find ./wrt/package -maxdepth 4 -type f -name Cargo.lock -print0 2>/dev/null \
+            | sort -z | xargs -0 cat 2>/dev/null | sha1sum | cut -d' ' -f1)"
+          echo "RUST_DEPS_HASH=${H:-none}" >> "$GITHUB_ENV"
+          echo "Rust 依赖指纹：${H:-none}"
+
+      - name: 恢复缓存（Rust 交叉编译产物 & cargo 注册表）
+        if: env.WRT_TEST != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          key: wrt-rust-${{env.WRT_TARGET}}-${{env.RUST_DEPS_HASH}}
+          restore-keys: |
+            wrt-rust-${{env.WRT_TARGET}}-
+            wrt-rust-
+          path: |
+            ./wrt/.rust-build
+            ./wrt/package/luci-app-airpi-fancontrol/src/target
+            ./wrt/package/luci-app-taygedo/rust/target
+            ~/.cargo/registry
+            ~/.cargo/git
+
+      - name: 预编译全部 Rust 后端（官方 Rust SDK 交叉编译）
+        if: env.WRT_TEST != 'true'
+        run: |
+          cd ./wrt/
+
+          SCRIPT="$GITHUB_WORKSPACE/Scripts/Build-Rust-Prebuilt.sh"
+          RC=0
+
+          # ① luci-app-mt5700（MT5700 方案：at-webserver，含 rustls/ring）
+          if [ -f ./package/luci-app-mt5700/src/rust/Cargo.toml ] \
+            && grep -qx 'CONFIG_PACKAGE_luci-app-mt5700=y' ./.config; then
+            echo "::group::① luci-app-mt5700（at-webserver）"
+            bash "$SCRIPT" ./package/luci-app-mt5700 src/rust at-webserver || RC=1
+            echo "::endgroup::"
+          fi
+
+          # ② luci-app-h5000m-fancontrol（零依赖 crate，静态 musl）
+          if [ -f ./package/luci-app-h5000m-fancontrol/src/Cargo.toml ] \
+            && grep -qx 'CONFIG_PACKAGE_luci-app-h5000m-fancontrol=y' ./.config; then
+            echo "::group::② luci-app-h5000m-fancontrol"
+            bash "$SCRIPT" ./package/luci-app-h5000m-fancontrol src h5000m-fancontrol --offline || RC=1
+            echo "::endgroup::"
+          fi
+
+          # ③ luci-app-fm350（fm350d，FM350 / NetWiz-FM350 变体）
+          if [ -f ./package/luci-app-fm350/rust/Cargo.toml ] \
+            && grep -qx 'CONFIG_PACKAGE_luci-app-fm350=y' ./.config; then
+            echo "::group::③ luci-app-fm350（fm350d）"
+            bash "$SCRIPT" ./package/luci-app-fm350 rust fm350d || RC=1
+            echo "::endgroup::"
+          fi
+
+          echo "==== 本轮 Rust 预编译清单 ===="
+          cat ./.rust-build/BUILD-INDEX 2>/dev/null || echo "（本变体无 Rust 插件）"
+          exit $RC
+
       # 关键改动 3：AP3000M 跳过 rust/host 源码构建
       #   luci-app-airpi-fancontrol 的守护进程 airpi-fanctl 是 Rust 写的，
       #   默认路径会让 OpenWrt 从源码构建整套 rust/host（rustc + cargo + LLVM），
@@ -854,6 +905,21 @@ jobs:
             exit 1
           fi
           ls -l ./package/luci-app-taygedo/local/
+
+      # 与上方「恢复缓存（Rust 交叉编译产物 & cargo 注册表）」配对。放在
+      # airpi / taygedo 预编译之后：三个包 + 统一脚本的产物一次收齐。
+      # always()：预编译失败时把已完成的注册表/目标目录也存下来，下次少编。
+      - name: 保存缓存（Rust 交叉编译产物 & cargo 注册表）
+        if: always() && env.WRT_TEST != 'true'
+        uses: actions/cache/save@v6
+        with:
+          key: wrt-rust-${{env.WRT_TARGET}}-${{env.RUST_DEPS_HASH}}
+          path: |
+            ./wrt/.rust-build
+            ./wrt/package/luci-app-airpi-fancontrol/src/target
+            ./wrt/package/luci-app-taygedo/rust/target
+            ~/.cargo/registry
+            ~/.cargo/git
 
       - name: 编译固件
         if: env.WRT_TEST != 'true'
