@@ -1244,6 +1244,9 @@ jobs:
               echo "WRT_LIST_MD=（未采集到插件清单）" >> $GITHUB_ENV
             fi
 
+            # 清掉编译辅助文件。注意原生 sha256sums 记录的是「编译输出的
+            # 原始文件名」，固件重命名后它会全部指向不存在的文件 —— 因此
+            # 这里一并删掉，稍后在 upload 里按重命名后的固件名重新生成。
             find ./bin/targets/ -iregex ".*\(buildinfo\|json\|sha256sums\|packages\)$" -exec rm -rf {} +
 
             # 固件统一重命名：<机型>-<模组插件>-<编译日期>-<固件类型>.<扩展名>
@@ -1261,8 +1264,9 @@ jobs:
             #   - 固件类型：sysupgrade / factory / initramfs / recovery / efi /
             #     combined / efi-iso / iso / efi-vmdk / vmdk，保留刷机方式判断
             #     所必需的信息，只改文件名，不改固件内容与刷写用途。
-            # Releases 只收「可直接刷写的完整镜像」：Config / manifest /
-            # kernel.bin / rootfs 分片等非固件辅助文件一律不进 upload。
+            # Releases 只收「可直接刷写的完整镜像」+ 配套 SHA256 校验文件：
+            # Config / manifest / kernel.bin / rootfs 分片等非固件辅助文件一律
+            # 不进 upload；校验文件在重命名完成后按新固件名重新生成。
             for FILE in $(find ./bin/targets/ -type f -iname "*$WRT_TARGET*") ; do
               BASE=$(basename "$FILE")
               case "$BASE" in
@@ -1318,10 +1322,32 @@ jobs:
             find ./upload/ -type f -iname "*.bin" -size -2M -print -delete
 
             # 净化 upload：只保留本次机型 / 本次编译日期、符合新命名规范的
-            # 完整固件，任何旧格式残留或辅助文本都剔除，保证 Release 资产
-            # 100% 是可直接刷写的固件。
+            # 完整固件，任何旧格式残留或辅助文本都剔除。校验文件随后按
+            # 净化后的固件重新生成，保证 Release 只含固件 + 配套校验。
             find ./upload/ -maxdepth 1 -type f \
               ! -name "$WRT_DEVICE-$WRT_FLAVOR-$WRT_DATE_SHORT-*" -print -delete
+
+            # 重新生成 SHA256 校验文件（基于「重命名后的固件名」，而非编译原始名）：
+            #   - sha256sums        标准聚合表，sha256sum -c sha256sums 人工校验，
+            #                       也是插件 checksum_asset 的来源（find_sha256_in_text
+            #                       按目标固件文件名逐行匹配，故行里必须是新固件名）；
+            #   - <固件名>.sha256   每个固件一份单哈希文件，插件按
+            #                       {目标固件名}.sha256 精确命中，单哈希不会被
+            #                       extract_single_sha256 判为歧义；同组多机型 job
+            #                       追加进同一 Release 时文件名天然唯一，不会像单份
+            #                       sha256sums 那样被 --clobber 互相覆盖。
+            # 只覆盖 upload 里已净化的完整固件，不含任何辅助文件。
+            cd ./upload/
+            : > sha256sums
+            for FW in "$WRT_DEVICE"-"$WRT_FLAVOR"-"$WRT_DATE_SHORT"-*; do
+              [ -f "$FW" ] || continue
+              case "$FW" in *.sha256|sha256sums) continue ;; esac
+              SUM=$(sha256sum "$FW")
+              printf '%s\n' "$SUM" >> sha256sums
+              printf '%s\n' "$SUM" > "$FW.sha256"
+            done
+            cd ../
+            echo "==> SHA256 校验：" && cat ./upload/sha256sums
 
             if ! ls ./upload/*.* >/dev/null 2>&1; then
               echo "::error::整理后 upload 为空，本次未产出任何固件"
@@ -1422,7 +1448,8 @@ jobs:
 
           # 产物上传：单文件串行 + 失败重试（最多 5 次，间隔 5s），规避服务端断连。
           # upload 已在「整理并打包固件」阶段净化，这里再加一道命名白名单，
-          # 只上传本次机型 / 日期的固件，杜绝非固件资产混入 Release。
+          # 只上传本次机型 / 日期的固件及其 <固件名>.sha256 校验文件（两者都
+          # 以机型前缀开头，同一 glob 覆盖），杜绝非固件资产混入 Release。
           for f in ./wrt/upload/"$WRT_DEVICE"-"$WRT_FLAVOR"-"$WRT_DATE_SHORT"-*.*; do
             [ -f "$f" ] || continue
             attempt=0
@@ -1437,6 +1464,33 @@ jobs:
             done
           done
 
+          # SHA256 校验总表：同组同日多机型 job 共享同一 Tag，直接上传会被
+          # 后完成的 job --clobber 覆盖、丢掉其它机型的条目。先下载已有表、
+          # 按「文件名」去重合并（本次结果覆盖同名旧条目），再上传。
+          # 每个固件的 <固件名>.sha256 已在上面的白名单循环里随固件上传，
+          # 文件名唯一、不会互相覆盖，是插件校验的主路径；总表主要供人工
+          # sha256sum -c sha256sums 使用，即使被覆盖也不影响在线升级。
+          CHK="./wrt/upload/sha256sums"
+          if [ -f "$CHK" ]; then
+            mkdir -p ./chk_prev
+            gh release download "$WRT_RELEASE_TAG" --pattern sha256sums --dir ./chk_prev --clobber >/dev/null 2>&1 || true
+            if [ -f ./chk_prev/sha256sums ]; then
+              awk 'NF >= 2 { line[$2] = $0 } END { for (k in line) print line[k] }' \
+                ./chk_prev/sha256sums "$CHK" | sort -k2,2 > "${CHK}.merged"
+              mv -f "${CHK}.merged" "$CHK"
+            fi
+            attempt=0
+            until gh release upload --clobber "$WRT_RELEASE_TAG" "$CHK"; do
+              attempt=$((attempt + 1))
+              if [ "$attempt" -ge 5 ]; then
+                echo "::error::上传 sha256sums 失败（已重试 5 次）"
+                exit 1
+              fi
+              echo "上传 sha256sums 失败（第 ${attempt} 次，5s 后重试）..."
+              sleep 5
+            done
+          fi
+
           # ④ 下载一览：从 Release 现有资产反向生成，按机型分节（含同组其他
           #    job 已追加的产物）。资产名 → 机型 / 用途的映射见下方两个 case。
           : > "$BODY_DL"
@@ -1445,7 +1499,7 @@ jobs:
             echo
             echo "> 文件命名：\`<机型>-<模组插件>-<编译日期>-<固件类型>.<扩展名>\`（如 \`H5000M-MT5700-26.11.09-sysupgrade.bin\`）。日期段 \`YY.MM.DD\` 即编译日期，也是 \`luci-app-online-upgrade\` 从资产名解析出的版本号；与「用途」列对照选择即可。"
             echo
-            echo "> 本 Release 只收录可直接刷写的完整固件镜像，不含编译配置、插件清单、内核 / 根文件系统分片等辅助文件。"
+            echo "> 本 Release 只收录可直接刷写的完整固件镜像，以及每个固件对应的 SHA256 校验文件（\`sha256sums\` 总表与 \`<固件名>.sha256\`）；不含编译配置、插件清单、内核 / 根文件系统分片等辅助文件。校验文件按重命名后的固件名生成，可用 \`sha256sum -c sha256sums\` 人工核对，\`luci-app-online-upgrade\` 的 \`expected_sha256\` 留空时也会自动读取。"
             echo
           } >> "$BODY_DL"
 
@@ -1464,6 +1518,8 @@ jobs:
             # rootfs.img.gz 等，必须先于 .img.gz / .iso 等扩展名兜底判断）→
             # 安装镜像 / 虚拟盘 → 辅助文本
             case "$NAME" in
+              sha256sums)    USE="SHA256 校验总表（sha256sum -c）" ;;
+              *.sha256)      USE="SHA256 校验值（对应同名固件）" ;;
               *sysupgrade*)  USE="sysupgrade 升级包（保留配置）" ;;
               *factory*)     USE="factory 全新刷机包" ;;
               *initramfs*)   USE="initramfs 临时引导" ;;

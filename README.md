@@ -118,7 +118,7 @@
 | `firmware_pattern` | 见上表 | 对 Release 资产名做**正则**匹配，决定下载哪个文件 |
 | `min_size_mb` | `15` | 下载完整性下限（MB），低于即判为截断 |
 | `proxy` | `https://gh.acg2.mom/` | 下载加速前缀，直连 GitHub 不稳时使用 |
-| `expected_sha256` | 留空 | 留空则使用 Release 资产自带校验；填值则强制校验该哈希 |
+| `expected_sha256` | 留空 | 留空则自动读取 Release 里的 `sha256sums` 总表或 `<固件名>.sha256`（按固件名匹配哈希）；填值则强制校验该哈希 |
 | `dl_workers` | `6` | 分片并发数 |
 | `dl_chunk_mb` | `4` | 单分片大小（MB） |
 | `dl_stall_sec` | `30` | 无进展判定超时（秒），超时后重试该分片 |
@@ -211,7 +211,16 @@
 | `FM350-26.11.01` | 基础母配置 + FM350 模组固件 |
 | `自用-26.11.01` | H5000M 个人专属配置固件 |
 
-**Releases 只收录可直接刷写的完整固件镜像**：不再附带 `Config-*.txt`、`.manifest`、`kernel.bin`、`rootfs` 分片等辅助文件；`kernel` / `rootfs` 在打包阶段就被排除，X86 保留 `efi` / `combined` / `iso` / `vmdk` 等完整镜像。
+**Releases 只收录可直接刷写的完整固件镜像 + 配套的 SHA256 校验文件**：不再附带 `Config-*.txt`、`.manifest`、`kernel.bin`、`rootfs` 分片等辅助文件；`kernel` / `rootfs` 在打包阶段就被排除，X86 保留 `efi` / `combined` / `iso` / `vmdk` 等完整镜像。
+
+每个 Release 附带两类校验资产，均由打包阶段**按重命名后的固件名重新生成**（OpenWrt 原生的 `sha256sums` 记录的是编译原始文件名，重命名后会失效，故不直接沿用）：
+
+| 校验资产 | 用途 |
+| :--- | :--- |
+| `sha256sums` | 标准聚合表，下载后 `sha256sum -c sha256sums` 可人工核对全部固件；也是 `luci-app-online-upgrade` 的 `checksum_asset` 来源 |
+| `<固件名>.sha256` | 每个固件一份单哈希文件，插件按 `{固件名}.sha256` 精确匹配；同组多机型 job 追加进同一 Release 时文件名唯一，不会被 `--clobber` 互相覆盖 |
+
+> 同组同日多机型 job 共享同一个 Tag，标准 `sha256sums` 总表采用「下载已有表 → 按文件名去重合并 → 再上传」的方式尽量保留其它机型的条目；插件的自动校验以不会冲突的 `<固件名>.sha256` 为主路径，总表即使被覆盖也不影响在线升级。`firmware_pattern` 不匹配校验资产，插件不会把校验文件误当成固件下载。
 
 固件文件名统一为 **`<机型>-<模组插件>-<编译日期>-<固件类型>.<扩展名>`**：
 

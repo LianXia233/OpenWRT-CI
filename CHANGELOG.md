@@ -1,4 +1,26 @@
 # 更新日志
+## [2026-11-10] 保留 SHA256 校验资产并按重命名后的固件名重新生成
+
+### 背景
+
+上一版为「Releases 只收固件」把 `sha256sums` 一并排除，但校验文件是 Release 的必要组成：README 里 `expected_sha256` 留空时的自动校验、以及人工 `sha256sum -c` 核对都依赖它。
+
+更重要的是**不能直接沿用 OpenWrt 原生 `sha256sums`**：它记录的是编译输出的原始文件名（如 `immortalwrt-mediatek-filogic-xxx-squashfs-sysupgrade.bin`），固件重命名为 `<机型>-<模组插件>-<编译日期>-<固件类型>.<扩展名>` 后，表里的名字全部指向不存在的文件。上游 `rust/src/hash.rs` 的 `find_sha256_in_text()` 是按**目标固件文件名**逐行匹配哈希的，名字对不上就找不到；多固件 Release 里 `extract_single_sha256()` 又会因「多条不同哈希」拒绝兜底，校验直接失效。
+
+### 变更
+
+- `.github/workflows/WRT-CORE.yml`：
+  - 打包阶段仍删除失效的原生 `sha256sums`，但**在 upload 净化完成后按重命名后的固件名重新生成** `sha256sums` 总表，并为每个固件生成 `<固件名>.sha256` 单哈希文件；
+  - 上传白名单 glob 天然覆盖以机型前缀开头的 `<固件名>.sha256`；标准总表单独上传，采用「下载已有 → 按文件名去重合并 → 再上传」缓解同组多机型 job 共享 Tag 时的 `--clobber` 覆盖；
+  - 「下载一览」用途映射新增 `sha256sums` / `*.sha256` 分支（放在刷机类型判断之前，避免 `-sysupgrade.bin.sha256` 被误标成升级包），说明文案补充校验文件。
+- `docs/index.html`：产物识别补充收集校验资产映射，固件卡片新增「SHA256」校验文件下载入口；校验资产结尾不是固件扩展名，天然不匹配 `FW_NAME_RE`，不会误入固件卡片与计数。
+- `Scripts/OnlineUpgradePreset.sh`：`expected_sha256` 注释补充自动校验来源；`firmware_pattern` 不变（不匹配校验资产）。
+- `README.md` / 变更报告：Release 资产约束精确化为「固件 + 配套 SHA256 校验文件」，补充校验资产表与并发覆盖说明。
+
+### 兼容性
+
+校验资产均为新增，不影响既有固件命名与 `firmware_pattern`；存量旧 Release 无校验资产时，插件 `expected_sha256` 留空会退回 `sha256_source=none`（不校验，也不报错），重新编译对应归组后自动生效。
+
 ## [2026-11-10] 固件产物统一命名为「机型-模组插件-编译日期」并收紧 Release 资产
 
 ### 背景

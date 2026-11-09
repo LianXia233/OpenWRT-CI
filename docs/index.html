@@ -2382,6 +2382,10 @@
               <button class="btn btn-secondary btn-icon" onclick="copyText('${downloadLink}', '下载直链')" title="复制加速直链">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
               </button>
+              ${item.checksumUrl ? `<a href="${getAcceleratedUrl(item.checksumUrl)}" class="btn btn-secondary btn-sm" target="_blank" title="下载 SHA256 校验文件（sha256sum -c 核对完整性）">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                SHA256
+              </a>` : ''}
             </div>
           </div>
         `;
@@ -2410,6 +2414,9 @@
           // 日期段 YY.MM.DD 同时是 luci-app-online-upgrade 从资产名解析出的
           // 版本号。只有匹配该规范的完整固件才进列表；Config / manifest /
           // kernel / rootfs 分片 / 轮换前的旧格式资产一律跳过。
+          // SHA256 校验资产（sha256sums / <固件名>.sha256）结尾不是固件扩展名，
+          // 天然不匹配 FW_NAME_RE，不会误进卡片列表；下面单独收集它们的下载
+          // 链接挂到对应固件卡片上，方便下载后 sha256sum -c 核对完整性。
           const FW_NAME_RE = /^(H5000M|AP3000M|X86)-([A-Za-z0-9-]+)-(\d{2}\.\d{2}\.\d{2})-([A-Za-z0-9-]+)\.(bin|img\.gz|img|iso|vmdk|gz)$/;
           const DEVICE_NAMES = {
             H5000M: 'Hiveton H5000M 5G CPE',
@@ -2418,6 +2425,17 @@
           };
           releases.forEach(rel => {
             if (!rel.assets || rel.assets.length === 0) return;
+            // 每个固件一份 <固件名>.sha256，资产名唯一；标准 sha256sums 总表
+            // 作为兜底（同组多机型 job 可能只留下最后合并的一份）。
+            const checksumUrls = new Map();
+            let checksumTableUrl = '';
+            rel.assets.forEach(a => {
+              if (/\.sha256$/i.test(a.name)) {
+                checksumUrls.set(a.name.replace(/\.sha256$/i, ''), a.browser_download_url);
+              } else if (/^sha256sums(\.txt|\.sha256)?$/i.test(a.name)) {
+                checksumTableUrl = a.browser_download_url;
+              }
+            });
             rel.assets.forEach(asset => {
               const m = FW_NAME_RE.exec(asset.name);
               if (!m) return;
@@ -2463,7 +2481,8 @@
                 tag: rel.tag_name,
                 desc: rel.body ? rel.body.substring(0, 110) + '...' : `${deviceName} 云端编译自动发版固件`,
                 tags: [device, flavor, fwType, buildStamp, variant],
-                downloadUrl: asset.browser_download_url
+                downloadUrl: asset.browser_download_url,
+                checksumUrl: checksumUrls.get(asset.name) || checksumTableUrl || ''
               });
             });
           });

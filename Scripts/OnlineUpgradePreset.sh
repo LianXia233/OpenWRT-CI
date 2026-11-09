@@ -19,7 +19,8 @@
 #   rust/src/uci.rs                 const BASE = "online-upgrade.settings"
 #   rust/src/github.rs              repo / tag / proxy / firmware_pattern / min_size_mb
 #   rust/src/downloader.rs          dl_workers / dl_chunk_mb / dl_stall_sec / dl_retries
-#   rust/src/upgrade.rs             expected_sha256（自定义校验值，留空则用 Release 资产的）
+#   rust/src/upgrade.rs             expected_sha256（自定义校验值，留空则自动读取
+#                                    Release 里的 sha256sums / <固件名>.sha256）
 # 上游默认配置里的 enabled / keep_config 在本版本 Rust 与 rpcd 代码中均未被读取，
 # 故不写入预设，避免产生「配了却不起作用」的假象。
 #
