@@ -2,8 +2,9 @@
 #
 # ⚠️ 本配置为【个人自用】配置：
 #   - 仅服务作者自有的 H5000M 设备；
-#   - 产物在 Releases 中单独归组「自用」（Release Tag 形如 自用-<YY.MM.DD>，
-#     固件名后缀 -自用），不进入 MT5700 / MT5700M / FM350 / NetWiz / BASE
+#   - 产物在 Releases 中单独归组「自用」（Release 标题 / Tag 保持中文，
+#     形如 自用-<YY.MM.DD>；固件名模组段为 ASCII 的 SelfUse），
+#     不进入 MT5700 / MT5700M / FM350 / NetWiz / BASE
 #     等其他任何分类。
 #
 # 在现有 MT5700 方案基础上新增两个 LianXia233 插件：

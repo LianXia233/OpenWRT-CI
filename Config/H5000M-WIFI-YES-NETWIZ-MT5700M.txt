@@ -10,7 +10,8 @@
 # 全部 MT 包，「校验 luci-app-netwiz 已选中」步骤的组合一致性断言会拦截。
 #
 # 命名保留 "H5000M-WIFI-YES" 子串以继承按机型名匹配的既有逻辑；产物归组
-# NetWiz-MT5700M（Release Tag 形如 NetWiz-MT5700M-<YY.MM.DD>，固件名后缀 -NetWiz-MT5700M）。
+# NetWiz-MT5700M（归组 Tag 形如 NetWiz-<YY.MM.DD>，固件名模组段为 NetWiz-MT5700M，
+# 完整命名 <机型>-<模组插件>-<YY.MM.DD>-<固件类型>.<扩展名>）。
 # 设备平台
 CONFIG_TARGET_mediatek=y
 CONFIG_TARGET_mediatek_filogic=y

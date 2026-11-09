@@ -9,7 +9,8 @@
 # 本配置 MT_MODE 留空（定时工作流已固定），不装 MT5700 / MT5700M 插件。
 #
 # 命名保留 "AP3000M" 子串以继承按机型名匹配的既有逻辑；产物归组
-# NetWiz-FM350（Release Tag 形如 NetWiz-FM350-<YY.MM.DD>，固件名后缀 -NetWiz-FM350）。
+# NetWiz-FM350（归组 Tag 形如 NetWiz-<YY.MM.DD>，固件名模组段为 NetWiz-FM350，
+# 完整命名 <机型>-<模组插件>-<YY.MM.DD>-<固件类型>.<扩展名>）。
 # 设备平台
 CONFIG_TARGET_mediatek=y
 CONFIG_TARGET_mediatek_filogic=y

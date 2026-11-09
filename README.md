@@ -98,13 +98,14 @@
 
 | 机型 | `firmware_pattern`（正则） | 匹配的实际资产 |
 | :--- | :--- | :--- |
-| H5000M | `^H5000M-.*sysupgrade\.bin$` | `H5000M-MT5700-sysupgrade.bin`、`H5000M-FM350-sysupgrade.bin`、自用版 `H5000M-.-sysupgrade.bin` |
-| AP3000M | `^AP3000M-.*sysupgrade\.bin$` | `AP3000M-MT5700-sysupgrade.bin` 等 |
-| X86 | `^X86-.*-efi\.img\.gz$` | `X86-NETWIZ-MT5700-efi.img.gz` 等（UEFI 引导） |
+| H5000M | `^H5000M-[A-Za-z0-9-]+-[0-9]{2}\.[0-9]{2}\.[0-9]{2}-sysupgrade\.bin$` | `H5000M-MT5700-26.11.09-sysupgrade.bin`、`H5000M-FM350-26.11.09-sysupgrade.bin`、自用版 `H5000M-SelfUse-26.11.09-sysupgrade.bin` |
+| AP3000M | `^AP3000M-[A-Za-z0-9-]+-[0-9]{2}\.[0-9]{2}\.[0-9]{2}-sysupgrade\.bin$` | `AP3000M-MT5700-26.11.09-sysupgrade.bin` 等 |
+| X86 | `^X86-[A-Za-z0-9-]+-[0-9]{2}\.[0-9]{2}\.[0-9]{2}-efi\.img\.gz$` | `X86-NetWiz-MT5700-26.11.09-efi.img.gz` 等（UEFI 引导） |
 
-- `tag` 统一为 `latest@^<归组>-`，归组取 `BASE` / `MT5700` / `MT5700M` / `FM350` / `NetWiz` / `自用`，与 Release 的 Tag 前缀一致（如 `latest@^MT5700-` 只在 `MT5700-26.11.07` 这类 Tag 里找最新）。同一归组下三个机型共用 Release，靠 `firmware_pattern` 的设备前缀区分，不会互相取错。
-- 正则不含中文 flavor：自用版 `WRT_FLAVOR` 是「自用」，GitHub 上传资产时会把非 ASCII 字节化（实测 `H5000M-.-sysupgrade.bin`），写死 flavor 反而匹配不到。
-- **X86 引导方式需人工确认**：预设按 UEFI 取 `efi.img.gz`。BIOS/Legacy 引导的机器必须把 `firmware_pattern` 改成 `^X86-.*-combined\.img\.gz$` —— 两者分区表不同，混用会导致升级后无法引导。
+- `tag` 统一为 `latest@^<归组>-`，归组取 `BASE` / `MT5700` / `MT5700M` / `FM350` / `NetWiz` / `自用`，与 Release 的 Tag 前缀一致（如 `latest@^MT5700-` 只在 `MT5700-26.11.09` 这类 Tag 里找最新）。同一归组下三个机型共用 Release，靠 `firmware_pattern` 的设备前缀区分，不会互相取错。
+- **日期段是识别关键**：上游 `version::pick()` 从资产名取「最后一个点分数字」当版本号，`is_date_tag()` 只把 `YY.MM.DD` / `YYYY.MM.DD` 认作日期型版本。固件名带编译日期后，自用 SNAPSHOT 固件的本地构建日期才能与目标版本正确比较新/旧；不带日期（或写成 `20261109`）只能退化成按 Release 发布时间判断。正则里的 `[0-9]{2}\.[0-9]{2}\.[0-9]{2}` 明确锚定日期段，也不会误匹配轮换前遗留的旧格式资产。
+- 模组插件段全 ASCII：自用变体文件名用 `SelfUse`（`Release` 标题与 `Tag` 仍是中文「自用」）。此前用中文导致 GitHub 资产名被字节化成 `H5000M-.-sysupgrade.bin`，既不可读也无法稳定匹配，现已修复。
+- **X86 引导方式需人工确认**：预设按 UEFI 取 `efi.img.gz`。BIOS/Legacy 引导的机器必须把 `firmware_pattern` 里的 `efi` 改成 `combined` —— 两者分区表不同，混用会导致升级后无法引导。
 - 尚未发布过的归组（例如当前没有 `BASE-*` Release）不会报错，只是检查更新时返回「无新版本」，等对应构建出包后自动生效。
 - **v2 二进制路径三方对齐（构建期断言）**：上游 `root/etc/uci-defaults/90-online-upgrade-auto` 曾判定 v1 的 `/usr/bin/online-upgrade.sh`，已于上游 `98a966a` 修复为 `[ -x /usr/bin/online-upgrade ]`。[`Scripts/Packages-OnlineUpgrade.sh`](Scripts/Packages-OnlineUpgrade.sh) 现在**按内容判定、幂等**：只在检测到 v1 路径时才改写，上游已修复则一行不动；随后断言文件内没有 `online-upgrade.sh`、守卫判定的就是 `/usr/bin/online-upgrade` —— 与 `Makefile` 安装项、WRT-CORE 预编译落点三者一致，任一处漂移即构建失败。
 
@@ -210,7 +211,20 @@
 | `FM350-26.11.01` | 基础母配置 + FM350 模组固件 |
 | `自用-26.11.01` | H5000M 个人专属配置固件 |
 
-固件文件名格式：`<设备>-<产品/方案>-<固件类型>.<扩展名>`（如 `H5000M-MT5700-sysupgrade.bin`、`AP3000M-FM350-factory.bin`）。
+**Releases 只收录可直接刷写的完整固件镜像**：不再附带 `Config-*.txt`、`.manifest`、`kernel.bin`、`rootfs` 分片等辅助文件；`kernel` / `rootfs` 在打包阶段就被排除，X86 保留 `efi` / `combined` / `iso` / `vmdk` 等完整镜像。
+
+固件文件名统一为 **`<机型>-<模组插件>-<编译日期>-<固件类型>.<扩展名>`**：
+
+| 段 | 取值 | 说明 |
+| :--- | :--- | :--- |
+| 机型 | `H5000M` / `AP3000M` / `X86` | 由 `WRT_CONFIG` 首段推导 |
+| 模组插件 | `NetWiz-MT5700` / `NetWiz-MT5700M` / `NetWiz-FM350` / `MT5700` / `MT5700M` / `FM350` / `SelfUse` / `BASE` | 全 ASCII；无变体时以 `BASE` 占位，保证所有变体结构一致 |
+| 编译日期 | `YY.MM.DD`（`TZ=UTC-8`，如 `26.11.09`） | 与 Tag 的日期段同源（`WRT_DATE_SHORT`）；既是版本标识，也避免跨天同名互相覆盖 |
+| 固件类型 | `sysupgrade` / `factory` / `initramfs` / `recovery` / `efi` / `combined` / `efi-iso` / `iso` / `efi-vmdk` / `vmdk` | 保留刷机方式判断所必需的信息 |
+
+示例：`H5000M-MT5700-26.11.09-sysupgrade.bin`、`AP3000M-NetWiz-FM350-26.11.09-factory.bin`、`X86-NetWiz-MT5700-26.11.09-efi.img.gz`、`H5000M-SelfUse-26.11.09-sysupgrade.bin`。
+
+`luci-app-online-upgrade` 的 `firmware_pattern` 与 `docs/index.html` 的产物解析均按此规范实现，详见 [`Scripts/OnlineUpgradePreset.sh`](Scripts/OnlineUpgradePreset.sh) 与 [`docs/index.html`](docs/index.html)。
 
 ---
 

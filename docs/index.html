@@ -1698,7 +1698,7 @@
         <span class="section-tag">FIRMWARE RELEASES</span>
         <h2 class="section-title">固件下载矩阵中心</h2>
         <p class="section-desc">
-          所有固件按产品与变体方案精准归类。直连本仓库 GitHub Releases，提供实时动态更新与高速下载节点。
+          所有固件按产品与变体方案精准归类，文件名统一为「机型-模组插件-编译日期-固件类型」。直连本仓库 GitHub Releases，提供实时动态更新与高速下载节点。
         </p>
       </div>
 
@@ -1717,7 +1717,7 @@
           <!-- Search Input -->
           <div class="search-input-box">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input type="text" id="searchInput" placeholder="搜索固件名称、功能标签、格式...">
+            <input type="text" id="searchInput" placeholder="搜索机型、模组插件、编译日期、文件名...">
           </div>
         </div>
 
@@ -1728,7 +1728,9 @@
             <button class="chip active" data-filter-type="variant" data-value="ALL">全部方案</button>
             <button class="chip" data-filter-type="variant" data-value="NETWIZ">🌟 NetWiz 向导家族 (力荐)</button>
             <button class="chip" data-filter-type="variant" data-value="MT5700">⚡ MT5700 方案 (Rust轻量)</button>
+            <button class="chip" data-filter-type="variant" data-value="MT5700M">MT5700M 方案 A</button>
             <button class="chip" data-filter-type="variant" data-value="FM350">📡 FM350-GL 变体</button>
+            <button class="chip" data-filter-type="variant" data-value="SELFUSE">自用配置 (SelfUse)</button>
             <button class="chip" data-filter-type="variant" data-value="BASE">🔧 基础母配置</button>
           </div>
 
@@ -2150,13 +2152,13 @@
           variantLabel: 'NetWiz 家族 · MT5700',
           variantClass: 'fw-badge-netwiz',
           format: 'sysupgrade',
-          filename: 'H5000M-NetWiz-MT5700-sysupgrade.bin',
+          filename: `H5000M-NetWiz-MT5700-${tagDate}-sysupgrade.bin`,
           size: '58.4 MB',
           date: `20${tagDate.replace(/\./g, '-')}`,
           tag: `NetWiz-${tagDate}`,
           desc: '内置 NetWiz 网络向导 + MT5700 (Rust后端) 5G 模组驱动 + WiFi 7 双频 160MHz + 双温区温控',
           tags: ['NetWiz向导', '5G拨号', 'WiFi 7', 'PWM温控', '自愈守护', 'sysupgrade'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/NetWiz-${tagDate}/H5000M-NetWiz-MT5700-sysupgrade.bin`
+          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/NetWiz-${tagDate}/H5000M-NetWiz-MT5700-${tagDate}-sysupgrade.bin`
         },
         {
           id: 'h5000m-mt5700',
@@ -2166,13 +2168,13 @@
           variantLabel: 'MT5700 方案 B (轻量)',
           variantClass: 'fw-badge-mt',
           format: 'sysupgrade',
-          filename: 'H5000M-MT5700-sysupgrade.bin',
+          filename: `H5000M-MT5700-${tagDate}-sysupgrade.bin`,
           size: '56.2 MB',
           date: `20${tagDate.replace(/\./g, '-')}`,
           tag: `MT5700-${tagDate}`,
           desc: '母配置 + luci-app-mt5700 模组管理，Rust 极速后端，状态大屏，多网智能切换，推荐日常选用',
           tags: ['MT5700', 'Rust后端', 'WiFi 7', 'NetMode多网', 'sysupgrade'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/MT5700-${tagDate}/H5000M-MT5700-sysupgrade.bin`
+          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/MT5700-${tagDate}/H5000M-MT5700-${tagDate}-sysupgrade.bin`
         },
         {
           id: 'h5000m-fm350',
@@ -2182,13 +2184,13 @@
           variantLabel: 'Fibocom FM350-GL',
           variantClass: 'fw-badge-fm350',
           format: 'sysupgrade',
-          filename: 'H5000M-FM350-sysupgrade.bin',
+          filename: `H5000M-FM350-${tagDate}-sysupgrade.bin`,
           size: '57.8 MB',
           date: `20${tagDate.replace(/\./g, '-')}`,
           tag: `FM350-${tagDate}`,
           desc: '专为广和通 FM350-GL 5G 模组定制，走 RNDIS 纯净通道无内核冲突，满血 WiFi 7 吞吐',
           tags: ['FM350-GL', 'RNDIS通道', 'WiFi 7', 'PWM温控', 'sysupgrade'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/FM350-${tagDate}/H5000M-FM350-sysupgrade.bin`
+          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/FM350-${tagDate}/H5000M-FM350-${tagDate}-sysupgrade.bin`
         },
         {
           id: 'h5000m-base',
@@ -2198,13 +2200,13 @@
           variantLabel: '纯净基础母配置',
           variantClass: 'fw-badge-base',
           format: 'sysupgrade',
-          filename: 'H5000M-BASE-sysupgrade.bin',
+          filename: `H5000M-BASE-${tagDate}-sysupgrade.bin`,
           size: '53.1 MB',
           date: `20${tagDate.replace(/\./g, '-')}`,
           tag: `BASE-${tagDate}`,
           desc: '不含 5G 模组插件的基础高速固件，满血 WiFi 7，保留风扇温控与多网络智能切换组件',
           tags: ['基础母配置', 'WiFi 7', 'Tailscale', 'Samba4', 'sysupgrade'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/BASE-${tagDate}/H5000M-BASE-sysupgrade.bin`
+          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/BASE-${tagDate}/H5000M-BASE-${tagDate}-sysupgrade.bin`
         },
         {
           id: 'ap3000m-netwiz-mt5700',
@@ -2214,13 +2216,13 @@
           variantLabel: 'NetWiz 家族 · MT5700',
           variantClass: 'fw-badge-netwiz',
           format: 'sysupgrade',
-          filename: 'AP3000M-NetWiz-MT5700-sysupgrade.bin',
+          filename: `AP3000M-NetWiz-MT5700-${tagDate}-sysupgrade.bin`,
           size: '48.9 MB',
           date: `20${tagDate.replace(/\./g, '-')}`,
           tag: `NetWiz-${tagDate}`,
           desc: 'AirPi AP3000M 专属，内置 NetWiz 向导与 EEPROM 射频自愈，双频 WiFi 6 160MHz 满血发射',
           tags: ['NetWiz', 'EEPROM自愈', 'WiFi 6', 'airpi-fanctl', 'sysupgrade'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/NetWiz-${tagDate}/AP3000M-NetWiz-MT5700-sysupgrade.bin`
+          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/NetWiz-${tagDate}/AP3000M-NetWiz-MT5700-${tagDate}-sysupgrade.bin`
         },
         {
           id: 'ap3000m-factory',
@@ -2230,13 +2232,13 @@
           variantLabel: 'U-Boot 出厂直刷 / 救砖',
           variantClass: 'fw-badge-base',
           format: 'factory',
-          filename: 'AP3000M-factory.bin',
+          filename: `AP3000M-BASE-${tagDate}-factory.bin`,
           size: '46.7 MB',
           date: `20${tagDate.replace(/\./g, '-')}`,
           tag: `BASE-${tagDate}`,
           desc: 'AirPi AP3000M U-Boot 救砖底包，首次刷入写入真实 MAC 并恢复 factory 分区 28~29 dBm 射频',
           tags: ['Factory直刷', '救砖专用', 'EEPROM校准', 'factory'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/BASE-${tagDate}/AP3000M-factory.bin`
+          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/BASE-${tagDate}/AP3000M-BASE-${tagDate}-factory.bin`
         },
         {
           id: 'ap3000m-fm350',
@@ -2246,13 +2248,13 @@
           variantLabel: 'FM350-GL 模组方案',
           variantClass: 'fw-badge-fm350',
           format: 'sysupgrade',
-          filename: 'AP3000M-FM350-sysupgrade.bin',
+          filename: `AP3000M-FM350-${tagDate}-sysupgrade.bin`,
           size: '49.5 MB',
           date: `20${tagDate.replace(/\./g, '-')}`,
           tag: `FM350-${tagDate}`,
           desc: 'AP3000M 适配 FM350-GL 模组，免驱动冲突，内置 airpi-fanctl 智能风扇温控',
           tags: ['FM350', 'EEPROM修复', 'WiFi 6', 'sysupgrade'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/FM350-${tagDate}/AP3000M-FM350-sysupgrade.bin`
+          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/FM350-${tagDate}/AP3000M-FM350-${tagDate}-sysupgrade.bin`
         },
         {
           id: 'x86-netwiz-mt5700',
@@ -2262,13 +2264,13 @@
           variantLabel: 'NetWiz 家族 · Docker',
           variantClass: 'fw-badge-netwiz',
           format: 'x86-img',
-          filename: 'X86-NetWiz-MT5700-efi.img.gz',
+          filename: `X86-NetWiz-MT5700-${tagDate}-efi.img.gz`,
           size: '72.3 MB',
           date: `20${tagDate.replace(/\./g, '-')}`,
           tag: `NetWiz-${tagDate}`,
           desc: 'X86 软路由专用，集成 Docker 容器引擎与 NetWiz 网络向导，EFI 引导开箱即用',
           tags: ['Docker', 'NetWiz', 'EFI引导', 'x86-img', '硬件加解密'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/NetWiz-${tagDate}/X86-NetWiz-MT5700-efi.img.gz`
+          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/NetWiz-${tagDate}/X86-NetWiz-MT5700-${tagDate}-efi.img.gz`
         },
         {
           id: 'x86-base-grub',
@@ -2278,13 +2280,13 @@
           variantLabel: '传统 GRUB / 兼容镜像',
           variantClass: 'fw-badge-base',
           format: 'x86-img',
-          filename: 'X86-combined-squashfs.img.gz',
+          filename: `X86-BASE-${tagDate}-combined.img.gz`,
           size: '68.9 MB',
           date: `20${tagDate.replace(/\./g, '-')}`,
           tag: `BASE-${tagDate}`,
           desc: '通用 Legacy BIOS / GRUB 引导固件，支持 PVE / ESXi / 物理机，内置 Tailscale 与 Samba4',
           tags: ['GRUB引导', '软路由', 'Docker', 'x86-img'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/BASE-${tagDate}/X86-combined-squashfs.img.gz`
+          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/BASE-${tagDate}/X86-BASE-${tagDate}-combined.img.gz`
         }
       ];
     }
@@ -2369,7 +2371,7 @@
             <div class="fw-meta-row">
               <span>大小：<strong style="color:#0f172a;">${item.size}</strong></span>
               <span>版本：<strong style="color:#0f172a;">${item.tag}</strong></span>
-              <span>日期：<strong style="color:#0f172a;">${item.date}</strong></span>
+              <span>编译日期：<strong style="color:#0f172a;">${item.date}</strong></span>
             </div>
 
             <div class="fw-actions">
@@ -2401,69 +2403,75 @@
 
         if (Array.isArray(releases) && releases.length > 0) {
           statusEl.textContent = `已连接 GitHub Releases (${releases.length} 个最新发版)`;
-          
+
           const parsedItems = [];
+          // 与 WRT-CORE.yml「整理并打包固件」的命名规范严格对应：
+          //   <机型>-<模组插件>-<编译日期>-<固件类型>.<扩展名>
+          // 日期段 YY.MM.DD 同时是 luci-app-online-upgrade 从资产名解析出的
+          // 版本号。只有匹配该规范的完整固件才进列表；Config / manifest /
+          // kernel / rootfs 分片 / 轮换前的旧格式资产一律跳过。
+          const FW_NAME_RE = /^(H5000M|AP3000M|X86)-([A-Za-z0-9-]+)-(\d{2}\.\d{2}\.\d{2})-([A-Za-z0-9-]+)\.(bin|img\.gz|img|iso|vmdk|gz)$/;
+          const DEVICE_NAMES = {
+            H5000M: 'Hiveton H5000M 5G CPE',
+            AP3000M: 'AirPi AP3000M 路由器',
+            X86: 'X86_64 软路由 / 工控机'
+          };
           releases.forEach(rel => {
             if (!rel.assets || rel.assets.length === 0) return;
             rel.assets.forEach(asset => {
-              const name = asset.name;
-              if (name.endsWith('.manifest') || name.endsWith('.sha256') || name.endsWith('.md')) return;
-              
-              let device = 'X86';
-              let deviceName = 'X86_64 软路由';
-              if (name.includes('H5000M')) {
-                device = 'H5000M';
-                deviceName = 'Hiveton H5000M 5G CPE';
-              } else if (name.includes('AP3000M')) {
-                device = 'AP3000M';
-                deviceName = 'AirPi AP3000M 路由器';
-              }
+              const m = FW_NAME_RE.exec(asset.name);
+              if (!m) return;
+              const device = m[1], flavor = m[2], buildStamp = m[3], fwType = m[4];
+              const deviceName = DEVICE_NAMES[device] || device;
 
-              let variant = 'BASE';
-              let variantLabel = '基础母配置';
-              let variantClass = 'fw-badge-base';
-              if (name.includes('NetWiz')) {
+              // 模组插件段精确判定，不再靠 name.includes 猜，避免
+              // NetWiz-MT5700 被误判成 MT5700 方案
+              let variant = 'BASE', variantLabel = '基础母配置', variantClass = 'fw-badge-base';
+              if (/^NetWiz/i.test(flavor)) {
                 variant = 'NETWIZ';
-                variantLabel = 'NetWiz 向导';
+                variantLabel = `NetWiz 向导 · ${flavor.replace(/^NetWiz-?/i, '') || '标准版'}`;
                 variantClass = 'fw-badge-netwiz';
-              } else if (name.includes('MT5700M')) {
-                variant = 'MT5700M';
-                variantLabel = 'MT5700M 方案A';
-                variantClass = 'fw-badge-mt';
-              } else if (name.includes('MT5700')) {
-                variant = 'MT5700';
-                variantLabel = 'MT5700 方案B';
-                variantClass = 'fw-badge-mt';
-              } else if (name.includes('FM350')) {
-                variant = 'FM350';
-                variantLabel = 'FM350-GL 变体';
-                variantClass = 'fw-badge-fm350';
+              } else if (/^SelfUse$/i.test(flavor)) {
+                variant = 'SELFUSE'; variantLabel = '自用配置 (SelfUse)'; variantClass = 'fw-badge-base';
+              } else if (/^MT5700M$/i.test(flavor)) {
+                variant = 'MT5700M'; variantLabel = 'MT5700M 方案A'; variantClass = 'fw-badge-mt';
+              } else if (/^MT5700$/i.test(flavor)) {
+                variant = 'MT5700'; variantLabel = 'MT5700 方案B'; variantClass = 'fw-badge-mt';
+              } else if (/^FM350$/i.test(flavor)) {
+                variant = 'FM350'; variantLabel = 'FM350-GL 变体'; variantClass = 'fw-badge-fm350';
               }
 
-              let format = 'sysupgrade';
-              if (name.includes('factory')) format = 'factory';
-              if (name.includes('.img') || name.includes('efi')) format = 'x86-img';
+              let format = 'x86-img';
+              if (/sysupgrade/.test(fwType)) format = 'sysupgrade';
+              else if (/factory|initramfs|recovery/.test(fwType)) format = 'factory';
+
+              // 编译日期取自文件名（YY.MM.DD），比资产上传时间更贴近真实构建批次
+              const buildDate = `20${buildStamp.replace(/\./g, '-')}`;
 
               parsedItems.push({
                 id: asset.id.toString(),
-                device: device,
-                deviceName: deviceName,
-                variant: variant,
-                variantLabel: variantLabel,
-                variantClass: variantClass,
-                format: format,
-                filename: name,
+                device,
+                deviceName,
+                flavor,
+                variant,
+                variantLabel,
+                variantClass,
+                format,
+                filename: asset.name,
                 size: (asset.size / (1024 * 1024)).toFixed(1) + ' MB',
-                date: asset.updated_at.split('T')[0],
+                date: buildDate,
                 tag: rel.tag_name,
                 desc: rel.body ? rel.body.substring(0, 110) + '...' : `${deviceName} 云端编译自动发版固件`,
-                tags: [device, variant, format],
+                tags: [device, flavor, fwType, buildStamp, variant],
                 downloadUrl: asset.browser_download_url
               });
             });
           });
 
           if (parsedItems.length > 0) {
+            // 新固件在前：编译日期倒序，再按机型 / 文件名稳定排序
+            parsedItems.sort((a, b) => b.date.localeCompare(a.date) ||
+              a.device.localeCompare(b.device) || a.filename.localeCompare(b.filename));
             currentFirmwares = parsedItems;
             renderFirmwares();
           }

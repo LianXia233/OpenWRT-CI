@@ -1,4 +1,14 @@
-*.txt text eol=lf
-*.sh text eol=lf
+* text=auto eol=lf
 
+*.txt   text eol=lf
+*.sh    text eol=lf
 *.patch text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.js    text eol=lf
+*.uc    text eol=lf
+*.toml  text eol=lf
+*.rs    text eol=lf

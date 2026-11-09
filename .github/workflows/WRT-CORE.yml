@@ -317,16 +317,29 @@ jobs:
           # 设备名：配置名首个 '-' 前的段（H5000M / AP3000M / X86），
           # 用作固件文件名首段 —— 同一 Release 汇聚多设备时仍可一眼识别。
           echo "WRT_DEVICE=${WRT_CONFIG%%-*}" >> $GITHUB_ENV
-          # 产品方案段（用于固件文件名）：严格按「产品/配置本身」推导，
-          # 不依赖 grep 插件内容决定分类。判断优先级：
-          #   NETMONITOR（自用）→ 自用（独立分类，不进入公开 MT5700）
+          # 编译日期（YY.MM.DD，TZ=UTC-8 即北京时间）：同时用于固件文件名的
+          # 日期段与 Release Tag 的日期段，二者严格同源。
+          # luci-app-online-upgrade 的 version::pick() 会从资产名取「最后一个
+          # 点分数字」当版本号，只有 YY.MM.DD / YYYY.MM.DD 才会被 is_date_tag()
+          # 认作日期型版本，进而与本机 SNAPSHOT 固件的构建日期正确比较新/旧；
+          # 写成 20261109（无点）或完全不带日期都识别不到，只能退化成按
+          # Release 发布时间判断，甚至误判降级。
+          WRT_DATE_SHORT=$(TZ=UTC-8 date +"%y.%m.%d")
+          echo "WRT_DATE_SHORT=$WRT_DATE_SHORT" >> $GITHUB_ENV
+          # 模组/插件段（固件文件名第二段）：严格按「产品/配置本身」推导，
+          # 全部使用 ASCII —— GitHub 资产名会把中文等非 ASCII 字节化
+          # （实测「自用」变成 `.`，产出 H5000M-.-sysupgrade.bin），既不可读
+          # 也无法被在线升级插件稳定匹配。Release 标题与 Tag 仍保持中文。
+          # 判断优先级：
+          #   NETMONITOR（自用）→ SelfUse（独立分类，不进入公开 MT5700）
           #   NETWIZ 家族 → NetWiz-<组合>（NetWiz 是独立产品，即使内部含
           #     MT / FM350 插件也只属于 NetWiz，不进入 MT5700 / MT5700M / FM350）
           #   FM350 变体（非 NetWiz）→ FM350
-          #   其余普通配置 → 按 MT_MODE（MT5700 / MT5700M / 空）
+          #   其余普通配置 → 按 MT_MODE（MT5700 / MT5700M），无 MT 则 BASE
+          # BASE 是占位段，保证所有变体的文件名都是统一的四段结构。
           case "$WRT_CONFIG" in
             *-NETMONITOR*)
-              WRT_FLAVOR="自用"
+              WRT_FLAVOR="SelfUse"
               ;;
             *-NETWIZ*)
               case "$WRT_CONFIG" in
@@ -343,7 +356,7 @@ jobs:
               case "${MT_MODE:-}" in
                 MT5700)  WRT_FLAVOR="MT5700" ;;
                 MT5700M) WRT_FLAVOR="MT5700M" ;;
-                *)       WRT_FLAVOR="" ;;
+                *)       WRT_FLAVOR="BASE" ;;
               esac
               ;;
           esac
@@ -366,8 +379,10 @@ jobs:
             WRT_TAG_GROUP="BASE"
           fi
           echo "WRT_TAG_GROUP=$WRT_TAG_GROUP" >> $GITHUB_ENV
-          echo "WRT_RELEASE_TAG=$(TZ=UTC-8 date +"%y.%m.%d" | sed "s/^/${WRT_TAG_GROUP}-/")" >> $GITHUB_ENV
-          echo "当前机型=${WRT_CONFIG} MT_MODE=${MT_MODE:-NONE} 变体=${WRT_VARIANT:-（无）} 归组=${WRT_TAG_GROUP} Tag=${WRT_RELEASE_TAG}"
+          # Tag 与固件文件名共用同一份日期变量，不再各自取一次 date，
+          # 避免跨零点时「Tag 是今天、文件名是昨天」的错位。
+          echo "WRT_RELEASE_TAG=${WRT_TAG_GROUP}-${WRT_DATE_SHORT}" >> $GITHUB_ENV
+          echo "当前机型=${WRT_CONFIG} MT_MODE=${MT_MODE:-NONE} 变体=${WRT_VARIANT:-（无）} 归组=${WRT_TAG_GROUP} 编译日期=${WRT_DATE_SHORT} Tag=${WRT_TAG_GROUP}-${WRT_DATE_SHORT}"
 
       - name: 拉取 OpenWrt 源码
         run: |
@@ -1200,8 +1215,11 @@ jobs:
         run: |
           cd ./wrt/ && mkdir ./upload/
 
-          # 配置导出：配置名 + MT 模式已能完整识别产物，去掉冗余的源码/分支/秒级时间戳
-          cp -f ./.config ./upload/Config-"$WRT_CONFIG"-"$WRT_MT".txt
+          # 编译配置只在 TEST（仅出配置）模式导出供人工核对；正式构建的
+          # Release 只收固件，不再附带 Config-*.txt / manifest 等文本辅助文件。
+          if [[ $WRT_TEST == 'true' ]]; then
+            cp -f ./.config ./upload/Config-"$WRT_CONFIG"-"$WRT_MT".txt
+          fi
 
           if [[ $WRT_TEST != 'true' ]]; then
             echo "WRT_KVER=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^kernel - \K[\d\.]+' {} \;)" >> $GITHUB_ENV
@@ -1228,26 +1246,35 @@ jobs:
 
             find ./bin/targets/ -iregex ".*\(buildinfo\|json\|sha256sums\|packages\)$" -exec rm -rf {} +
 
-            # 固件统一重命名：<设备>-<产品/方案>-<固件类型>.<扩展名>
-            #   - 设备名：WRT_DEVICE（H5000M / AP3000M / X86），同一 Release 汇聚
-            #     多设备时靠它消歧，无需把架构 / target / 时间戳塞进文件名；
-            #   - 产品/方案段：WRT_FLAVOR（NetWiz-MT5700 / MT5700 / FM350 / 自用 / 空），
-            #     严格按产品身份推导，NetWiz 家族绝不落入 MT5700 / FM350 等插件分类；
-            #   - 固件类型：从原文件名识别 sysupgrade / factory / initramfs / recovery /
-            #     efi / combined / rootfs / kernel，保留刷机判断所必需的信息，
-            #     只改文件名，不改固件内容与刷写用途。
+            # 固件统一重命名：<机型>-<模组插件>-<编译日期>-<固件类型>.<扩展名>
+            #   例：H5000M-MT5700-26.11.09-sysupgrade.bin
+            #       AP3000M-NetWiz-FM350-26.11.09-factory.bin
+            #       X86-NetWiz-MT5700-26.11.09-efi.img.gz
+            #       H5000M-SelfUse-26.11.09-sysupgrade.bin
+            #   - 机型：WRT_DEVICE（H5000M / AP3000M / X86），同一 Release 汇聚
+            #     多设备时靠它消歧；
+            #   - 模组插件：WRT_FLAVOR（NetWiz-MT5700 / MT5700 / FM350 /
+            #     SelfUse / BASE），全 ASCII，各变体不再撞名；
+            #   - 编译日期：WRT_DATE_SHORT（YY.MM.DD），与 Tag 同源。它既是
+            #     版本标识（插件 version::pick 从这里解析），也避免不同日期
+            #     的产物同名互相覆盖；
+            #   - 固件类型：sysupgrade / factory / initramfs / recovery / efi /
+            #     combined / efi-iso / iso / efi-vmdk / vmdk，保留刷机方式判断
+            #     所必需的信息，只改文件名，不改固件内容与刷写用途。
+            # Releases 只收「可直接刷写的完整镜像」：Config / manifest /
+            # kernel.bin / rootfs 分片等非固件辅助文件一律不进 upload。
             for FILE in $(find ./bin/targets/ -type f -iname "*$WRT_TARGET*") ; do
               BASE=$(basename "$FILE")
               case "$BASE" in
-                *.bin|*.img|*.gz|*.vmdk) ;;   # 固件，统一重命名
-                *) mv -f "$FILE" "./upload/$BASE"; continue ;;  # manifest 等辅助文件保持原名
+                *.bin|*.img|*.gz|*.iso|*.vmdk) ;;  # 固件候选，统一重命名
+                *) continue ;;                      # 文本/清单等辅助文件：不搬进 upload
               esac
               EXT=$(echo "$BASE" | cut -d '.' -f 2-)
               STEM="${BASE%.*}"
-              # 类型识别（顺序即优先级）：sysupgrade / factory / initramfs / recovery
-              # 是明确刷机类型；efi 区分 UEFI 与 legacy（combined-efi 与 combined 并存时
-              # 必须可区分，否则刷错引导方式）；combined / rootfs / kernel 兜底。
-              case "$STEM" in
+              # 类型识别（顺序即优先级）：明确刷机类型 → UEFI/legacy 区分 →
+              # 分片 → ISO / VMDK 兜底。用 $BASE 判断以便区分 *.iso / *.vmdk，
+              # 不让两个 ISO 撞成同一个名字。
+              case "$BASE" in
                 *sysupgrade*)   TYPE=sysupgrade ;;
                 *factory*)      TYPE=factory ;;
                 *initramfs*)    TYPE=initramfs ;;
@@ -1256,17 +1283,22 @@ jobs:
                 *combined*)     TYPE=combined ;;
                 *rootfs*)       TYPE=rootfs ;;
                 *kernel*)       TYPE=kernel ;;
-                *)              TYPE="" ;;
+                *-efi.iso)      TYPE=efi-iso ;;
+                *.iso)          TYPE=iso ;;
+                *-efi.vmdk)     TYPE=efi-vmdk ;;
+                *.vmdk)         TYPE=vmdk ;;
+                *-efi*)         TYPE=efi ;;
+                *)              TYPE=image ;;
               esac
-              if [ -n "$WRT_FLAVOR" ]; then
-                NEW_BASE="$WRT_DEVICE-$WRT_FLAVOR"
-              else
-                NEW_BASE="$WRT_DEVICE"
-              fi
+              # rootfs / kernel 是编译分片而非可直接刷写的完整固件，不发布
+              case "$TYPE" in
+                rootfs|kernel) continue ;;
+              esac
+              NEW_BASE="$WRT_DEVICE-$WRT_FLAVOR-$WRT_DATE_SHORT"
               [ -n "$TYPE" ] && NEW_BASE="$NEW_BASE-$TYPE"
               NEW_FILE="$NEW_BASE.$EXT"
-              # 防冲突兜底：同一设备同方案同类型出现多文件时，先追加文件系统段
-              #（squashfs / ext4），再不行才追加源文件名短哈希，绝不覆盖既有产物。
+              # 防冲突兜底：同机型同方案同日期同类型出现多文件时，先追加
+              # 文件系统段（squashfs / ext4），再不行才追加源文件名短哈希。
               if [ -e "./upload/$NEW_FILE" ]; then
                 FS=$(echo "$STEM" | grep -ioE 'squashfs|ext4' | tail -n 1 || true)
                 if [ -n "$FS" ] && [ ! -e "./upload/$NEW_BASE-$FS.$EXT" ]; then
@@ -1279,15 +1311,23 @@ jobs:
               mv -f "$FILE" "./upload/$NEW_FILE"
             done
 
-            find ./bin/targets/ -type f -exec mv -f {} ./upload/ \;
-
             # 过滤非固件小文件：mediatek 目标编译时会把 mt798x-ram-*-bl2 等
             # DDR 引导辅助 bin（<1MB，仅供开发者二次拼包，不可直接刷写）输出到
-            # bin/targets，上面的兜底搬运会把它带进 upload。真正的固件 bin 都是
-            # 几十 MB 的 sysupgrade / factory / kernel 镜像，按「.bin 且小于 2MB
-            # 即非固件」过滤，Release 页面只保留正常固件与 Config / manifest
-            # 等文本辅助文件。-print 把被删文件记进日志，便于事后核对。
+            # bin/targets，可能被上面的循环当成固件搬进 upload。真正的固件
+            # bin 都是几十 MB，按「.bin 且小于 2MB 即非固件」过滤。
             find ./upload/ -type f -iname "*.bin" -size -2M -print -delete
+
+            # 净化 upload：只保留本次机型 / 本次编译日期、符合新命名规范的
+            # 完整固件，任何旧格式残留或辅助文本都剔除，保证 Release 资产
+            # 100% 是可直接刷写的固件。
+            find ./upload/ -maxdepth 1 -type f \
+              ! -name "$WRT_DEVICE-$WRT_FLAVOR-$WRT_DATE_SHORT-*" -print -delete
+
+            if ! ls ./upload/*.* >/dev/null 2>&1; then
+              echo "::error::整理后 upload 为空，本次未产出任何固件"
+              exit 1
+            fi
+            echo "==> 待发布固件：" && ls -lh ./upload/
 
             make clean -j$(nproc)
           fi
@@ -1380,8 +1420,10 @@ jobs:
             gh release create "$WRT_RELEASE_TAG" --notes-file "$BODY"
           fi
 
-          # 产物上传：单文件串行 + 失败重试（最多 5 次，间隔 5s），规避服务端断连
-          for f in ./wrt/upload/*.*; do
+          # 产物上传：单文件串行 + 失败重试（最多 5 次，间隔 5s），规避服务端断连。
+          # upload 已在「整理并打包固件」阶段净化，这里再加一道命名白名单，
+          # 只上传本次机型 / 日期的固件，杜绝非固件资产混入 Release。
+          for f in ./wrt/upload/"$WRT_DEVICE"-"$WRT_FLAVOR"-"$WRT_DATE_SHORT"-*.*; do
             [ -f "$f" ] || continue
             attempt=0
             until gh release upload --clobber "$WRT_RELEASE_TAG" "$f"; do
@@ -1401,13 +1443,17 @@ jobs:
           {
             echo "## 📦 下载一览（按机型）"
             echo
-            echo "> 文件命名：\`<设备>-<产品/方案>-<固件类型>.<扩展名>\`，与「用途」列对照选择即可。"
+            echo "> 文件命名：\`<机型>-<模组插件>-<编译日期>-<固件类型>.<扩展名>\`（如 \`H5000M-MT5700-26.11.09-sysupgrade.bin\`）。日期段 \`YY.MM.DD\` 即编译日期，也是 \`luci-app-online-upgrade\` 从资产名解析出的版本号；与「用途」列对照选择即可。"
+            echo
+            echo "> 本 Release 只收录可直接刷写的完整固件镜像，不含编译配置、插件清单、内核 / 根文件系统分片等辅助文件。"
             echo
           } >> "$BODY_DL"
 
           declare -A ROWS=()
           while IFS=$'\t' read -r NAME SIZE URL; do
             [ -n "${NAME:-}" ] || continue
+            # 新命名以机型前缀开头；Config-* / immortalwrt-* 分支仅为兼容
+            # 轮换前遗留的历史资产，新 Release 已不再产出这类文件。
             case "$NAME" in
               H5000M-*|Config-H5000M-*)        DEV=H5000M ;;
               AP3000M-*|Config-AP3000M-*)      DEV=AP3000M ;;
@@ -1424,6 +1470,7 @@ jobs:
               *recovery*)    USE="recovery 救砖包" ;;
               *rootfs*)      USE="rootfs 根文件系统" ;;
               *kernel*)      USE="内核镜像" ;;
+              *-efi-iso.iso) USE="UEFI 安装镜像（光盘 / U 盘）" ;;
               *-efi.iso)     USE="UEFI 安装镜像（光盘 / U 盘）" ;;
               *.iso)         USE="BIOS/Legacy 安装镜像（光盘 / U 盘）" ;;
               *-efi.vmdk)    USE="UEFI 虚拟盘（VMware）" ;;
@@ -1432,8 +1479,8 @@ jobs:
               *.img.gz)      USE="BIOS/Legacy 磁盘镜像（balenaEtcher / dd 写入）" ;;
               *-efi*)        USE="UEFI 镜像" ;;
               *combined*)    USE="BIOS/Legacy 磁盘镜像" ;;
-              Config-*)      USE="编译配置（可复现）" ;;
-              *.manifest)    USE="内置插件清单" ;;
+              Config-*)      USE="编译配置（历史资产）" ;;
+              *.manifest)    USE="内置插件清单（历史资产）" ;;
               *)             USE="固件文件" ;;
             esac
             # 体积：≥1MB 显示 MB（一位小数），<1MB 显示 KB（manifest 等小文件）

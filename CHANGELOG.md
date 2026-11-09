@@ -1,4 +1,32 @@
 # 更新日志
+## [2026-11-10] 固件产物统一命名为「机型-模组插件-编译日期」并收紧 Release 资产
+
+### 背景
+
+原命名 `<设备>-<产品/方案>-<固件类型>.<扩展名>` 不带日期，导致：
+
+- 不同日期 / 不同变体的产物同名，跨天 `--clobber` 互相覆盖，用户无法从文件名判断构建批次；
+- 自用变体 `WRT_FLAVOR` 用中文「自用」，GitHub 上传时把非 ASCII 字节化成 `.`，实际资产是 `H5000M-.-sysupgrade.bin`，既不可读也无法被在线升级插件稳定匹配；
+- 上游 `version::pick()` 从资产名取「最后一个点分数字」当版本号，原文件名取不到，只能退化成按 Release 发布时间判断新/旧，自用 SNAPSHOT 固件甚至可能误判降级；
+- Release 里混入了 `Config-*.txt`、`.manifest`、`kernel.bin`、`rootfs-*.tar.gz` / `rootfs.img.gz` 等非固件辅助文件。
+
+### 变更
+
+- `.github/workflows/WRT-CORE.yml`：
+  - 新增 `WRT_DATE_SHORT`（`YY.MM.DD`，`TZ=UTC-8`），同时供固件文件名日期段与 `WRT_RELEASE_TAG` 使用，避免跨零点错位；
+  - `WRT_FLAVOR` 全 ASCII 化：自用 `自用` → `SelfUse`，无变体 `""` → `BASE`。**Release 标题与 Tag 仍保持中文**（如 `自用构建 · 26.11.09` / `自用-26.11.09`），只改固件文件名；
+  - 重命名规则改为 `<机型>-<模组插件>-<编译日期>-<固件类型>.<扩展名>`；固件类型识别补齐 `efi-iso` / `iso` / `efi-vmdk` / `vmdk`，解决两个 X86 ISO 撞名；
+  - 打包阶段排除 `rootfs` / `kernel` 分片与非固件文本，不再兜底搬运 `bin/targets` 残留、不再导出 `Config-*.txt`；新增 upload 净化（只保留本次机型 / 日期的新命名固件）与空目录断言；
+  - 上传循环改用命名白名单 glob，Release 资产 100% 是可直接刷写的完整镜像；「下载一览」同步更新命名说明。
+- `Scripts/OnlineUpgradePreset.sh`：`firmware_pattern` 改为按新命名锚定机型前缀 + `[0-9]{2}\.[0-9]{2}\.[0-9]{2}` 日期段 + 刷机类型，既能被 `version::pick()` 解析出日期型版本号，也不会匹配轮换前的旧格式资产；`tag` 归组逻辑不变。
+- `docs/index.html`：产物识别改为按新命名**结构化解析**（机型 / 模组插件 / 编译日期 / 固件类型四段正则），不再用 `name.includes` 猜测；编译日期取自文件名而非资产上传时间；新增 `SelfUse` / `MT5700M` 筛选；fallback 目录的文件名与下载直链同步补齐日期段并按编译日期倒序展示。
+- `README.md` / `Config/*.txt` / 工作流注释：命名规范、预设表与过时说明同步。
+- `.gitattributes`：补齐 `*.yml` / `*.yaml` / `*.html` / `*.md` / `*.json` 的 `text eol=lf` 规则。
+
+### 兼容性
+
+新 `firmware_pattern` 不匹配旧格式资产，**需要重新编译一次对应归组**，在线升级插件与下载页才会看到新产物；历史 Release 由 `Auto-Clean` 按既有轮换策略自然淘汰。`WRT_TAG_GROUP` / `Tag` 归组规则未变，`Auto-Clean.yml` 无需改动。
+
 ## [2026-11-08] 全机型内置 `luci-app-online-upgrade` 并按机型预设升级配置
 
 ### 背景
