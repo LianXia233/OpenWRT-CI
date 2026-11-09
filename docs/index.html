@@ -16,7 +16,7 @@
   </script>
 
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>OpenWRT-CI · 高性能 5G CPE & 路由器定制固件工坊</title>
   <meta name="description" content="基于 ImmortalWrt 深度定制 · 专为 Hiveton H5000M 5G CPE、AirPi AP3000M 与通用 X86_64 打造。支持 NetWiz 智能向导、MT5700 / FM350-GL 5G 模组、多网络智能切换与温控。">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230284c7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect width='20' height='8' x='2' y='14' rx='2'/><path d='M6 18h.01'/><path d='M10 18h.01'/><path d='M15 10v4'/><path d='M17.8 7.2a6 6 0 0 0-7.6 0'/><path d='M20.6 4.4a10 10 0 0 0-13.2 0'/></svg>" type="image/svg+xml">
@@ -1468,7 +1468,311 @@
       padding: 0 4px;
     }
 
-  </style>
+  /* ============================================================
+   Phase 3 移动端落地补丁 · B = openwrtci.html (OpenWRT-CI, main:/docs)
+   注入位置：本文件最后一个 style 结束标签之前，新建【独立】块，
+             【必须】排在现有 @media (max-width:767px) 块（1438-1459）之后，
+             不要插进现有 @media (max-width:640px) 块（1381-1388）内部。
+   约束：全部规则包在 max-width:640px 内 -> >=641px 零影响（768 零改动）；
+         仅 640 / 360 两个宽度断点；纯 CSS，幂等，自包含。
+   注意：767 块排在 640 块之后会覆盖同名类，冲突选择器一律提高
+         特异性（如 .tutorial-tabs .tut-tab-btn / .container .stat-bar）。
+   ============================================================ */
+
+@media (max-width: 640px) {
+
+  /* ---- 1. 兜底与安全区（B 原 body 已有 overflow-x:hidden，此处显式保留） ---- */
+  body {
+    overflow-x: hidden;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* ---- 2. 顶栏 56px / 隐藏 nav-links ---- */
+  .nav-inner { min-height: 56px !important; }
+  header .nav-links { display: none !important; }
+  #opacitySwitcher { display: none !important; }
+  .nav-actions { gap: 8px !important; }
+
+  /* ---- 3. 字号阶梯（Phase 1） ---- */
+  .hero-title, h1 {
+    font-size: clamp(26px, 7vw, 34px) !important;
+    line-height: 1.25 !important;
+  }
+  .section-title, h2 {
+    font-size: clamp(20px, 5.2vw, 24px) !important;
+    line-height: 1.3 !important;
+  }
+  h3, h4 {
+    font-size: clamp(16px, 4.2vw, 18px) !important;
+  }
+  .hero-desc, .section-desc {
+    font-size: clamp(14px, 3.8vw, 16px) !important;
+  }
+
+  /* ---- 4. 中文断行（弃 break-all，balance，隐藏标题硬 br） ---- */
+  h1, h2, h3 {
+    word-break: normal !important;
+    line-break: strict;
+    overflow-wrap: break-word;
+    text-wrap: balance;
+  }
+  /* 只隐藏标题内硬 br；教程正文里的 <br>（2617/2641/2642）保持不变 */
+  h1 br, h2 br { display: none !important; }
+  .nowrap { white-space: nowrap !important; }
+  p, li, td, th, span {
+    word-break: normal !important;
+    overflow-wrap: break-word;
+  }
+
+  /* ---- 5. 正文阅读宽度（min(32ch,100%) / 左对齐 / 1.6） ---- */
+  .hero-desc, .section-desc {
+    max-width: min(32ch, 100%) !important;
+    margin-left: 0 !important;
+    margin-right: auto !important;
+    text-align: left !important;
+    line-height: 1.6 !important;
+  }
+  .hero-badge {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+    white-space: normal !important;
+  }
+
+  /* ---- 6. 首屏：CTA 2+1 网格（B 已有 .hero-cta 类，直接接管） ---- */
+  .hero-capsule .hero-cta {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    align-items: stretch !important;
+    justify-content: stretch !important;
+    gap: 12px !important;
+    margin-bottom: 20px !important;
+  }
+  .hero-capsule .hero-cta > a {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    white-space: normal !important;
+    font-size: 14px !important;
+  }
+  .hero-capsule .hero-cta > a:first-child {
+    grid-column: 1 / -1 !important;
+    min-height: 48px !important;
+  }
+  .hero-capsule .hero-cta > a:not(:first-child) {
+    min-height: 44px !important;
+  }
+
+  /* ---- 7. 首屏：统计卡改单行横滚 + scroll-snap（提高特异性对抗 820 块） ---- */
+  .container .stat-bar {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 12px !important;
+    max-width: 100%;
+    min-width: 0;
+    padding-bottom: 6px;
+    margin-bottom: 20px !important;
+  }
+  .container .stat-bar > .stat-card {
+    flex: 0 0 min(72vw, 260px) !important;
+    min-width: 0;
+    scroll-snap-align: start;
+    padding: 16px !important;
+  }
+
+  /* ---- 8. 筛选 chip 2 列网格（只命中直接含 .chip 的组） ---- */
+  .filter-group:has(> .chip) {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+  .filter-group:has(> .chip) > .chip {
+    min-width: 0 !important;
+    max-width: 100%;
+    box-sizing: border-box !important;
+    white-space: normal !important;
+    text-align: center;
+    line-height: 1.35;
+  }
+  .segmented-control .segment-btn {
+    white-space: normal !important;
+    font-size: 12px !important;
+    min-height: 44px !important;
+  }
+
+  /* ---- 9. 溢出与横向滚动容器 ---- */
+  div[style*="overflow-x:auto"],
+  div[class*="overflow-x-auto"] {
+    max-width: 100% !important;
+    min-width: 0;
+    overflow-x: auto !important;
+    overscroll-behavior-x: contain;
+  }
+  /* 横向 Tab：scroll-snap + 右侧渐隐提示。
+     底色用 background-color（非 background 简写），保证 background-image
+     渐隐提示不被擦除；提高特异性对抗 767px 块。 */
+  .tutorial-tabs {
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    max-width: 100%;
+    min-width: 0;
+    background-color: #f1f5f9 !important;
+    background-image: linear-gradient(90deg,
+        rgba(241, 245, 249, 0) calc(100% - 26px),
+        rgba(241, 245, 249, 0.96) 100%) !important;
+  }
+  .tutorial-tabs .tut-tab-btn {
+    scroll-snap-align: start;
+    min-height: 44px !important;
+    min-width: 44px !important;
+    max-width: 100%;
+    box-sizing: border-box !important;
+  }
+  .tut-scroll-hint {
+    font-size: 12px !important;
+    line-height: 1.4;
+  }
+  code, pre {
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  pre { white-space: pre-wrap !important; }
+
+  /* ---- 10. 触控目标 >=44px / 输入 16px / range 44px 热区 ---- */
+  .btn, .btn-sm, .btn-icon,
+  .chip,
+  .segment-btn,
+  .copy-btn,
+  .brand-logo,
+  .tutorial-tabs .tut-tab-btn,
+  .mobile-menu-btn,
+  .floating-btn,
+  a[href="#downloads"][class*="btn"],
+  footer a {
+    min-height: 44px !important;
+    min-width: 44px !important;
+    max-width: 100%;
+    box-sizing: border-box !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+  /* 句内纯文字链：inline 元素上 min-height 无效，用 padding 扩大热区；
+     不改 display，避免覆盖任何响应式 display:none。 */
+  a[class*="underline"]:not([class*="rounded"]),
+  a:not([class]) {
+    padding-top: 15px !important;
+    padding-bottom: 15px !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    min-height: 44px !important;
+    min-width: 44px !important;
+    box-sizing: border-box !important;
+  }
+  input:not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+    min-height: 44px !important;
+    max-width: 100%;
+    box-sizing: border-box !important;
+  }
+  .search-input-box input { font-size: 16px !important; }
+  input[type="range"] {
+    min-height: 44px !important;
+    padding-top: 18px !important;
+    padding-bottom: 18px !important;
+    box-sizing: border-box !important;
+    background-clip: content-box !important;
+    -webkit-background-clip: content-box !important;
+    touch-action: pan-y;
+  }
+
+  /* ---- 11. <=10px 小字提到 12px（滑块刻度 / "4 Tabs"） ---- */
+  [style*="font-size:10px"],
+  [class*="text-[10px]"] {
+    font-size: 12px !important;
+  }
+
+  /* ---- 12. 卡片/区块间距（卡片 16 / 区块 20 / 组 12） ---- */
+  .hero-capsule { padding: 20px 16px !important; }
+  .fw-card, .device-card, .feat-card, .spec-item-card, .tut-content-box {
+    padding: 16px !important;
+  }
+
+  /* ---- 13. 毛玻璃 blur 12px ----
+     注意：刻意【不】覆盖 .md-card / .chip 的 background-color，
+     B 的 opacitySlider 通过 --md-sys-color-card / --md-sys-color-surface
+     变量动态调节透光度，此处加 !important 会打断该 JS；
+     背景相关一律只用 background-color 非简写（见 .tutorial-tabs）。 */
+  .md-card {
+    backdrop-filter: blur(12px) saturate(150%) !important;
+    -webkit-backdrop-filter: blur(12px) saturate(150%) !important;
+  }
+
+  /* ---- 14. 锚点 / 浮动工具避让 / a11y ---- */
+  #downloads {
+    scroll-margin-top: calc(64px + env(safe-area-inset-top));
+  }
+  .wallpaper-control-panel {
+    top: calc(68px + env(safe-area-inset-top)) !important;
+    max-height: calc(100dvh - 80px - env(safe-area-inset-top));
+    overflow-y: auto;
+  }
+  .toast-container {
+    bottom: calc(20px + env(safe-area-inset-bottom)) !important;
+  }
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid #0284c7 !important;
+    outline-offset: 2px;
+  }
+}
+
+/* ---- 并列追加：降低动效（自带 640 条件，>=641 零影响） ---- */
+@media (max-width: 640px) and (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- 并列追加：横屏隐藏浮动工具 ---- */
+@media (max-width: 640px) and (orientation: landscape) {
+  .wallpaper-control-panel,
+  .toast-container { display: none !important; }
+}
+
+/* ---- 最后并列追加：360 单列降级 ---- */
+@media (max-width: 360px) {
+  .hero-capsule .hero-cta {
+    grid-template-columns: 1fr !important;
+  }
+  .hero-capsule .hero-cta > a:first-child {
+    grid-column: auto !important;
+  }
+  .filter-group:has(> .chip) {
+    grid-template-columns: 1fr !important;
+  }
+  .container .stat-bar > .stat-card {
+    flex-basis: min(86vw, 260px) !important;
+  }
+}
+</style>
 </head>
 <body>
 
@@ -1616,8 +1920,8 @@
         </div>
 
         <h1 class="hero-title">
-          高性能 5G CPE & 软路由<br>
-          <span class="gradient-text">OpenWRT 定制固件云端工坊</span>
+          <span class="nowrap">高性能</span> <span class="nowrap">5G CPE</span> & <span class="nowrap">软路由</span><br>
+          <span class="gradient-text">OpenWRT <span class="nowrap">定制固件</span><span class="nowrap">云端工坊</span></span>
         </h1>
 
         <p class="hero-desc">
