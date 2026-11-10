@@ -361,6 +361,24 @@ jobs:
               ;;
           esac
           echo "WRT_FLAVOR=$WRT_FLAVOR" >> $GITHUB_ENV
+          # 架构段（固件文件名第三段，位于日期之前）：取值必须是
+          # luci-app-online-upgrade `compat::asset_arch()` 认识的架构词，
+          # 否则插件把资产判成「未声明架构」（arch_check=undeclared），
+          # 即便机型命中也不会自动升级（rust/src/compat.rs：
+          # undeclared → can_upgrade=false，只能在「固件列表」里手工确认）。
+          #   aarch64 —— mediatek/filogic（H5000M、AP3000M），命中 Arch::Aarch64；
+          #   x86-64  —— x86/64，命中 Arch::X86（与 `Arch::label()` 的 x86_64 等价，
+          #              用连字符是为了让旧版固件里的 `[A-Za-z0-9-]+` 预设正则
+          #              继续命中，详见下方重命名说明）。
+          case "$WRT_DEVICE" in
+            X86)            WRT_ARCH="x86-64"  ;;
+            H5000M|AP3000M) WRT_ARCH="aarch64" ;;
+            *)
+              WRT_ARCH="aarch64"
+              echo "::warning::未知机型 ${WRT_DEVICE}，架构段按 aarch64 生成，请核对产物名"
+              ;;
+          esac
+          echo "WRT_ARCH=$WRT_ARCH" >> $GITHUB_ENV
           # Release 归组（Tag = <组名>-<YY.MM.DD>）：让 Releases 页面按分类归类，
           # 同组同一天的全部机型产物汇聚到同一个 Release 里：
           #   WRT_VARIANT 非空 → 按产品/变体组（NetWiz 家族统一归 NetWiz，
@@ -1249,15 +1267,21 @@ jobs:
             # 这里一并删掉，稍后在 upload 里按重命名后的固件名重新生成。
             find ./bin/targets/ -iregex ".*\(buildinfo\|json\|sha256sums\|packages\)$" -exec rm -rf {} +
 
-            # 固件统一重命名：<机型>-<模组插件>-<编译日期>-<固件类型>.<扩展名>
-            #   例：H5000M-MT5700-26.11.09-sysupgrade.bin
-            #       AP3000M-NetWiz-FM350-26.11.09-factory.bin
-            #       X86-NetWiz-MT5700-26.11.09-efi.img.gz
-            #       H5000M-SelfUse-26.11.09-sysupgrade.bin
+            # 固件统一重命名：<机型>-<模组插件>-<架构>-<编译日期>-<固件类型>.<扩展名>
+            #   例：H5000M-NetWiz-MT5700-aarch64-26.11.09-sysupgrade.bin
+            #       AP3000M-NetWiz-FM350-aarch64-26.11.09-factory.bin
+            #       X86-NetWiz-MT5700-x86-64-26.11.09-efi.img.gz
+            #       H5000M-SelfUse-aarch64-26.11.09-sysupgrade.bin
             #   - 机型：WRT_DEVICE（H5000M / AP3000M / X86），同一 Release 汇聚
             #     多设备时靠它消歧；
             #   - 模组插件：WRT_FLAVOR（NetWiz-MT5700 / MT5700 / FM350 /
             #     SelfUse / BASE），全 ASCII，各变体不再撞名；
+            #   - 架构：WRT_ARCH（aarch64 / x86-64），供 luci-app-online-upgrade
+            #     `compat::asset_arch()` 声明架构。缺了它插件只能判「未声明
+            #     架构」，机型再对也不允许自动升级；放在日期之前是为了让旧版
+            #     固件里的 `[A-Za-z0-9-]+-[0-9]{2}\.[0-9]{2}\.[0-9]{2}-`
+            #     预设正则继续命中，已刷老固件的设备不必先手动重刷就能
+            #     在线升级到新命名产物；
             #   - 编译日期：WRT_DATE_SHORT（YY.MM.DD），与 Tag 同源。它既是
             #     版本标识（插件 version::pick 从这里解析），也避免不同日期
             #     的产物同名互相覆盖；
@@ -1298,7 +1322,7 @@ jobs:
               case "$TYPE" in
                 rootfs|kernel) continue ;;
               esac
-              NEW_BASE="$WRT_DEVICE-$WRT_FLAVOR-$WRT_DATE_SHORT"
+              NEW_BASE="$WRT_DEVICE-$WRT_FLAVOR-$WRT_ARCH-$WRT_DATE_SHORT"
               [ -n "$TYPE" ] && NEW_BASE="$NEW_BASE-$TYPE"
               NEW_FILE="$NEW_BASE.$EXT"
               # 防冲突兜底：同机型同方案同日期同类型出现多文件时，先追加
@@ -1325,7 +1349,7 @@ jobs:
             # 完整固件，任何旧格式残留或辅助文本都剔除。校验文件随后按
             # 净化后的固件重新生成，保证 Release 只含固件 + 配套校验。
             find ./upload/ -maxdepth 1 -type f \
-              ! -name "$WRT_DEVICE-$WRT_FLAVOR-$WRT_DATE_SHORT-*" -print -delete
+              ! -name "$WRT_DEVICE-$WRT_FLAVOR-$WRT_ARCH-$WRT_DATE_SHORT-*" -print -delete
 
             # 重新生成 SHA256 校验文件（基于「重命名后的固件名」，而非编译原始名）：
             #   - sha256sums        标准聚合表，sha256sum -c sha256sums 人工校验，
@@ -1339,7 +1363,7 @@ jobs:
             # 只覆盖 upload 里已净化的完整固件，不含任何辅助文件。
             cd ./upload/
             : > sha256sums
-            for FW in "$WRT_DEVICE"-"$WRT_FLAVOR"-"$WRT_DATE_SHORT"-*; do
+            for FW in "$WRT_DEVICE"-"$WRT_FLAVOR"-"$WRT_ARCH"-"$WRT_DATE_SHORT"-*; do
               [ -f "$FW" ] || continue
               case "$FW" in *.sha256|sha256sums) continue ;; esac
               SUM=$(sha256sum "$FW")
@@ -1450,7 +1474,7 @@ jobs:
           # upload 已在「整理并打包固件」阶段净化，这里再加一道命名白名单，
           # 只上传本次机型 / 日期的固件及其 <固件名>.sha256 校验文件（两者都
           # 以机型前缀开头，同一 glob 覆盖），杜绝非固件资产混入 Release。
-          for f in ./wrt/upload/"$WRT_DEVICE"-"$WRT_FLAVOR"-"$WRT_DATE_SHORT"-*.*; do
+          for f in ./wrt/upload/"$WRT_DEVICE"-"$WRT_FLAVOR"-"$WRT_ARCH"-"$WRT_DATE_SHORT"-*.*; do
             [ -f "$f" ] || continue
             attempt=0
             until gh release upload --clobber "$WRT_RELEASE_TAG" "$f"; do
@@ -1497,7 +1521,7 @@ jobs:
           {
             echo "## 📦 下载一览（按机型）"
             echo
-            echo "> 文件命名：\`<机型>-<模组插件>-<编译日期>-<固件类型>.<扩展名>\`（如 \`H5000M-MT5700-26.11.09-sysupgrade.bin\`）。日期段 \`YY.MM.DD\` 即编译日期，也是 \`luci-app-online-upgrade\` 从资产名解析出的版本号；与「用途」列对照选择即可。"
+            echo "> 文件命名：\`<机型>-<模组插件>-<架构>-<编译日期>-<固件类型>.<扩展名>\`（如 \`H5000M-NetWiz-MT5700-aarch64-26.11.09-sysupgrade.bin\`）。日期段 \`YY.MM.DD\` 即编译日期，也是 \`luci-app-online-upgrade\` 从资产名解析出的版本号；与「用途」列对照选择即可。"
             echo
             echo "> 本 Release 只收录可直接刷写的完整固件镜像，以及每个固件对应的 SHA256 校验文件（\`sha256sums\` 总表与 \`<固件名>.sha256\`）；不含编译配置、插件清单、内核 / 根文件系统分片等辅助文件。校验文件按重命名后的固件名生成，可用 \`sha256sum -c sha256sums\` 人工核对，\`luci-app-online-upgrade\` 的 \`expected_sha256\` 留空时也会自动读取。"
             echo

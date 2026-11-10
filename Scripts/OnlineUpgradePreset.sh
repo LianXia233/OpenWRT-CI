@@ -33,6 +33,16 @@ WRT_CONFIG="${WRT_CONFIG:-}"
 WRT_DEVICE="${WRT_DEVICE:-${WRT_CONFIG%%-*}}"
 WRT_VARIANT="${WRT_VARIANT:-}"
 MT_MODE="${MT_MODE:-}"
+# 架构段：由 WRT-CORE「初始化构建变量」导出；本地手动构建时按机型回退。
+# 取值必须能被 luci-app-online-upgrade `compat::asset_arch()` 识别，
+# 否则插件把资产判成「未声明架构」，规则命中也不写进匹配依据。
+WRT_ARCH="${WRT_ARCH:-}"
+if [ -z "$WRT_ARCH" ]; then
+	case "$WRT_DEVICE" in
+		X86) WRT_ARCH="x86-64" ;;
+		*) WRT_ARCH="aarch64" ;;
+	esac
+fi
 # 归组优先级与 WRT-CORE「初始化构建变量」完全一致：
 #   有变体按变体（NetWiz / FM350 / 自用），否则按 MT 模式，再否则 BASE
 WRT_TAG_GROUP="${WRT_TAG_GROUP:-${WRT_VARIANT:-${MT_MODE:-BASE}}}"
@@ -53,31 +63,44 @@ if [ -z "$WRT_DEVICE" ]; then
 fi
 
 # 资产名规则取自 WRT-CORE「整理并打包固件」：
-#   <机型>-<模组插件>-<编译日期>-<固件类型>.<扩展名>
-#   - H5000M / AP3000M：<机型>-<模组插件>-<YY.MM.DD>-sysupgrade.bin
-#   - X86：<机型>-<模组插件>-<YY.MM.DD>-efi.img.gz（无 sysupgrade.bin）
-#   - 例：H5000M-MT5700-26.11.09-sysupgrade.bin
-#         H5000M-SelfUse-26.11.09-sysupgrade.bin（自用，文件名已 ASCII 化）
-#         X86-NetWiz-MT5700-26.11.09-efi.img.gz
+#   <机型>-<模组插件>-<架构>-<编译日期>-<固件类型>.<扩展名>
+#   - H5000M / AP3000M：<机型>-<模组插件>-aarch64-<YY.MM.DD>-sysupgrade.bin
+#   - X86：<机型>-<模组插件>-x86-64-<YY.MM.DD>-efi.img.gz（无 sysupgrade.bin）
+#   - 例：H5000M-NetWiz-MT5700-aarch64-26.11.09-sysupgrade.bin
+#         H5000M-SelfUse-aarch64-26.11.09-sysupgrade.bin（自用，文件名已 ASCII 化）
+#         X86-NetWiz-MT5700-x86-64-26.11.09-efi.img.gz
 # 模组插件段全 ASCII（含 NetWiz-MT5700 这类带连字符的组合），不再出现中文
 # 被 GitHub 字节化成 `.` 的资产名；日期段用 [0-9]{2}\.[0-9]{2}\.[0-9]{2}
 # 明确锚定，既能被上游 version::pick() 解析成日期型版本号，也不会误匹配
-# 轮换前遗留的旧格式资产。flavor 不写死，同归组内新增变体无需改预设。
+# 轮换前遗留的旧格式资产。
+# 架构段必须出现：上游 compat::asset_arch() 靠它判定架构，缺了就是
+# arch_check=undeclared（机型再对也不允许自动升级）。架构段放在日期之前，
+# 旧的宽松正则（[A-Za-z0-9-]+-[0-9]{2}\.[0-9]{2}\.[0-9]{2}-）依然能命中，
+# 已刷老固件的设备可直接在线升级到新命名产物。
+# 模组段精确化：WRT_FLAVOR 由 WRT-CORE 导出（如 NetWiz-MT5700），用它锚定变体，
+# 否则同一归组里 NetWiz-FM350 与 NetWiz-MT5700 会被同一条正则同时命中，
+# 插件按资产顺序取第一个 —— 可能刷错变体。本地手动构建等取不到值时退回通配。
+case "${WRT_FLAVOR:-}" in
+	'' | *[!A-Za-z0-9-]*) FLAVOR_RE='[A-Za-z0-9-]+' ;;
+	*) FLAVOR_RE="$WRT_FLAVOR" ;;
+esac
+
+# 刷机类型段同样锚定：x86 默认取 UEFI 镜像（现代小主机/软路由主流引导方式）。
+# BIOS/Legacy 引导的机器需把 firmware_pattern 里的 efi 改成
+# combined —— 两种镜像的分区表不同，不能混用。
 case "$WRT_DEVICE" in
 	X86)
-		# x86 默认取 UEFI 镜像（现代小主机/软路由主流引导方式）。
-		# BIOS/Legacy 引导的机器需把 firmware_pattern 里的 efi 改成
-		# combined —— 两种镜像的分区表不同，不能混用。
-		PATTERN="^X86-[A-Za-z0-9-]+-[0-9]{2}\\.[0-9]{2}\\.[0-9]{2}-efi\\.img\\.gz\$"
+		TYPE_RE='efi\.img\.gz'
 		;;
 	H5000M | AP3000M)
-		PATTERN="^${WRT_DEVICE}-[A-Za-z0-9-]+-[0-9]{2}\\.[0-9]{2}\\.[0-9]{2}-sysupgrade\\.bin\$"
+		TYPE_RE='sysupgrade\.bin'
 		;;
 	*)
 		echo "::warning::未知机型 ${WRT_DEVICE}，按 sysupgrade.bin 规则生成，请核对资产名"
-		PATTERN="^${WRT_DEVICE}-[A-Za-z0-9-]+-[0-9]{2}\\.[0-9]{2}\\.[0-9]{2}-sysupgrade\\.bin\$"
+		TYPE_RE='sysupgrade\.bin'
 		;;
 esac
+PATTERN="^${WRT_DEVICE}-${FLAVOR_RE}-${WRT_ARCH}-[0-9]{2}\\.[0-9]{2}\\.[0-9]{2}-${TYPE_RE}\$"
 
 # tag 语义来自 rust/src/github.rs：latest 取最新 Release，
 # latest@<正则> 只在该正则匹配的 Tag 里找最新 —— 这里按归组过滤，

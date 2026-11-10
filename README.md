@@ -94,13 +94,16 @@
 
 **各机型预设配置**
 
-预设由 [`Scripts/OnlineUpgradePreset.sh`](Scripts/OnlineUpgradePreset.sh) 在构建期按 `WRT_DEVICE` / `WRT_TAG_GROUP` 生成，落在 `files/etc/config/online-upgrade`（`$(TOPDIR)/files` 会被并入 rootfs），覆盖包自带同名 conffile，首次开机即指向本机型自己的产物：
+预设由 [`Scripts/OnlineUpgradePreset.sh`](Scripts/OnlineUpgradePreset.sh) 在构建期按 `WRT_DEVICE` / `WRT_FLAVOR` / `WRT_ARCH` / `WRT_TAG_GROUP` 生成，落在 `files/etc/config/online-upgrade`（`$(TOPDIR)/files` 会被并入 rootfs），覆盖包自带同名 conffile，首次开机即指向本机型自己的产物：
 
 | 机型 | `firmware_pattern`（正则） | 匹配的实际资产 |
 | :--- | :--- | :--- |
-| H5000M | `^H5000M-[A-Za-z0-9-]+-[0-9]{2}\.[0-9]{2}\.[0-9]{2}-sysupgrade\.bin$` | `H5000M-MT5700-26.11.09-sysupgrade.bin`、`H5000M-FM350-26.11.09-sysupgrade.bin`、自用版 `H5000M-SelfUse-26.11.09-sysupgrade.bin` |
-| AP3000M | `^AP3000M-[A-Za-z0-9-]+-[0-9]{2}\.[0-9]{2}\.[0-9]{2}-sysupgrade\.bin$` | `AP3000M-MT5700-26.11.09-sysupgrade.bin` 等 |
-| X86 | `^X86-[A-Za-z0-9-]+-[0-9]{2}\.[0-9]{2}\.[0-9]{2}-efi\.img\.gz$` | `X86-NetWiz-MT5700-26.11.09-efi.img.gz` 等（UEFI 引导） |
+| H5000M | `^H5000M-[A-Za-z0-9-]+-aarch64-[0-9]{2}\.[0-9]{2}\.[0-9]{2}-sysupgrade\.bin$` | `H5000M-NetWiz-MT5700-aarch64-26.11.09-sysupgrade.bin`、`H5000M-FM350-aarch64-26.11.09-sysupgrade.bin`、自用版 `H5000M-SelfUse-aarch64-26.11.09-sysupgrade.bin` |
+| AP3000M | `^AP3000M-[A-Za-z0-9-]+-aarch64-[0-9]{2}\.[0-9]{2}\.[0-9]{2}-sysupgrade\.bin$` | `AP3000M-NetWiz-MT5700-aarch64-26.11.09-sysupgrade.bin` 等 |
+| X86 | `^X86-[A-Za-z0-9-]+-x86-64-[0-9]{2}\.[0-9]{2}\.[0-9]{2}-efi\.img\.gz$` | `X86-NetWiz-MT5700-x86-64-26.11.09-efi.img.gz` 等（UEFI 引导） |
+
+- **架构段是自动升级的前提**：资产名必须带 `aarch64`（H5000M / AP3000M，mediatek filogic）或 `x86-64`（X86），上游 `compat::asset_arch()` 靠它判定架构。少了它，即使机型命中也会被判成「资产未声明架构」（`arch_check=undeclared`）→ `can_upgrade=false`，只能在「固件列表」里人工确认。架构段放在日期之前，因此旧的宽松正则 `[A-Za-z0-9-]+-[0-9]{2}\.[0-9]{2}\.[0-9]{2}-` 仍能命中：升级前已刷老固件的设备不必先手动重刷，就能拿到新命名产物。
+- **表里的 `[A-Za-z0-9-]+` 在实际预设中是精确值**：构建期把它换成该次构建的 `WRT_FLAVOR`（如 `NetWiz-MT5700`）。同一归组里同时存在 `H5000M-NetWiz-FM350` 与 `H5000M-NetWiz-MT5700`，只有精确到模组段才不会取错变体。
 
 - `tag` 统一为 `latest@^<归组>-`，归组取 `BASE` / `MT5700` / `MT5700M` / `FM350` / `NetWiz` / `自用`，与 Release 的 Tag 前缀一致（如 `latest@^MT5700-` 只在 `MT5700-26.11.09` 这类 Tag 里找最新）。同一归组下三个机型共用 Release，靠 `firmware_pattern` 的设备前缀区分，不会互相取错。
 - **日期段是识别关键**：上游 `version::pick()` 从资产名取「最后一个点分数字」当版本号，`is_date_tag()` 只把 `YY.MM.DD` / `YYYY.MM.DD` 认作日期型版本。固件名带编译日期后，自用 SNAPSHOT 固件的本地构建日期才能与目标版本正确比较新/旧；不带日期（或写成 `20261109`）只能退化成按 Release 发布时间判断。正则里的 `[0-9]{2}\.[0-9]{2}\.[0-9]{2}` 明确锚定日期段，也不会误匹配轮换前遗留的旧格式资产。
@@ -231,7 +234,7 @@
 | 编译日期 | `YY.MM.DD`（`TZ=UTC-8`，如 `26.11.09`） | 与 Tag 的日期段同源（`WRT_DATE_SHORT`）；既是版本标识，也避免跨天同名互相覆盖 |
 | 固件类型 | `sysupgrade` / `factory` / `initramfs` / `recovery` / `efi` / `combined` / `efi-iso` / `iso` / `efi-vmdk` / `vmdk` | 保留刷机方式判断所必需的信息 |
 
-示例：`H5000M-MT5700-26.11.09-sysupgrade.bin`、`AP3000M-NetWiz-FM350-26.11.09-factory.bin`、`X86-NetWiz-MT5700-26.11.09-efi.img.gz`、`H5000M-SelfUse-26.11.09-sysupgrade.bin`。
+示例：`H5000M-MT5700-aarch64-26.11.09-sysupgrade.bin`、`AP3000M-NetWiz-FM350-aarch64-26.11.09-factory.bin`、`X86-NetWiz-MT5700-x86-64-26.11.09-efi.img.gz`、`H5000M-SelfUse-aarch64-26.11.09-sysupgrade.bin`。
 
 `luci-app-online-upgrade` 的 `firmware_pattern` 与 `docs/index.html` 的产物解析均按此规范实现，详见 [`Scripts/OnlineUpgradePreset.sh`](Scripts/OnlineUpgradePreset.sh) 与 [`docs/index.html`](docs/index.html)。
 
