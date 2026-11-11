@@ -110,6 +110,56 @@ jobs:
           echo "::error::MT5700M 变体已暂时禁用（2026-10-07 起，原因：不稳定）。如需恢复，请移除本守卫步骤并恢复各入口的 MT5700M 配置项。"
           exit 1
 
+      - name: 预检并释放磁盘空间
+        # 2026-11-11 的 H5000M MT 编译只跑了 14 分钟就失败：宿主先告警
+        # 「Free space left: 46 MB」，随后 arm-trusted-firmware-mediatek 与
+        # golang-bootstrap 报编译失败，最后 runner 自己连诊断日志都写不进去
+        # （No space left on device）而崩溃 —— 真正原因是磁盘写满，不是代码。
+        # 托管 runner 不同区域/批次的根分区容量并不一致（正常机 145G，实测
+        # 会调度到明显偏小的机器），而一次全量编译约需 25~30G（build_dir 16G
+        # + staging/dl/tmp/toolchain 约 7G + Rust 产物约 0.6G，另加 ccache）。
+        # 因此在任何耗时操作之前先清掉镜像里与编译无关的大件，并检查可用空间：
+        # 空间不足就立刻失败并给出可执行建议，避免白跑十几分钟再崩掉。
+        timeout-minutes: 10
+        run: |
+          # 托管镜像预装、但 OpenWrt 编译完全用不到的大件（合计约 15~20G）
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /usr/local/share/boost \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL 2>/dev/null || true
+          # .deb 缓存对本次编译无用（后续 init 脚本按需重新下载）
+          sudo apt-get -yqq clean 2>/dev/null || true
+          # 部分镜像预装了大量 Docker 镜像，构建不使用
+          if command -v docker >/dev/null 2>&1; then
+            sudo docker image prune -af >/dev/null 2>&1 || true
+          fi
+
+          df -h
+          # 构建目录稍后会落在 /mnt/build_wrt；/mnt 与 / 可能属于不同分区，
+          # 取两者中较小的可用空间作为实际可写入空间。
+          avail_mb() { df -Pk "$1" 2>/dev/null | awk 'NR==2{print $4+0}'; }
+          ROOT_MB=$(avail_mb /); ROOT_MB=${ROOT_MB:-0}
+          MNT_MB=$(avail_mb /mnt); MNT_MB=${MNT_MB:-0}
+          AVAIL_MB=$ROOT_MB
+          # 用 if 而非 `&&` 串联：run 以 bash -e 执行，条件不成立的行尾返回 1
+          # 会直接终止整个步骤。
+          if [ "$MNT_MB" -gt 0 ] && [ "$MNT_MB" -lt "$AVAIL_MB" ]; then
+            AVAIL_MB=$MNT_MB
+          fi
+          echo "清理后可用空间：$((AVAIL_MB / 1024)) MB（/= $((ROOT_MB / 1024)) MB, /mnt= $((MNT_MB / 1024)) MB）"
+
+          # 25G 以下必然在半途写满（重试也一样），直接 fail 换取一次重新调度；
+          # 25~35G 属紧平衡，允许继续但在日志里留下预警。
+          if [ "$AVAIL_MB" -lt 25600 ]; then
+            echo "::error::可用磁盘仅 ${AVAIL_MB} MB（< 25600 MB），不足以完成一次全量编译。该 runner 根分区容量异常偏小，请重新运行本工作流（会调度到新机器）。"
+            exit 1
+          fi
+          if [ "$AVAIL_MB" -lt 35840 ]; then
+            echo "::warning::可用磁盘仅 ${AVAIL_MB} MB，编译后期可能逼近上限，如失败请优先重跑。"
+          fi
+
       - name: 选择 apt 镜像
         # 托管 runner 的 azure.archive.ubuntu.com 会间歇性退化到几十 kB/s，而且不报错：
         # 内置 /etc/apt/apt-mirrors.txt 只在「镜像出错」时降级，慢而不失败永远不触发它。

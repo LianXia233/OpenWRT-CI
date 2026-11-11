@@ -1,4 +1,29 @@
 # 更新日志
+## [2026-11-11] CI 增加磁盘空间预检与清理，避免 runner 写满导致编译中断
+
+### 背景
+
+2026-11-11 的 H5000M 定时编译（MT 双配置）只运行 14 分钟即失败，日志顺序为：
+
+1. `##[warning]You are running out of disk space. ... Free space left: 46 MB`；
+2. `arm-trusted-firmware-mediatek`（`mt7988-ram-ddr3`）与 `golang-bootstrap [host]` 报编译失败；
+3. runner 自身因 `System.IO.IOException: No space left on device` 无法写入诊断日志而崩溃。
+
+同批其余 5 个任务全部成功，前一晚的提交也只改产物命名与文档，故根因是**托管 runner 磁盘容量偏小**，而非源码或配置问题。一次全量编译实测约需 25~30G（`build_dir` 约 16G，`staging_dl`/`tmp`/`toolchain` 约 7G，Rust 产物约 0.6G，另加 ccache），部分区域/批次的根分区明显小于正常的 145G，编译中途即被写满。
+
+### 变更
+
+- `.github/workflows/WRT-CORE.yml`：在「检出仓库代码」之后新增「预检并释放磁盘空间」步骤：
+  - 删除镜像预装且与编译无关的大件（`/usr/share/dotnet`、`/usr/local/lib/android`、`/usr/local/share/boost`、`/opt/ghc`、`/opt/hostedtoolcache/CodeQL`），并执行 `apt-get clean`、`docker image prune -af`；
+  - 调整后打印 `df -h`，取 `/` 与 `/mnt` 中较小的可用空间作为实际可写空间；
+  - 可用空间低于 25G 直接 `::error::` 失败并提示重跑（换取重新调度到新机器）；25~35G 输出 `::warning::` 预警。
+
+### 兼容性
+
+- 仅影响 GitHub Actions 编译流程，不改变固件内容、产物命名与配置；
+- 清理项均为托管镜像中与 OpenWrt 编译无关的预装组件，后续步骤所需的依赖仍由「初始化编译环境」正常安装；
+- 预检在任何耗时步骤之前执行，空间不足时能在 1 分钟内给出明确结论，不再白跑十几分钟后崩溃。
+
 ## [2026-11-10] 产物名加入架构段，修复在线升级插件无法自动匹配
 
 ### 背景
