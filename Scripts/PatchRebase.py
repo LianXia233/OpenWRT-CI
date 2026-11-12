@@ -9,10 +9,15 @@ OpenWrt/ImmortalWrt 的包常带客制补丁（如 firewall4 的 fullcone 支持
 表现为 prepare 阶段 `Hunk #N FAILED`，整包编译中断，而补丁本身的语义并没有过时。
 
 本脚本只做一件事：**重建 hunk 的上下文行**，绝不猜测补丁的增删内容。
-  1. 先在解包后的源码上 `patch --dry-run`：能原样应用就一字不改；
-  2. 打不上时，对每个 hunk 用「删除行块」在目标文件中做唯一锚点定位，
+  1. 在源码副本上按文件名顺序**累积**应用：每条补丁都跑在「前序补丁已生效」的
+     树上 `patch --dry-run`，能原样应用就一字不改并继续累积；
+  2. 只有真正打不上时，才对每个 hunk 用「删除行块」在目标文件中做唯一锚点定位，
      再按 hunk 原有的增删结构重建上下文；
   3. 重建结果必须整体 dry-run 通过才写回补丁文件，否则保持原样并以非 0 退出。
+
+注意：patches/ 是序列而不是孤立的补丁集合（例如 004 直接改 001 新增的
+`resolve_bridge_devices()`）。若逐条对「原始源码」试打，序列依赖会被误判成
+上游漂移，从而把本来完全健康的构建判死。
 
 用法
 ----
@@ -265,6 +270,20 @@ def apply_dry_run(srcroot, patch_path, timeout=300):
     return r.returncode == 0, r.stdout.decode("utf-8", "replace")
 
 
+def apply_real(srcroot, patch_path, timeout=300):
+    r = subprocess.run(
+        [
+            "patch", "-p1", "--forward", "--no-backup-if-mismatch",
+            "-i", os.path.abspath(patch_path),
+        ],
+        cwd=srcroot,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=timeout,
+    )
+    return r.returncode == 0, r.stdout.decode("utf-8", "replace")
+
+
 def touch_build_dir(wrt, pkg_rel):
     """清理可能残留的 prepare 失败标记，保证下次 make 重新解包打补丁。"""
     name_dir = os.path.basename(pkg_rel)
@@ -291,6 +310,7 @@ def process(wrt, pkg_rel, handle_all):
     print("[info] 源码包: %s" % os.path.basename(tar_path))
 
     tmp = tempfile.mkdtemp(prefix="patchrebase-")
+    workdir = tempfile.mkdtemp(prefix="patchrebase-work-")
     try:
         srcroot = unpack_source(tar_path, tmp)
         if not srcroot or not os.path.isdir(srcroot):
@@ -298,12 +318,25 @@ def process(wrt, pkg_rel, handle_all):
             return 0
 
         changed = []
+
+        # patches/ 是按文件名顺序累积生效的序列：后一条补丁往往直接修改前一条新增的
+        # 代码（例：004 改 001 引入的 resolve_bridge_devices()）。因此先复制一份源码
+        # 副本，把能打上的补丁真正打上去，后续补丁才在正确的树上做判定。
+        workroot = workdir
+        shutil.copytree(srcroot, workroot, dirs_exist_ok=True, symlinks=True)
+
         for p in patches:
-            ok, out = apply_dry_run(srcroot, p)
+            ok, out = apply_dry_run(workroot, p)
             if ok:
-                if not handle_all:
-                    continue
-                print("[ok] %s 可原样应用" % os.path.basename(p))
+                if handle_all:
+                    print("[ok] %s 可原样应用" % os.path.basename(p))
+                ok_real, out_real = apply_real(workroot, p)
+                if not ok_real:
+                    print(
+                        "    [fail] %s dry-run 通过但实际应用失败：\n%s"
+                        % (os.path.basename(p), out_real.strip()[-1500:])
+                    )
+                    return 1
                 continue
 
             print("[warn] %s 无法原样应用，尝试重建上下文" % os.path.basename(p))
@@ -313,7 +346,7 @@ def process(wrt, pkg_rel, handle_all):
             for fp in files:
                 if fp.is_new_file:
                     continue
-                tgt = os.path.join(srcroot, fp.target)
+                tgt = os.path.join(workroot, fp.target)
                 if not os.path.isfile(tgt):
                     failed.append((p, fp.target, "目标文件不存在"))
                     continue
@@ -341,9 +374,19 @@ def process(wrt, pkg_rel, handle_all):
             with open(tmp_patch, "w", encoding="utf-8", errors="surrogateescape", newline="\n") as fh:
                 fh.write(new_text)
 
-            ok2, out2 = apply_dry_run(srcroot, tmp_patch)
+            # 先在副本上 dry-run + 真实应用，两者都成功才写回补丁文件
+            ok2, out2 = apply_dry_run(workroot, tmp_patch)
             if not ok2:
                 print("    [fail] 重建后仍无法应用：\n%s" % out2.strip()[-1500:])
+                print("    保持原补丁不变，请人工检查 %s" % p)
+                return 1
+
+            ok_real, out_real = apply_real(workroot, tmp_patch)
+            if not ok_real:
+                print(
+                    "    [fail] %s 重写后实际应用失败：\n%s"
+                    % (os.path.basename(p), out_real.strip()[-1500:])
+                )
                 print("    保持原补丁不变，请人工检查 %s" % p)
                 return 1
 
@@ -360,6 +403,7 @@ def process(wrt, pkg_rel, handle_all):
         return 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+        shutil.rmtree(workdir, ignore_errors=True)
 
 
 def main():

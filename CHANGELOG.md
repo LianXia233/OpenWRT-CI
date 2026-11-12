@@ -1,4 +1,33 @@
 # 更新日志
+## [2026-11-12] 修复预检把补丁序列依赖误判为上游漂移（五条 VIKINGYFY 构建全红）
+
+### 背景
+
+2026-11-12 02:10（UTC）的定时批次中，基于 `VIKINGYFY/immortalwrt` 的 5 条构建（FM350、NetWiz、AP3000M、H5000M、H5000M 自用）全部停在「校正客制补丁上下文（上游源码漂移兜底）」，而 X86（`immortalwrt/immortalwrt`）正常：
+
+```
+[warn] 004-scope-bridge-flowtable-offload.patch 无法原样应用，尝试重建上下文
+    [fail] 重建后仍无法应用：
+Hunk #1 FAILED at 493. ... 2 out of 2 hunks FAILED
+1 out of 2 hunks FAILED
+```
+
+上游在 2026-11-11 07:58 新增了 `004-scope-bridge-flowtable-offload.patch`，它改的正是 `001-add-bridge-flowtable-support.patch` 新引入的 `resolve_bridge_devices()` 与 bridge 表块。`patches/` 在 OpenWrt 里是**按文件名顺序累积**应用的序列，而预检对每条补丁都在「未打任何补丁的原始源码」上单独 `patch --dry-run`：004 要删的行在原始源码里根本不存在，重建上下文必然失败，于是 `return 1` 终止整条构建。
+
+用 CI 实际下载的 `firewall4-2026.11.08~3722eadc.tar.zst` 复现：7 条补丁按序累积应用全部成功（004 之后 `ruleset.uc` 出现 `chain flow_offload`、`fw4.uc` 出现 `resolve_bridge_offload`），而单条试打时 004、005 失配——与日志一致。上游 `package/network/config/firewall4` 自 2026-11-11 11:37 起未再改动（`2bb59802` 与当前 HEAD 的 Makefile / 补丁 blob SHA 完全相同），不存在需要等待的上游修复。
+
+### 变更
+
+- `Scripts/PatchRebase.py`：
+  - 预检改为在源码副本上**累积**执行：能原样应用的补丁先 `patch` 真实打上，后续补丁在「前序已生效」的树上判定；
+  - 只有真正失配的补丁才重建上下文，重建结果必须 dry-run 与真实应用同时通过才写回；
+  - 副本使用独立临时目录，避免 `unpack_source` 返回解包根目录时自我递归。
+
+### 兼容性
+
+- 仅影响预检步骤，`WRT-CORE.yml` 无需改动，固件内容、补丁语义与产物命名均不变；正常批次输出 `[info] 无需改动`；
+- 真正打不上的补丁仍然 `exit 1`（已用合成用例验证：目标行被上游删除时保持原补丁不变并非 0 退出）。
+
 ## [2026-11-11] CI 增加磁盘空间预检与清理，避免 runner 写满导致编译中断
 
 ### 背景
