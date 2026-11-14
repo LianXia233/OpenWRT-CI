@@ -17,7 +17,8 @@ env:
 
 jobs:
   cleanup:
-    runs-on: ubuntu-latest
+    # 统一使用 Ubuntu 26.04
+    runs-on: ubuntu-26.04
     steps:
       - name: 检出仓库代码
         uses: actions/checkout@v7
