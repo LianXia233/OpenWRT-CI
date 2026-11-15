@@ -963,6 +963,20 @@ jobs:
       - name: 校正客制补丁上下文（上游源码漂移兜底）
         if: env.WRT_TEST != 'true'
         run: |
+          # 官方 immortalwrt/immortalwrt:master 在 2026-11-14 的 Merge Official
+          # Source 里把 firewall4 源码包升到 2026-11-08~3722eadc，但随源码带的
+          # fullcone 补丁仍针对 2026-10-29：新版 root/etc/config/firewall 删掉了
+          # 两行注释，而该 hunk 是纯新增（无删除行），PatchRebase 的「删除行唯一
+          # 锚点」无法定位，预检会直接 Hunk #1 FAILED 并中断 X86 全部构建。
+          # 这里用已同步上下文的同名补丁覆盖；条件绑定源码版本，上游再次升级
+          # 或自行刷新补丁后自动让位，后续漂移仍由 PatchRebase 兜底。
+          if [ "${WRT_SOURCE}" = "immortalwrt/immortalwrt" ] && \
+             grep -q '^PKG_SOURCE_VERSION:=3722eadc088c3ab81389596ca9796112b436583a' \
+               ./wrt/package/network/config/firewall4/Makefile; then
+            cp "$GITHUB_WORKSPACE/Scripts/patches/firewall4/001-firewall4-add-support-for-fullcone-nat.patch" \
+               ./wrt/package/network/config/firewall4/patches/001-firewall4-add-support-for-fullcone-nat.patch
+            echo "已覆盖适配 firewall4 2026-11-08~3722eadc 的 fullcone 补丁"
+          fi
           python3 "$GITHUB_WORKSPACE/Scripts/PatchRebase.py" \
             --wrt ./wrt --package package/network/config/firewall4
 

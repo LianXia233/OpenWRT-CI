@@ -1,4 +1,20 @@
 # 更新日志
+## [2026-11-15] 修复官方源 firewall4 源码升级导致 X86 构建全红
+
+### 背景
+
+`immortalwrt/immortalwrt:master` 于 2026-11-14 03:42 UTC 合并 `a4ba8240d`（Merge Official Source），把 firewall4 源码包从 `2026-10-29~e6f600c4` 升级到 `2026-11-08~3722eadc`，但随源码带的 `001-firewall4-add-support-for-fullcone-nat.patch` 仍是旧版。新版 `root/etc/config/firewall` 删掉了两行注释，而补丁第一个 hunk 是纯新增（没有删除行），`PatchRebase.py` 的「删除行唯一锚点」无法定位，预检在步骤「校正客制补丁上下文」报 `Hunk #1 FAILED at 5` 并退出，X86 / X86-FM350 / X86-NETWIZ 共 4 个 job 全挂。同批基于 `VIKINGYFY/immortalwrt:owrt` 的 6 个 job 正常（其补丁已在 11-11 刷新过）。
+
+### 改动
+
+- 新增 `Scripts/patches/firewall4/001-firewall4-add-support-for-fullcone-nat.patch`：仅把第一个 hunk 的上下文同步到新版源码（去掉两行注释，改为 `-5,4 +5,8`），增删内容一字不改；实测在 `firewall4-2026.11.08~3722eadc` 上可原样应用，fullcone 选项仍落在 `config defaults` 段内。
+- `.github/workflows/WRT-CORE.yml`：步骤「校正客制补丁上下文」执行前，仅在 `WRT_SOURCE=immortalwrt/immortalwrt` 且 `PKG_SOURCE_VERSION` 为 `3722eadc…` 时用上述补丁覆盖上游同名补丁；上游再次升级后自动让位，后续漂移继续由 PatchRebase 兜底。
+
+### 兼容性
+
+- 只影响 `immortalwrt/immortalwrt:master` 且源码版本命中时才生效；其余机型与 fork 源行为不变。
+- 未改动 `Scripts/PatchRebase.py`，预检的失败快速中断策略保持不变。
+
 ## [2026-11-14] CI：全面适配 Ubuntu 26.04 runner
 
 ### 背景
