@@ -948,8 +948,16 @@ jobs:
             echo "::error::$FW_MARKER 不存在：在线升级预设脚本未注入固件版本标记"
             exit 1
           fi
-          if [ "$(cat "$FW_MARKER")" != "$WRT_DATE_SHORT" ]; then
-            echo "::error::$FW_MARKER 内容=$(cat "$FW_MARKER")，与本次编译日期 $WRT_DATE_SHORT 不一致"
+          # 结构化标记：五个字段齐全且 VERSION 等于本次编译日期。
+          for KEY in DEVICE ARCH BUILD_TIME BUILD_SEQ VERSION; do
+            grep -qE "^${KEY}='[^']+'$" "$FW_MARKER" || {
+              echo "::error::$FW_MARKER 缺少字段 $KEY：$(cat "$FW_MARKER")"
+              exit 1
+            }
+          done
+          if ! grep -qFx "VERSION='${WRT_DATE_SHORT}'" "$FW_MARKER"; then
+            echo "::error::$FW_MARKER 的 VERSION 与本次编译日期 $WRT_DATE_SHORT 不一致"
+            cat "$FW_MARKER"
             exit 1
           fi
 
