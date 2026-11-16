@@ -941,7 +941,19 @@ jobs:
             exit 1
           fi
 
-          echo "luci-app-online-upgrade 已就位、已被 .config 选中，升级预设匹配机型 ${WRT_DEVICE} / 归组 ${WRT_TAG_GROUP} / 架构 ${WRT_ARCH}"
+          # 固件版本标记必须在编译前落盘：插件靠它拿到强依据，
+          # 内容与本次 WRT_DATE_SHORT（YY.MM.DD）一致，随固件刷新。
+          FW_MARKER=./files/etc/online-upgrade/firmware-version
+          if [ ! -f "$FW_MARKER" ]; then
+            echo "::error::$FW_MARKER 不存在：在线升级预设脚本未注入固件版本标记"
+            exit 1
+          fi
+          if [ "$(cat "$FW_MARKER")" != "$WRT_DATE_SHORT" ]; then
+            echo "::error::$FW_MARKER 内容=$(cat "$FW_MARKER")，与本次编译日期 $WRT_DATE_SHORT 不一致"
+            exit 1
+          fi
+
+          echo "luci-app-online-upgrade 已就位、已被 .config 选中，升级预设匹配机型 ${WRT_DEVICE} / 归组 ${WRT_TAG_GROUP} / 架构 ${WRT_ARCH}；固件版本标记 $WRT_DATE_SHORT 已注入"
 
       - name: 预下载源码包
         if: env.WRT_TEST != 'true'

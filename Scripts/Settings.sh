@@ -129,7 +129,7 @@ echo "CONFIG_PACKAGE_luci-theme-$WRT_THEME=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-app-online-upgrade=y" >> ./.config
 ONLINE_UPGRADE_PRESET="$(cd "$(dirname "$0")" && pwd)/OnlineUpgradePreset.sh"
 if [ -x "$ONLINE_UPGRADE_PRESET" ]; then
-	"$ONLINE_UPGRADE_PRESET"
+	"$ONLINE_UPGRADE_PRESET" || exit 1
 else
 	echo "::warning::未找到 $ONLINE_UPGRADE_PRESET，跳过在线升级预设生成"
 fi
