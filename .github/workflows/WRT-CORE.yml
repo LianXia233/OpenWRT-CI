@@ -920,14 +920,28 @@ jobs:
             exit 1
           fi
 
-          # Release 归组同理：tag 必须落在本机型本次构建的组里
-          if ! grep -qF "option tag 'latest@^${WRT_TAG_GROUP}-'" "$PRESET"; then
-            echo "::error::$PRESET 的 tag 与本次构建归组 ${WRT_TAG_GROUP} 不匹配"
+          # v2.7 统一规则：tag 固定 latest，归组过滤放到独立的 tag_rule 选项。
+          if ! grep -qF "option tag 'latest'" "$PRESET"; then
+            echo "::error::$PRESET 的 tag 不是 latest（应为独立 tag_rule 承载归组过滤）"
             grep 'option tag' "$PRESET" || true
             exit 1
           fi
+          if ! grep -qF "option tag_rule '^${WRT_TAG_GROUP}-'" "$PRESET"; then
+            echo "::error::$PRESET 的 tag_rule 与本次构建归组 ${WRT_TAG_GROUP} 不匹配"
+            grep 'option tag_rule' "$PRESET" || true
+            exit 1
+          fi
 
-          echo "luci-app-online-upgrade 已就位、已被 .config 选中，升级预设匹配机型 ${WRT_DEVICE} / 归组 ${WRT_TAG_GROUP}"
+          # 架构段一致性：firmware_pattern 中必须包含本次 WRT_ARCH，
+          # 杜绝「声明 x86-64 却产出 aarch64」导致设备端架构冲突拒绝升级。
+          if ! grep -qF "option firmware_pattern '^${WRT_DEVICE}-" "$PRESET" \
+             || ! grep -q -- "-${WRT_ARCH}-" "$PRESET"; then
+            echo "::error::$PRESET 的 firmware_pattern 缺少架构段 ${WRT_ARCH}（WRT_DEVICE=${WRT_DEVICE}）"
+            grep 'firmware_pattern' "$PRESET" || true
+            exit 1
+          fi
+
+          echo "luci-app-online-upgrade 已就位、已被 .config 选中，升级预设匹配机型 ${WRT_DEVICE} / 归组 ${WRT_TAG_GROUP} / 架构 ${WRT_ARCH}"
 
       - name: 预下载源码包
         if: env.WRT_TEST != 'true'
@@ -1399,6 +1413,15 @@ jobs:
               NEW_BASE="$WRT_DEVICE-$WRT_FLAVOR-$WRT_ARCH-$WRT_DATE_SHORT"
               [ -n "$TYPE" ] && NEW_BASE="$NEW_BASE-$TYPE"
               NEW_FILE="$NEW_BASE.$EXT"
+              # 架构段自检：产出文件名第三段必须等于 WRT_ARCH。
+              # 历史遗留 bug：X86 资产曾全部标成 aarch64（与声明的 x86-64
+              # 不符），导致升级插件判架构冲突而拒绝升级。这里直接红掉，
+              # 杜绝「声明与产物不一致」再次流到 Release。
+              FILE_ARCH=$(printf '%s' "$NEW_FILE" | cut -d '-' -f 3)
+              if [ "$FILE_ARCH" != "$WRT_ARCH" ]; then
+                echo "::error::产物架构段 [$FILE_ARCH] 与 WRT_ARCH [$WRT_ARCH] 不一致（文件=$NEW_FILE，机型=$WRT_DEVICE）"
+                exit 1
+              fi
               # 防冲突兜底：同机型同方案同日期同类型出现多文件时，先追加
               # 文件系统段（squashfs / ext4），再不行才追加源文件名短哈希。
               if [ -e "./upload/$NEW_FILE" ]; then

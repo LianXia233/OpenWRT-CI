@@ -102,10 +102,13 @@ case "$WRT_DEVICE" in
 esac
 PATTERN="^${WRT_DEVICE}-${FLAVOR_RE}-${WRT_ARCH}-[0-9]{2}\\.[0-9]{2}\\.[0-9]{2}-${TYPE_RE}\$"
 
-# tag 语义来自 rust/src/github.rs：latest 取最新 Release，
-# latest@<正则> 只在该正则匹配的 Tag 里找最新 —— 这里按归组过滤，
-# 保证 H5000M 不会从 FM350 组里取错产物。
-TAG="latest@^${WRT_TAG_GROUP}-"
+# v2.7 统一规则：TAG 追踪模式与过滤正则解耦为两个独立选项。
+#   tag      = latest（追踪最新 Release）
+#   tag_rule = ^<归组>-（只在该正则匹配的 Tag 里找最新）
+# 这样三个 CI 仓库（OpenWRT-CI / H5000M-CI-Qmodem / OpenWRT-CI-H5000M）
+# 生成的预设字段结构完全一致，且老插件仍能把 tag=latest 当作追最新处理。
+TAG='latest'
+TAG_RULE="^${WRT_TAG_GROUP}-"
 
 mkdir -p "$(dirname "$TARGET")"
 {
@@ -113,6 +116,7 @@ mkdir -p "$(dirname "$TARGET")"
 	printf 'config online-upgrade %s\n' "'settings'"
 	printf "\toption repo '%s'\n" "$UPGRADE_REPO"
 	printf "\toption tag '%s'\n" "$TAG"
+	printf "\toption tag_rule '%s'\n" "$TAG_RULE"
 	printf "\toption firmware_pattern '%s'\n" "$PATTERN"
 	printf "\toption min_size_mb '15'\n"
 	printf "\toption proxy 'https://gh.acg2.mom/'\n"
@@ -123,9 +127,9 @@ mkdir -p "$(dirname "$TARGET")"
 	printf "\toption dl_retries '3'\n"
 } > "$TARGET"
 
-# 生成后自检：10 个键一个不少，且关键项与推导值一致。
+# 生成后自检：11 个键一个不少，且关键项与推导值一致。
 # 任何一项不匹配都说明模板被改坏，直接红掉而不是带着坏预设编译。
-EXPECT_KEYS=10
+EXPECT_KEYS=11
 GOT_KEYS=$(grep -c '^[[:space:]]*option ' "$TARGET" || true)
 if [ "$GOT_KEYS" -ne "$EXPECT_KEYS" ]; then
 	echo "::error::${TARGET} 生成异常：期望 ${EXPECT_KEYS} 个 option，实际 ${GOT_KEYS}"
@@ -135,5 +139,9 @@ grep -qF "option tag '${TAG}'" "$TARGET" || {
 	echo "::error::${TARGET} 的 tag 与推导值不一致"
 	exit 1
 }
+grep -qF "option tag_rule '${TAG_RULE}'" "$TARGET" || {
+	echo "::error::${TARGET} 的 tag_rule 与推导值不一致"
+	exit 1
+}
 
-echo "==> 在线升级预设：机型=${WRT_DEVICE} 归组=${WRT_TAG_GROUP} 资产正则=${PATTERN}"
+echo "==> 在线升级预设：机型=${WRT_DEVICE} 归组=${WRT_TAG_GROUP} tag规则=${TAG_RULE} 资产正则=${PATTERN}"

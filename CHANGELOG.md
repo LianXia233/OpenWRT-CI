@@ -1,4 +1,11 @@
 # 更新日志
+## [2026-11-17] 三仓库统一在线升级规则：独立 tag_rule + 架构段自检
+
+### 改动
+
+- `Scripts/OnlineUpgradePreset.sh`：TAG 追踪模式与过滤正则解耦——`tag=latest`、`tag_rule=^<归组>-`，与另外两个 CI 仓库字段结构一致；自检键数 10 → 11。
+- `.github/workflows/WRT-CORE.yml`：校验步骤改为核对 `tag=latest` + `tag_rule` 归组，新增架构段一致性校验（`WRT_ARCH` 必须与固件文件名第三段一致）；打包阶段新增架构段运行时自检，杜绝「声明 x86-64 却产出 aarch64」再次流入 Release。
+
 ## [2026-11-15] 修复官方源 firewall4 源码升级导致 X86 构建全红
 
 ### 背景
