@@ -348,7 +348,10 @@ jobs:
           echo "WRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
           echo "WRT_MARK=${GITHUB_REPOSITORY%%/*}" >> $GITHUB_ENV
           echo "WRT_INFO=${WRT_SOURCE%%/*}" >> $GITHUB_ENV
-          echo "WRT_TARGET=$(grep -m 1 -oP '^CONFIG_TARGET_\K[\w]+(?=\=y)' ./Config/$WRT_CONFIG.txt)" >> $GITHUB_ENV
+          # 目标平台先落到 shell 变量再用：$GITHUB_ENV 只在「后续步骤」生效，
+          # 同一个 run 块里读 $WRT_TARGET 拿到的是空值（下方架构交叉校验要用）。
+          WRT_TARGET="$(grep -m 1 -oP '^CONFIG_TARGET_\K[\w]+(?=\=y)' ./Config/$WRT_CONFIG.txt)"
+          echo "WRT_TARGET=$WRT_TARGET" >> $GITHUB_ENV
           echo "WRT_WIFI=wifi-yes" >> $GITHUB_ENV
           echo "WRT_KVER=none" >> $GITHUB_ENV
           echo "WRT_LIST=none" >> $GITHUB_ENV
@@ -372,7 +375,11 @@ jobs:
           fi
           # 设备名：配置名首个 '-' 前的段（H5000M / AP3000M / X86），
           # 用作固件文件名首段 —— 同一 Release 汇聚多设备时仍可一眼识别。
-          echo "WRT_DEVICE=${WRT_CONFIG%%-*}" >> $GITHUB_ENV
+          # 必须同时赋给 shell 变量：$GITHUB_ENV 只对「后续步骤」生效，
+          # 下方架构判定在本步骤内就要读它，只写 $GITHUB_ENV 会读到空值
+          # （空值走 case 兜底分支 → 全部机型被判成 aarch64，X86 被标错架构）。
+          WRT_DEVICE="${WRT_CONFIG%%-*}"
+          echo "WRT_DEVICE=$WRT_DEVICE" >> $GITHUB_ENV
           # 编译日期（YY.MM.DD，TZ=UTC-8 即北京时间）：同时用于固件文件名的
           # 日期段与 Release Tag 的日期段，二者严格同源。
           # luci-app-online-upgrade 的 version::pick() 会从资产名取「最后一个
@@ -435,6 +442,19 @@ jobs:
               ;;
           esac
           echo "WRT_ARCH=$WRT_ARCH" >> $GITHUB_ENV
+          # 架构交叉校验：x86 目标只允许 x86-64，其余（mediatek）只允许 aarch64。
+          # 机型名与真实目标平台对不上时在初始化阶段就红掉，而不是等编译
+          # 1~2 小时后才在打包步骤发现文件名架构段与平台不符。
+          if [ -n "${WRT_TARGET:-}" ]; then
+            if [ "$WRT_TARGET" = "x86" ] && [ "$WRT_ARCH" != "x86-64" ]; then
+              echo "::error::WRT_TARGET=x86 但架构段为 ${WRT_ARCH}（机型=${WRT_DEVICE:-空}）"
+              exit 1
+            fi
+            if [ "$WRT_TARGET" != "x86" ] && [ "$WRT_ARCH" != "aarch64" ]; then
+              echo "::error::WRT_TARGET=${WRT_TARGET} 但架构段为 ${WRT_ARCH}（机型=${WRT_DEVICE:-空}）"
+              exit 1
+            fi
+          fi
           # Release 归组（Tag = <组名>-<YY.MM.DD>）：让 Releases 页面按分类归类，
           # 同组同一天的全部机型产物汇聚到同一个 Release 里：
           #   WRT_VARIANT 非空 → 按产品/变体组（NetWiz 家族统一归 NetWiz，
@@ -1437,7 +1457,14 @@ jobs:
               # 历史遗留 bug：X86 资产曾全部标成 aarch64（与声明的 x86-64
               # 不符），导致升级插件判架构冲突而拒绝升级。这里直接红掉，
               # 杜绝「声明与产物不一致」再次流到 Release。
-              FILE_ARCH=$(printf '%s' "$NEW_FILE" | cut -d '-' -f 3)
+              # 不能用 `cut -d '-' -f 3` 取段：机型与 WRT_FLAVOR 都可能自带
+              # 连字符（X86-NetWiz-MT5700、NetWiz-MT5700），按位置切分会把
+              # 第 3 段切成 MT5700 / NetWiz 而误报。改为按已知前后缀精确剥离：
+              # 先去掉 "<机型>-<模组插件>-" 前缀，再截到 "-<日期>-" 之前。
+              ARCH_PREFIX="$WRT_DEVICE-$WRT_FLAVOR-"
+              ARCH_SUFFIX="-$WRT_DATE_SHORT-"
+              FILE_ARCH="${NEW_FILE#"$ARCH_PREFIX"}"
+              FILE_ARCH="${FILE_ARCH%%"$ARCH_SUFFIX"*}"
               if [ "$FILE_ARCH" != "$WRT_ARCH" ]; then
                 echo "::error::产物架构段 [$FILE_ARCH] 与 WRT_ARCH [$WRT_ARCH] 不一致（文件=$NEW_FILE，机型=$WRT_DEVICE）"
                 exit 1
