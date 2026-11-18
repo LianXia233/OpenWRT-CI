@@ -703,13 +703,15 @@ jobs:
       # CONFIG_PACKAGE_luci-app-honk=y（上一步「初始化构建变量」已把结果
       # 落到 env.WRT_HONK）。给其他配置加 honk 只需动配置文件一行。
       #
-      # 取包脚本 Scripts/Packages-Honk.sh 负责三件事：
+      # 取包脚本 Scripts/Packages-Honk.sh 只做两件事：
       #   1. 复制 honk 与 luci-app-honk 两个包到 package/，供 defconfig 选包；
-      #   2. 清掉包内预编译 honk-core.bin / .stamp，确保 Build/Compile 走
-      #      build_honk_core.sh 源码编译（产物架构跟随 target，H5000M 为
-      #      aarch64_cortex-a53，apk 可正常安装）；
-      #   3. 在 defconfig 前安装 Rust / Zig / bpf-linker / clang 等工具链，
-      #      并把 $HOME/.cargo/bin 与 Zig 目录写入 GITHUB_PATH。
+      #   2. 清掉包内预编译 honk-core.bin / .stamp —— 该文件是上游 Release 的
+      #      aarch64_generic 产物，Cortex-A53 上 apk 会拒装；导入阶段必须先清掉，
+      #      等下方「预编译全部 Rust 后端」第 ⑤ 段用官方 Rust SDK 源码编译。
+      #
+      # Rust 工具链不在本步骤安装：与 fm350 / mt5700 / taygedo / AirPi 一致，
+      # 统一由 Scripts/Build-Honk-Prebuilt.sh 在 runner 侧准备 rustup + Zig +
+      # bpf-linker，buildroot 只消费产物。
       #
       # 必须早于 defconfig：包未就位时 CONFIG_PACKAGE_honk=y 是孤立符号，
       # 会被连同依赖一起静默丢弃，表现为「编译全绿、固件里没有 honk」。
@@ -963,15 +965,27 @@ jobs:
             exit 1
           fi
           if [ ! -x ./package/honk/build_honk_core.sh ]; then
-            echo "::error::package/honk/build_honk_core.sh 缺失或不可执行：源码编译入口失效"
+            echo "::error::package/honk/build_honk_core.sh 缺失或不可执行：Build-Honk-Prebuilt.sh 的源码编译入口失效"
+            exit 1
+          fi
+          if [ ! -f ./package/honk/honk_toolchain.sh ]; then
+            echo "::error::package/honk/honk_toolchain.sh 缺失：无法解析 Zig / bpf-linker pins"
             exit 1
           fi
           if [ -e ./package/honk/files/honk-core.bin ]; then
-            echo "::error::package/honk/files/honk-core.bin 不应存在：当前方案要求源码编译，预编译 core 会让 --if-needed 跳过 Build/Compile"
+            echo "::error::package/honk/files/honk-core.bin 不应存在：导入阶段必须清掉上游预编译 core，产物只能由 Build-Honk-Prebuilt.sh 生成"
             exit 1
           fi
           if [ -e ./package/honk/files/honk-core.bin.stamp ]; then
-            echo "::error::honk-core.bin.stamp 不应存在：必须由 Build/Compile 重新生成"
+            echo "::error::honk-core.bin.stamp 不应存在：必须由 Build-Honk-Prebuilt.sh 重新生成"
+            exit 1
+          fi
+          if ! grep -q -- '--if-needed' ./package/honk/Makefile; then
+            echo "::error::honk/Makefile 的 Build/Compile 未调用 build_honk_core.sh：无法消费 CI 产物"
+            exit 1
+          fi
+          if grep -q 'rust/host' ./package/honk/Makefile; then
+            echo "::error::honk 不应依赖 OpenWrt 的 rust/host SDK：Rust 必须用 rustup（Rust SDK）编译"
             exit 1
           fi
 
@@ -998,16 +1012,7 @@ jobs:
             exit 1
           fi
 
-          if [ "${WRT_TEST:-false}" != "true" ]; then
-            for C in zig bpf-linker cargo rustup clang cmake pkg-config zstd; do
-              if ! command -v "$C" >/dev/null 2>&1; then
-                echo "::error::源码编译工具链缺少 $C：Packages-Honk.sh 的工具链安装是否失败？"
-                exit 1
-              fi
-            done
-          fi
-
-          echo "honk 已选中；build_honk_core.sh 就位；无预编译 core；内核 BTF 已启用"
+          echo "honk 已选中；build_honk_core.sh / honk_toolchain.sh 就位；无预编译 core；内核 BTF 已启用"
 
       # 防回归：luci-app-online-upgrade 全机型内置，因此本校验无 if 条件。
       # 四层断言对应四类真实失败形态：
@@ -1161,8 +1166,19 @@ jobs:
         if: env.WRT_TEST != 'true'
         run: |
           mkdir -p ./wrt/.rust-build
-          H="$(find ./wrt/package -maxdepth 4 -type f -name Cargo.lock -print0 2>/dev/null \
-            | sort -z | xargs -0 cat 2>/dev/null | sha1sum | cut -d' ' -f1)"
+          H="$(
+            {
+              find ./wrt/package -maxdepth 4 -type f -name Cargo.lock -print0 2>/dev/null \
+                | sort -z | xargs -0 cat 2>/dev/null
+
+              # honk 的源码版本钉在包 Makefile 里；Cargo.lock 在 buildroot
+              # 外 clone 的 honk-src 内，不在 package/ 下，必须单独计入指纹。
+              cat ./wrt/package/honk/Makefile \
+                  ./wrt/package/honk/build_honk_core.sh \
+                  ./wrt/package/honk/honk_toolchain.sh 2>/dev/null
+              cat "$GITHUB_WORKSPACE/Scripts/Build-Honk-Prebuilt.sh" 2>/dev/null
+            } | sha1sum | cut -d' ' -f1
+          )"
           echo "RUST_DEPS_HASH=${H:-none}" >> "$GITHUB_ENV"
           echo "Rust 依赖指纹：${H:-none}"
 
@@ -1235,6 +1251,24 @@ jobs:
             # 安装阶段才会报「online-upgrade: No such file」，这里先拦。
             if [ ! -s ./package/luci-app-online-upgrade/root/usr/bin/online-upgrade ]; then
               echo "::error::预编译产物未落到 package/luci-app-online-upgrade/root/usr/bin/online-upgrade"
+              RC=1
+            fi
+            echo "::endgroup::"
+          fi
+
+          # ⑤ honk（eBPF + Rust；H5000M 是 Cortex-A53，必须源码编译而不是
+          #    上游 aarch64_generic 预编译包）
+          #
+          # 与上面四个 Rust 后端同一链路：runner 侧 rustup 官方 SDK 交叉编译，
+          # 产物落到 package/honk/files/honk-core.bin + .stamp；buildroot 的
+          # Build/Compile 看到同 target 的 stamp 直接跳过，不会调 OpenWrt
+          # rust/host，也不会在 build_dir 里冷编 cargo。
+          if [ -f ./package/honk/build_honk_core.sh ] \
+            && grep -qx 'CONFIG_PACKAGE_honk=y' ./.config; then
+            echo "::group::⑤ honk（honk-core）"
+            bash "$GITHUB_WORKSPACE/Scripts/Build-Honk-Prebuilt.sh" || RC=1
+            if [ ! -s ./package/honk/files/honk-core.bin ]; then
+              echo "::error::honk-core.bin 未生成：Build-Honk-Prebuilt.sh 未产出"
               RC=1
             fi
             echo "::endgroup::"

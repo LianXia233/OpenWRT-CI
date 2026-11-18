@@ -86,14 +86,19 @@
 > **关于 `honk`**：eBPF 透明代理（dae 兼容）同样改为**配置驱动**——`Config/*.txt`
 > 写一行 `CONFIG_PACKAGE_luci-app-honk=y`，`Scripts/Packages-Honk.sh` 就会在
 > `defconfig` 之前把 `honk` / `luci-app-honk` 两个包放进 `package/`。
-> `honk-core` 是 Rust + eBPF 程序，**从源码编译**：`honk` 的 `Build/Compile`
-> 调包内 `build_honk_core.sh`，用 `Packages-Honk.sh` 预装的
-> Rust(nightly/rust-src) + Zig + bpf-linker + clang/llvm 工具链，编出 target
-> 架构的静态 musl ELF。**不再复用上游 Release 的预编译 core**——上游只发
-> `aarch64_generic` 的包，而 H5000M 实机是 Cortex-A53，OpenWrt 包架构为
-> `aarch64_cortex-a53`，apk 会拒绝 `aarch64_generic` 包；源码编译后
-> `honk` apk 的架构跟随 target，实机可正常安装。构建时间预计增加
-> 15~30 分钟。
+> `honk-core` 是 Rust + eBPF 程序，**从源码编译**，但走仓库内其他 Rust 后端
+> 的同一链路：`defconfig` 之后由 `Scripts/Build-Honk-Prebuilt.sh` 在 runner
+> 侧用 rustup 官方 Rust SDK + Zig + bpf-linker 交叉编译，产物回填
+> `package/honk/files/honk-core.bin`；buildroot 的 `Build/Compile` 只消费带
+> `.stamp` 的产物，不在 build_dir 冷编 cargo，也不触发 OpenWrt `rust/host`。
+> **不再复用上游 Release 的预编译 core**——上游只发 `aarch64_generic` 的包，
+> 而 H5000M 实机是 Cortex-A53，OpenWrt 包架构为 `aarch64_cortex-a53`，apk
+> 会拒绝 `aarch64_generic` 包；runner 侧源码编译后 `honk` apk 的架构跟随
+> target，实机可正常安装。构建时间预计增加 15~30 分钟。
+>
+> Rust 侧与 `luci-app-fm350` / `luci-app-mt5700` / `luci-app-taygedo` / AirPi
+> 一致，使用 rustup 官方 SDK；`Build-Honk-Prebuilt.sh` 自己安装 Zig /
+> bpf-linker / clang 依赖，不添加 `PKG_BUILD_DEPENDS:=rust/host`。
 >
 > ⚠️ **内核 BTF 是硬前提**：`honk-core` 是 BPF CO-RE 程序，启动时要读
 > `/sys/kernel/btf/vmlinux`。启用配置必须同时写 `CONFIG_KERNEL_DEBUG_INFO=y`、
@@ -102,7 +107,9 @@
 > 少写最后一行会让 `defconfig` 静默丢掉 BTF，固件能编译、honk 却起不来。
 > `WRT-CORE.yml` 在编译前会校验这三个符号、`CONFIG_HONK_USE_KERNEL_BTF=y`、
 > `build_honk_core.sh` 入口是否存在、以及**不能有预编译 `honk-core.bin`**；
-> 正式构建还会校验 Zig / bpf-linker / cargo / rustup 等工具链命令，缺失即红。
+> 正式构建的「预编译全部 Rust 后端」第 ⑤ 段会执行
+> `Scripts/Build-Honk-Prebuilt.sh`，由它准备并校验 rustup / Zig / bpf-linker /
+> clang 等源码编译依赖，缺失或编译失败即红。
 
 ### 3. 在线升级 `luci-app-online-upgrade`（全机型内置）
 

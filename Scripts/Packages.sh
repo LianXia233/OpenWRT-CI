@@ -69,9 +69,10 @@ UPDATE_PACKAGE "passwall" "Openwrt-Passwall/openwrt-passwall" "main" "pkg"
 UPDATE_PACKAGE "passwall2" "Openwrt-Passwall/openwrt-passwall2" "main" "pkg"
 
 # Honk eBPF 透明代理：已改为配置驱动源码包（见 Scripts/Packages-Honk.sh）。
-# honk-core 在 honk 的 Build/Compile 里由 build_honk_core.sh 从源码编译；
-# Packages-Honk.sh 负责在 defconfig 前安装 Rust / Zig / bpf-linker 工具链，
-# 包本身仍由 OpenWrt 正常打包、由 defconfig + apk 解析依赖；不再走首启 APK 安装。
+# 与仓库其他 Rust 后端一致：Build-Honk-Prebuilt.sh 在 runner 侧用 rustup
+# 官方 SDK + Zig + bpf-linker 源码交叉编译，产物回填 package/honk/files；
+# buildroot 的 Build/Compile 只消费产物、不调 OpenWrt rust/host 编译 Rust。
+# 包本身仍由 defconfig + apk 解析依赖；不再走首启 APK 安装。
 
 UPDATE_PACKAGE "luci-app-tailscale" "asvow/luci-app-tailscale" "main"
 
@@ -480,9 +481,10 @@ FIX_H5000M_NETMODE_SRC
 #   3. 上游 breeze303 资产停在旧版本，与 QiuSimons 正在维护的
 #      luci-app-honk 已经分叉。
 # 现行方案：Scripts/Packages-Honk.sh 把 honk / luci-app-honk 作为正常包
-# 导入 package/，并准备源码编译工具链；honk-core 由 Build/Compile 的
-# build_honk_core.sh 从源码编译，产物架构跟随 target（H5000M 为
-# aarch64_cortex-a53），由 defconfig + apk/opkg 在构建期解析全部依赖。
+# 导入 package/，并清掉上游 aarch64_generic 预编译 core；Build-Honk-Prebuilt.sh
+# 在 runner 侧用 rustup 官方 Rust SDK 源码交叉编译 honk-core，产物架构跟随
+# target（H5000M 为 aarch64_cortex-a53），由 defconfig + apk/opkg 在构建期
+# 解析全部依赖。
 
 #更新软件包版本
 UPDATE_VERSION() {

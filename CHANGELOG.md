@@ -22,18 +22,30 @@ openwrt-25.12 APK + uci-defaults 首启 `apk add`」方案。该方案有三个�
 
 ### 改动
 
-- **新增 `Scripts/Packages-Honk.sh`**（配置驱动取包 + 源码编译工具链）：
+- **新增 `Scripts/Packages-Honk.sh`**（只负责取包，不安装 Rust 工具链）：
   - `git fetch --depth=1` 取 `honk_2026.11.15_a9925bd-r1` 的包骨架，复制
     `honk` / `luci-app-honk` 到 `package/`；
-  - 删除包内任何 `files/honk-core.bin` / `.stamp`，确保 `Build/Compile`
-    走 `build_honk_core.sh` 源码编译，而不是 `--if-needed` 预编译短路；
-  - 在 `defconfig` 前安装源码编译工具链：rustup/cargo、Zig（版本取上游
-    `release.yml` 的 setup-zig）、bpf-linker（版本 + sha256 取上游
-    `.github/ci/pins.env`）、clang/llvm/libbpf-dev/cmake/libclang-dev/zstd；
-    工具链装到 `$HOME`，并把 `$HOME/.cargo/bin` 与 Zig 目录写入
-    `$GITHUB_PATH`，供后续 `Build/Compile` 继承；
+  - 删除包内任何 `files/honk-core.bin` / `.stamp` —— 上游 Release 的是
+    `aarch64_generic` 预编译 core，H5000M 的 `aarch64_cortex-a53` apk 会拒装，
+    而且无 stamp 的 core 会让 `--if-needed` 直接跳过源码编译；
   - 支持 `HONK_REPO` / `HONK_REF` 覆盖，默认 tag 与 `honk/Makefile` 的
-    `PKG_VERSION` 同源。
+    `PKG_VERSION` 同源；不添加 `PKG_BUILD_DEPENDS:=rust/host`。
+- **新增 `Scripts/Build-Honk-Prebuilt.sh`**（runner 侧官方 Rust SDK 源码编译，
+  与仓库其他 Rust 后端 `Build-Rust-Prebuilt.sh` / `Build-Taygedo.sh` / AirPi
+  同一条链路）：
+  - 从 `./.config` 的 `CONFIG_TARGET_ARCH_PACKAGES` 推导
+    `aarch64-unknown-linux-musl` / `x86_64-unknown-linux-musl`，不依赖
+    buildroot 的 `ARCH` 变量；
+  - Rust 侧只使用 rustup 官方 SDK（stable 宿主 + `honk-ebpf` 的 nightly
+    `-Zbuild-std`），安装 target 后调包内 `build_honk_core.sh`；
+  - Zig 版本取上游 `release.yml` 的 setup-zig；bpf-linker 版本 + sha256 取
+    `.github/ci/pins.env`；clang / llvm / libbpf-dev / libclang-dev / cmake /
+    zstd / xz 只按上游 release.yml 的依赖安装；
+  - honk 源码 clone 到 `./.rust-build/honk/src`（钉死 commit），cargo 与
+    eBPF 中间产物都留在 `.rust-build`，随现有 Rust 缓存整体复用；
+  - 产物写回 `package/honk/files/honk-core.bin` + `.stamp`，并检查 ELF、
+    静态链接与 AArch64/X86-64 架构；`Build/Compile` 看到同 target 的 stamp
+    后直接跳过，不会在 buildroot 里调 cargo，也不会触发 OpenWrt rust/host。
 - **`Config/H5000M-WIFI-YES-NETMONITOR.txt`**：加入 honk 段，显式选中
   `honk` / `luci-app-honk` / `luci-i18n-honk-zh-cn`，以及
   `kmod-sched-core`、`kmod-sched-bpf`、`kmod-veth`、`kmod-nft-queue`、
@@ -49,11 +61,17 @@ openwrt-25.12 APK + uci-defaults 首启 `apk add`」方案。该方案有三个�
     `Packages-Taygedo.sh` 之后、`make defconfig` 之前，并断言
     `feeds/luci/luci.mk` 已就位；
   - 新增「校验 honk 已选中且源码编译前置 / 内核 BTF 就绪」步骤：检查包目录、
-    `build_honk_core.sh` 可执行、**不允许预编译 `honk-core.bin` / `.stamp`**、
-    `.config` 六个符号（含 `CONFIG_HONK_USE_KERNEL_BTF`）、
-    `DEBUG_INFO_REDUCED` 未选中、`HONK_USE_VMLINUX_BTF` 未选中；正式构建
-    还会检查 zig / bpf-linker / cargo / rustup / clang / cmake / pkg-config /
-    zstd。
+    `build_honk_core.sh` / `honk_toolchain.sh`、`Makefile` 仍调用
+    `build_honk_core.sh --if-needed`、没有 `rust/host` 依赖、**不允许预编译
+    `honk-core.bin` / `.stamp`**、`.config` 六个符号（含
+    `CONFIG_HONK_USE_KERNEL_BTF`）、`DEBUG_INFO_REDUCED` 未选中、
+    `HONK_USE_VMLINUX_BTF` 未选中；
+  - 「预编译全部 Rust 后端」新增第 ⑤ 段 honk：`CONFIG_PACKAGE_honk=y` 时调用
+    `Build-Honk-Prebuilt.sh`，成功后复查 `honk-core.bin` 是否落盘；失败
+    直接 `RC=1`；
+  - Rust 依赖缓存键加入 honk 的 `Makefile` / `build_honk_core.sh` /
+    `honk_toolchain.sh` 与 `Build-Honk-Prebuilt.sh`，避免上游 pin 变化时
+    误用旧缓存。
 - **`Scripts/Packages.sh`**：删除已废弃的 `INSTALL_HONK_PREBUILT`（首启
   `apk add`）函数与注释，改为指向新脚本；**`Config/GENERAL.txt`** 的
   honk 段同步改写为配置驱动说明，不再在通用层启用。
@@ -62,8 +80,9 @@ openwrt-25.12 APK + uci-defaults 首启 `apk add`」方案。该方案有三个�
 
 ### 验证
 
-- `bash -n Scripts/Packages-Honk.sh`、`bash -n Scripts/Packages.sh` 通过；
-  `WRT-CORE.yml` 用 PyYAML 解析通过（41 steps）。
+- `bash -n Scripts/Packages-Honk.sh`、`bash -n Scripts/Build-Honk-Prebuilt.sh`、
+  `bash -n Scripts/Packages.sh` 通过；`WRT-CORE.yml` 用 PyYAML 解析通过
+  （41 steps）。
 - 在目标源码树（`VIKINGYFY/immortalwrt@owrt`，`3a4719c`）上做真实
   `make defconfig` 验证（只装 packages/luci feeds，避免无关 feed 干扰）：
   把 `Config/H5000M-WIFI-YES-NETMONITOR.txt` + `Config/GENERAL.txt` 拼成
@@ -78,12 +97,13 @@ openwrt-25.12 APK + uci-defaults 首启 `apk add`」方案。该方案有三个�
   - 上游 `honk/Makefile` 的 `+HONK_USE_VMLINUX_BTF:vmlinux-btf` 因目标
     源码树没有 `vmlinux-btf` 包而打印一条 warning；内核 BTF 分支不引用它，
     不影响构建。
-- **尚未跑完整固件编译**（单次约 1~2 小时；源码编译 honk-core 另加
+- **尚未跑完整固件编译**（单次约 1~2 小时；runner 侧源码编译 honk-core 另加
   15~30 分钟）。首次触发 `H5000M-NETMONITOR-AUTO.yml` 时重点观察：
-  1. 导入步骤是否完成工具链安装（zig / bpf-linker / cargo / rustup）；
-  2. 校验步骤是否确认无预编译 core + 六个符号；
-  3. 编译日志里 `tools/dwarves`（pahole）与 `build_honk_core.sh` 的
-     Rust/Zig/bpf-linker 源码编译是否正常；
+  1. 第 ⑤ 段 honk 预编译是否完成 rustup / Zig / bpf-linker / clang 准备，
+     并成功产出 `honk-core.bin` + `.stamp`；
+  2. 校验步骤是否确认导入阶段无预编译 core、六个符号与 BTF 三件套；
+  3. 编译日志里 `tools/dwarves`（pahole，内核 BTF 用）是否正常，honk-core
+     是否走静态 musl 链接；
   4. 产物 rootfs 中 `/usr/bin/honk-core`、`/etc/init.d/honk` 是否存在；
   5. `honk` apk 的架构是否为 `aarch64_cortex-a53`（不是 `aarch64_generic`）。
 - 体积影响：源码编译的 `honk-core` 约 27~30 MB（静态 ELF）+ Doona 面板 +
