@@ -68,9 +68,10 @@ UPDATE_PACKAGE "openclash" "vernesong/OpenClash" "dev" "pkg"
 UPDATE_PACKAGE "passwall" "Openwrt-Passwall/openwrt-passwall" "main" "pkg"
 UPDATE_PACKAGE "passwall2" "Openwrt-Passwall/openwrt-passwall2" "main" "pkg"
 
-# Honk eBPF 透明代理：使用上游预编译 APK（见下方 INSTALL_HONK_PREBUILT）
+# Honk eBPF 透明代理：已改为配置驱动源码包（见 Scripts/Packages-Honk.sh）。
 # 说明：honk 为 Rust/eBPF 架构，从源码编译会超过 GitHub 6 小时上限导致构建取消，
-# 因此改为下载上游发布的预编译包，并在首次开机时离线安装进固件。
+# 因此取上游 QiuSimons/luci-app-honk 的包骨架 + 同版本 Release 的预编译
+# honk-core（静态 ELF），由 OpenWrt 正常打包并解析依赖；不再走首启 APK 安装。
 
 UPDATE_PACKAGE "luci-app-tailscale" "asvow/luci-app-tailscale" "main"
 
@@ -471,83 +472,16 @@ FIX_H5000M_NETMODE_SRC() {
 }
 FIX_H5000M_NETMODE_SRC
 
-#安装 Honk 预编译 APK（避免从源码编译 Rust/eBPF 导致超过 6 小时上限）
-# 流程：
-#   1. 按编译目标架构从上游最新 release 下载 honk 与 luci-app-honk 的 openwrt-25.12 APK：
-#        x86      -> x86_64
-#        mediatek -> aarch64_cortex-a53（MT798x / MT7622 均为 Cortex-A53，MTK 机型专用）
-#        其余     -> aarch64_generic
-#      （与 immortalwrt master 的 APK 格式匹配）
-#   2. 将 APK 放入固件 files 覆盖层（/etc/honk/），并写入 uci-defaults 脚本，
-#      在设备首次开机时离线 apk add 安装（依赖由 GENERAL.txt 编入镜像，无需联网）。
-# 注意：上游 APK 基于 OpenWrt 25.12 构建，与 immortalwrt master 同内核/同 musl，ABI 兼容。
-INSTALL_HONK_PREBUILT() {
-	echo " "
-
-	# 确定目标架构（优先用 WRT-CORE 导出的 WRT_TARGET，回退到 WRT_CONFIG）
-	local HONK_ARCH="aarch64_generic"
-	case "${WRT_TARGET:-${WRT_CONFIG:-}}" in
-		x86) HONK_ARCH="x86_64" ;;
-		mediatek) HONK_ARCH="aarch64_cortex-a53" ;;
-	esac
-
-	# 定位 OpenWrt 工作区与 files 覆盖层
-	local WRT_FILES="${GITHUB_WORKSPACE:-$(pwd)/..}/wrt/files"
-	local HONK_DIR="$WRT_FILES/etc/honk"
-	local UCI_DIR="$WRT_FILES/etc/uci-defaults"
-	mkdir -p "$HONK_DIR" "$UCI_DIR"
-
-	# 获取上游最新 release 的资产下载地址，筛选本架构的 honk / luci-app-honk（排除 legacy / cortex-a53）
-	local REL_JSON
-	REL_JSON="$(curl -fsSL --retry 5 --retry-all-errors \
-		"https://api.github.com/repos/breeze303/openwrt-honk/releases/latest")" || {
-		echo "honk prebuilt: failed to fetch release list!"
-		return 1
-	}
-
-	local DL_URLS
-	DL_URLS="$(printf '%s' "$REL_JSON" | jq -r \
-		--arg arch "$HONK_ARCH" \
-		'.assets[] | select(.name | test("-"+$arch+"-openwrt-25.12.apk$")) | select(.name | test("legacy") | not) | .browser_download_url')" || {
-		echo "honk prebuilt: failed to parse release assets!"
-		return 1
-	}
-
-	if [ -z "$DL_URLS" ]; then
-		echo "honk prebuilt: no matching APK for arch $HONK_ARCH!"
-		return 1
-	fi
-
-	local URL COUNT=0
-	for URL in $DL_URLS; do
-		echo "honk prebuilt: downloading $URL"
-		curl -fsSL --retry 5 --retry-all-errors -o "$HONK_DIR/$(basename "$URL")" "$URL" && COUNT=$((COUNT + 1))
-	done
-
-	if [ "$COUNT" -eq 0 ]; then
-		echo "honk prebuilt: all downloads failed!"
-		return 1
-	fi
-
-	# 写入首次开机安装脚本（离线 apk add，依赖已在镜像内）
-	cat > "$UCI_DIR/99-honk-install" <<'EOF'
-#!/bin/sh
-HONK_DIR="/etc/honk"
-if command -v apk >/dev/null 2>&1 && [ -d "$HONK_DIR" ]; then
-	if apk add --allow-untrusted "$HONK_DIR"/*.apk >/dev/null 2>&1; then
-		rm -f "$HONK_DIR"/*.apk
-		echo "honk: prebuilt packages installed at first boot."
-	else
-		echo "honk: prebuilt install skipped (missing dependencies or unsupported target)."
-	fi
-fi
-EOF
-	chmod +x "$UCI_DIR/99-honk-install"
-
-	echo "honk prebuilt: $COUNT package(s) staged for $HONK_ARCH, will install at first boot."
-}
-# 临时禁用 Honk 插件（2026-08-12）：取消下行注释即可重新启用
-# INSTALL_HONK_PREBUILT
+# Honk eBPF 透明代理：旧的首启 APK 安装方案（breeze303/openwrt-honk +
+# uci-defaults 里 apk add）已于 2026-11-18 移除。原因：
+#   1. 首启安装不参与构建期依赖解析，缺包只能到设备上才发现；
+#   2. 上游资产是 openwrt-25.12 APK，而本仓库目标虽然已是 apk 打包，
+#      但内核 BTF / kmod 依赖必须先在镜像里，离线 add 的失败面太大；
+#   3. 上游 breeze303 资产停在旧版本，与 QiuSimons 正在维护的
+#      luci-app-honk 已经分叉。
+# 现行方案：Scripts/Packages-Honk.sh 把 honk / luci-app-honk 作为正常包
+# 导入 package/，honk-core 用上游同版本 Release 的预编译静态 ELF，
+# 由 defconfig + apk/opkg 在构建期解析全部依赖。
 
 #更新软件包版本
 UPDATE_VERSION() {

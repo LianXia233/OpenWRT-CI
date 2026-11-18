@@ -49,7 +49,7 @@
 | `*-NETWIZ-MT5700M` | H5000M / AP3000M / X86 | 母配置 **+ `luci-app-netwiz`** + MT5700M 方案 | `MT5700M` | 初学新手、向导式配网 + 5G（经典方案 A） |
 | `*-NETWIZ-FM350` | H5000M / AP3000M / X86 | 母配置 **+ `luci-app-netwiz`** + FM350 方案 | 无 (留空) | 初学新手、向导式配网 + FM350 模组 |
 | **自用配置** | | | | |
-| `H5000M-WIFI-YES-NETMONITOR` | H5000M | 母配置 + 网络监控 `netmonitor` + 每日签到 `taygedo` | `MT5700`（固定） | 作者个人测试使用，独立归组 |
+| `H5000M-WIFI-YES-NETMONITOR` | H5000M | 母配置 + 网络监控 `netmonitor` + 每日签到 `taygedo` + eBPF 透明代理 `honk` | `MT5700`（固定） | 作者个人测试使用，独立归组 |
 
 > \* 注：基础母配置本身不捆绑特定模组插件，编译时通过 **MT Mode** 下拉选项（`MT5700M` / `MT5700` / `NONE`）按需动态叠加。
 
@@ -64,6 +64,7 @@
 | NetWiz 配网向导 `netwiz` | — | — | ✅ | ✅ | ✅ | — |
 | 网络监控 `netmonitor` | — | — | — | — | — | ✅ |
 | 每日签到 `taygedo` | 🟡 可选 | 🟡 可选 | 🟡 可选 | 🟡 可选 | 🟡 可选 | ✅ |
+| eBPF 透明代理 `honk` | — | — | — | — | — | ✅ |
 | 在线升级 `online-upgrade` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 硬件风扇温控 `h5000m/airpi-fancontrol` | H5000M / AP3000M | 包含 | 包含 | 包含 | 包含 | 包含 |
 
@@ -81,6 +82,22 @@
 > 网络下载。与「预编译 AirPi Rust 后端」共用同一套工具链思路；编译失败时
 > 自动回退 `cross`（Docker），仍失败可设 `TAYGEDO_PREBUILT=1` 退回 Release
 > 预编译资产。
+
+> **关于 `honk`**：eBPF 透明代理（dae 兼容）同样改为**配置驱动**——`Config/*.txt`
+> 写一行 `CONFIG_PACKAGE_luci-app-honk=y`，`Scripts/Packages-Honk.sh` 就会在
+> `defconfig` 之前把 `honk` / `luci-app-honk` 两个包放进 `package/`。
+> `honk-core` 是 Rust + eBPF 程序，**不从源码编译**：取包阶段直接复用
+> [`QiuSimons/luci-app-honk`](https://github.com/QiuSimons/luci-app-honk) 同版本
+> Release 里的预编译静态 musl ELF（aarch64_generic / x86_64），包本身仍由
+> OpenWrt 正常打包，`kmod-sched-bpf` / `v2ray-geoip` / `rpcd-mod-ucode` 等依赖
+> 在构建期由 apk 解析。
+>
+> ⚠️ **内核 BTF 是硬前提**：`honk-core` 是 BPF CO-RE 程序，启动时要读
+> `/sys/kernel/btf/vmlinux`。启用配置必须同时写 `CONFIG_KERNEL_DEBUG_INFO=y`、
+> `CONFIG_KERNEL_DEBUG_INFO_BTF=y` 和 `# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set`
+> —— `Config-kernel.in` 里 `KERNEL_DEBUG_INFO_REDUCED` 默认 `y` 且与 BTF 互斥，
+> 少写最后一行会让 `defconfig` 静默丢掉 BTF，固件能编译、honk 却起不来。
+> `WRT-CORE.yml` 在编译前会校验这三项与预编译 core 的落位，缺失即红。
 
 ### 3. 在线升级 `luci-app-online-upgrade`（全机型内置）
 

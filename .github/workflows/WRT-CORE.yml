@@ -367,6 +367,15 @@ jobs:
           else
             echo "WRT_TAYGEDO=false" >> $GITHUB_ENV
           fi
+          # luci-app-honk 导入开关：与 taygedo 同一套「配置文件自己声明」机制。
+          # 任何 Config/*.txt 写了 CONFIG_PACKAGE_luci-app-honk=y 就自动导入；
+          # 既有配置都不含该行，故对现网产物零影响。
+          if grep -qE '^[[:space:]]*CONFIG_PACKAGE_luci-app-honk=y[[:space:]]*$' \
+              "./Config/$WRT_CONFIG.txt" 2>/dev/null; then
+            echo "WRT_HONK=true" >> $GITHUB_ENV
+          else
+            echo "WRT_HONK=false" >> $GITHUB_ENV
+          fi
           # MT 模式标签：用于产物文件名 / Release Tag / 配置导出，区分双配置并行编译
           if [ -z "${MT_MODE:-}" ]; then
             echo "WRT_MT=NONE" >> $GITHUB_ENV
@@ -688,6 +697,37 @@ jobs:
 
           $GITHUB_WORKSPACE/Scripts/Packages-Taygedo.sh
 
+      # luci-app-honk（eBPF 透明代理）：配置驱动导入，与机型名解耦。
+      #
+      # 触发条件只有一个 —— Config/$WRT_CONFIG.txt 里写了
+      # CONFIG_PACKAGE_luci-app-honk=y（上一步「初始化构建变量」已把结果
+      # 落到 env.WRT_HONK）。给其他配置加 honk 只需动配置文件一行。
+      #
+      # 取包脚本 Scripts/Packages-Honk.sh 负责三件事：
+      #   1. 按 WRT_TARGET 选架构（mediatek→aarch64_generic / x86→x86_64）；
+      #   2. 从 QiuSimons/luci-app-honk 同版本 Release 里取预编译 honk-core
+      #      （静态 musl ELF），放进 package/honk/files/honk-core.bin，
+      #      让包内 build_honk_core.sh 跳过 Rust/Zig/bpf-linker 源码编译；
+      #   3. 复制 honk 与 luci-app-honk 两个包到 package/，供 defconfig 选包。
+      #
+      # 必须早于 defconfig：包未就位时 CONFIG_PACKAGE_honk=y 是孤立符号，
+      # 会被连同依赖一起静默丢弃，表现为「编译全绿、固件里没有 honk」。
+      # 也必须晚于「更新 feeds 软件源」—— luci-app-honk/Makefile 走
+      # feeds/luci/luci.mk 编译框架。
+      - name: 导入 honk / luci-app-honk（配置驱动，可选）
+        if: env.WRT_HONK == 'true'
+        run: |
+          cd ./wrt/package/
+
+          $GITHUB_WORKSPACE/Scripts/Packages-Honk.sh
+
+          LUCI_MK="$(pwd)/../feeds/luci/luci.mk"
+          if [ ! -f "$LUCI_MK" ]; then
+            echo "::error::未找到 $LUCI_MK：feeds 未更新或 luci feed 未展开"
+            exit 1
+          fi
+          echo "luci.mk 就位：$LUCI_MK"
+
       # luci-app-online-upgrade（在线升级）：全机型无条件导入，不按机型名分支。
       #
       # 上游仓库是「包即仓库根」形态（Makefile / root/ / rust/ 都在根目录），
@@ -897,6 +937,74 @@ jobs:
             fi
             echo "luci-app-taygedo 已就位、已被 .config 选中，预编译资产 $(basename "$TG_ASSET") 在 dl/ 就绪（预编译模式）"
           fi
+
+      # 防回归：honk 有三个与 taygedo 同源的静默失败形态，任何一个都不能
+      # 只在日志里留一行 warning：
+      #   1. 包目录缺失 —— Packages-Honk.sh 没跑 / clone 失败；
+      #   2. .config 未选中 —— 包在 defconfig 之后才就位，或被依赖裁掉；
+      #   3. 预编译 core 没进包 —— 下载 404 / 解包为空，设备上会表现为
+      #      /usr/bin/honk-core 缺失，固件编译却全绿。
+      # 另外单独卡内核 BTF：honk-core 是 BPF CO-RE 程序，没有
+      # /sys/kernel/btf/vmlinux 时能装不能跑（启动即报找不到 BTF）。
+      # Config-kernel.in 里 KERNEL_DEBUG_INFO_REDUCED 默认 y，且与 BTF 互斥，
+      # 一旦配置层漏写「# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set」，
+      # defconfig 会把 BTF 选项静默丢掉 —— 这里在编译前就把它拦住。
+      - name: 校验 honk 已选中且预编译 core / 内核 BTF 就绪
+        if: env.WRT_HONK == 'true'
+        run: |
+          cd ./wrt/
+
+          if [ ! -d ./package/honk ]; then
+            echo "::error::package/honk 不存在：Packages-Honk.sh 未执行或 clone 失败"
+            exit 1
+          fi
+          if [ ! -d ./package/luci-app-honk ]; then
+            echo "::error::package/luci-app-honk 不存在：Packages-Honk.sh 未执行或 clone 失败"
+            exit 1
+          fi
+          if [ ! -s ./package/honk/files/honk-core.bin ]; then
+            echo "::error::package/honk/files/honk-core.bin 缺失或为空：预编译 core 未落位，固件会缺 /usr/bin/honk-core"
+            exit 1
+          fi
+          if [ -f ./package/honk/files/honk-core.bin.stamp ]; then
+            echo "::error::honk-core.bin.stamp 存在：build_honk_core.sh 会误判为需要源码重编，必须由 Packages-Honk.sh 删除"
+            exit 1
+          fi
+
+          for SYM in \
+            CONFIG_PACKAGE_honk \
+            CONFIG_PACKAGE_luci-app-honk \
+            CONFIG_PACKAGE_luci-i18n-honk-zh-cn \
+            CONFIG_KERNEL_DEBUG_INFO_BTF; do
+            if ! grep -qx "${SYM}=y" ./.config; then
+              echo "::error::.config 缺少 ${SYM}=y（包未就位 / 配置被依赖裁掉 / BTF 被 KERNEL_DEBUG_INFO_REDUCED 挤掉？）"
+              grep -i 'honk\|DEBUG_INFO' ./.config || echo "（.config 中无任何 honk / DEBUG_INFO 相关行）"
+              exit 1
+            fi
+          done
+
+          if grep -qx 'CONFIG_KERNEL_DEBUG_INFO_REDUCED=y' ./.config; then
+            echo "::error::CONFIG_KERNEL_DEBUG_INFO_REDUCED=y 与 BTF 互斥：请确认配置层写了 '# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set'"
+            exit 1
+          fi
+
+          FILE_DESC="$(file -b ./package/honk/files/honk-core.bin)"
+          case "${WRT_TARGET:-}" in
+            x86*)
+              case "$FILE_DESC" in
+                *"x86-64"*) ;;
+                *) echo "::error::honk-core 架构与 x86 目标不符：${FILE_DESC}"; exit 1 ;;
+              esac
+              ;;
+            *)
+              case "$FILE_DESC" in
+                *"ARM aarch64"*) ;;
+                *) echo "::error::honk-core 架构与 aarch64 目标不符：${FILE_DESC}"; exit 1 ;;
+              esac
+              ;;
+          esac
+
+          echo "honk 已就位且已被 .config 选中；内核 BTF 已启用；core：${FILE_DESC}"
 
       # 防回归：luci-app-online-upgrade 全机型内置，因此本校验无 if 条件。
       # 四层断言对应四类真实失败形态：

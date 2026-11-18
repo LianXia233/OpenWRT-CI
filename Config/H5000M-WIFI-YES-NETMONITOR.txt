@@ -82,5 +82,63 @@ CONFIG_PACKAGE_ucode-mod-uloop=y
 CONFIG_PACKAGE_luci-app-taygedo=y
 CONFIG_PACKAGE_ca-bundle=y
 
+# ===== luci-app-honk：eBPF 透明代理（自用）=====
+#
+# 包来源：https://github.com/QiuSimons/luci-app-honk
+#   - honk            —— honk-core（dae 兼容的 eBPF 透明代理）+ init.d +
+#                        /etc/honk 默认配置；
+#   - luci-app-honk   —— LuCI 页面 + rpcd/ucode 接口 + Doona 静态面板。
+#
+# 为什么不从源码编译：honk-core 是 Rust + eBPF（zig / bpf-linker / nightly
+# rust-src / clang-llvm 全要），完整构建会挤爆 GitHub 6 小时上限。因此
+# Scripts/Packages-Honk.sh 在取包阶段下载上游**同版本 Release** 里的预编译
+# honk-core（静态 musl ELF，aarch64_generic / x86_64 各一份），包本身仍由
+# OpenWrt 正常打包，依赖在构建期由 apk/opkg 解析，不做首启安装。
+#
+# 导入由配置文件驱动：workflow 只要看到下面这行
+# CONFIG_PACKAGE_luci-app-honk=y 就调用 Scripts/Packages-Honk.sh，
+# 与机型名无关；不写就不导入，其他配置零影响。
+#
+# 依赖逐项显式选中（理由与 NetWiz / taygedo 段一致：依赖只靠 DEPENDS 隐式
+# 解析时，一旦上游调整打包、或某依赖在别的配置层被置 =n，defconfig 后会
+# 静默缺组件，而固件编译仍然全绿）：
+#   - 内核：kmod-sched-core / kmod-sched-bpf / kmod-veth / kmod-nft-queue；
+#   - 数据：v2ray-geoip + v2ray-geosite（落到 /usr/share/v2ray，honk 的
+#           geoip:/geosite: 规则要靠这两份 .dat 才能解析）；
+#   - LuCI：rpcd-mod-ucode（honk.uc 的 RPC 接口）、unzip（Doona 面板解包）；
+#   - 工具：jsonfilter（honk.init 用 ubus 状态解析 DNS 时调用，
+#           LuCI 自身不保证带上，显式选中以免 DNS 劫持退回硬编码）。
+#   ca-bundle 已在上方 taygedo 段选中，不重复声明。
+#   注：honk.init 其余只用 ip / ubus / mount（基础镜像已有），
+#   不需要 jq / nsenter / tc-full；上游 Makefile 也未声明它们。
+#
+# eBPF CO-RE 的硬前提：honk-core 启动时要读 /sys/kernel/btf/vmlinux。
+# ImmortalWrt 的 filogic 内核默认不带 BTF，且 Config-kernel.in 里
+# KERNEL_DEBUG_INFO_REDUCED 默认 y（与 BTF 互斥），所以下面三行必须一起写：
+#   - DEBUG_INFO 打开 DWARF；
+#   - DEBUG_INFO_BTF 让 pahole 生成 BTF；
+#   - 显式关掉 DEBUG_INFO_REDUCED，否则 defconfig 会把 BTF 选项静默丢掉。
+# 代价：构建会多编 tools/dwarves（pahole），build_dir 也会变大；但这是
+# honk 在本机能跑的硬前提，不能省。workflow 的校验步骤会在编译前检查这三项。
+CONFIG_PACKAGE_honk=y
+CONFIG_PACKAGE_luci-app-honk=y
+CONFIG_PACKAGE_luci-i18n-honk-zh-cn=y
+
+CONFIG_PACKAGE_kmod-sched-core=y
+CONFIG_PACKAGE_kmod-sched-bpf=y
+CONFIG_PACKAGE_kmod-veth=y
+CONFIG_PACKAGE_kmod-nft-queue=y
+
+CONFIG_PACKAGE_v2ray-geoip=y
+CONFIG_PACKAGE_v2ray-geosite=y
+
+CONFIG_PACKAGE_rpcd-mod-ucode=y
+CONFIG_PACKAGE_unzip=y
+CONFIG_PACKAGE_jsonfilter=y
+
+CONFIG_KERNEL_DEBUG_INFO=y
+CONFIG_KERNEL_DEBUG_INFO_BTF=y
+# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set
+
 # MT 相关包一律交给 MT_MODE 决定：Scripts/ApplyMTMode.sh 在本层之后执行，
 # 会用 =n 覆盖本文件可能写入的任何 MT 包，故本文件不声明任何 MT 包。
