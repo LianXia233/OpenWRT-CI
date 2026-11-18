@@ -44,14 +44,12 @@ die() { echo "::error::[honk] $*" >&2; exit 1; }
 # 必须在 Zig/bpf-linker 下载前调用：bpf-linker 是 .tar.zst（要 zstd），
 # Zig 是 .tar.xz（要 xz）。
 ensure_apt_deps() {
-	local NEED_APT=0 C
-	for C in clang cmake pkg-config zstd xz readelf; do
-		command -v "$C" >/dev/null 2>&1 || NEED_APT=1
-	done
-	pkg-config --exists libclang 2>/dev/null || NEED_APT=1
-	pkg-config --exists libbpf 2>/dev/null || NEED_APT=1
+	local C
 
-	if [ "${HONK_SKIP_APT:-0}" != "1" ] && [ "$NEED_APT" = "1" ]; then
+	# honk 的 eBPF 后端需要 clang/libclang/libbpf；上游 release.yml 也是直接
+	# apt install。这里无条件安装（apt 幂等，已装时只花几秒），避免 runner
+	# 镜像里 clang 在、libclang-dev 不在的半套环境。
+	if [ "${HONK_SKIP_APT:-0}" != "1" ]; then
 		if command -v apt-get >/dev/null 2>&1; then
 			if sudo -n true 2>/dev/null; then
 				say "安装 honk 源码编译系统依赖（clang/llvm/libbpf-dev/libclang-dev 等）"
@@ -70,7 +68,6 @@ ensure_apt_deps() {
 	for C in clang cmake pkg-config zstd xz readelf; do
 		command -v "$C" >/dev/null 2>&1 || die "源码编译依赖缺失：$C"
 	done
-	pkg-config --exists libclang 2>/dev/null || die "源码编译依赖缺失：libclang"
 	pkg-config --exists libbpf 2>/dev/null || die "源码编译依赖缺失：libbpf"
 }
 
