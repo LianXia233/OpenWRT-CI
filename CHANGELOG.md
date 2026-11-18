@@ -61,6 +61,20 @@ openwrt-25.12 APK + uci-defaults 首启 `apk add`」方案。该方案有三个�
     直接打印 `using prebuilt honk-core (no stamp)` 后退出 0（不需要 zig/rust）。
 - `bash -n Scripts/Packages-Honk.sh`、`bash -n Scripts/Packages.sh` 通过；
   `WRT-CORE.yml` 用 PyYAML 解析通过。
+- 在目标源码树（`VIKINGYFY/immortalwrt@owrt`，`3a4719c`）上做真实
+  `make defconfig` 验证（只装 packages/luci feeds，避免无关 feed 干扰）：
+  把 `Config/H5000M-WIFI-YES-NETMONITOR.txt` + `Config/GENERAL.txt` 拼成
+  `.config`，并补 `CONFIG_PACKAGE_luci=y` / `CONFIG_LUCI_LANG_zh_Hans=y`
+  （与 `Scripts/Settings.sh` 的真实追加一致）后执行 `make defconfig`：
+  - `CONFIG_PACKAGE_honk`、`luci-app-honk`、`luci-i18n-honk-zh-cn` 全部保留；
+  - `kmod-sched-core`、`kmod-sched-bpf`、`kmod-veth`、`kmod-nft-queue`、
+    `v2ray-geoip`、`v2ray-geosite`、`rpcd-mod-ucode`、`unzip`、`jsonfilter`
+    共 14 个包符号全部被选中；
+  - `CONFIG_HONK_USE_KERNEL_BTF=y`，`KERNEL_DEBUG_INFO=y`、
+    `KERNEL_DEBUG_INFO_BTF=y`，`DEBUG_INFO_REDUCED` 未选中；
+  - 上游 `honk/Makefile` 的 `+HONK_USE_VMLINUX_BTF:vmlinux-btf` 因目标
+    源码树没有 `vmlinux-btf` 包而打印一条 warning；内核 BTF 分支不引用它，
+    不影响构建。
 - **尚未跑完整固件编译**（单次约 1~2 小时）。首次触发
   `H5000M-NETMONITOR-AUTO.yml` 时重点观察：
   1. `导入 honk / luci-app-honk` 步骤是否在 defconfig 前完成；
