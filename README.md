@@ -86,18 +86,23 @@
 > **关于 `honk`**：eBPF 透明代理（dae 兼容）同样改为**配置驱动**——`Config/*.txt`
 > 写一行 `CONFIG_PACKAGE_luci-app-honk=y`，`Scripts/Packages-Honk.sh` 就会在
 > `defconfig` 之前把 `honk` / `luci-app-honk` 两个包放进 `package/`。
-> `honk-core` 是 Rust + eBPF 程序，**不从源码编译**：取包阶段直接复用
-> [`QiuSimons/luci-app-honk`](https://github.com/QiuSimons/luci-app-honk) 同版本
-> Release 里的预编译静态 musl ELF（aarch64_generic / x86_64），包本身仍由
-> OpenWrt 正常打包，`kmod-sched-bpf` / `v2ray-geoip` / `rpcd-mod-ucode` 等依赖
-> 在构建期由 apk 解析。
+> `honk-core` 是 Rust + eBPF 程序，**从源码编译**：`honk` 的 `Build/Compile`
+> 调包内 `build_honk_core.sh`，用 `Packages-Honk.sh` 预装的
+> Rust(nightly/rust-src) + Zig + bpf-linker + clang/llvm 工具链，编出 target
+> 架构的静态 musl ELF。**不再复用上游 Release 的预编译 core**——上游只发
+> `aarch64_generic` 的包，而 H5000M 实机是 Cortex-A53，OpenWrt 包架构为
+> `aarch64_cortex-a53`，apk 会拒绝 `aarch64_generic` 包；源码编译后
+> `honk` apk 的架构跟随 target，实机可正常安装。构建时间预计增加
+> 15~30 分钟。
 >
 > ⚠️ **内核 BTF 是硬前提**：`honk-core` 是 BPF CO-RE 程序，启动时要读
 > `/sys/kernel/btf/vmlinux`。启用配置必须同时写 `CONFIG_KERNEL_DEBUG_INFO=y`、
 > `CONFIG_KERNEL_DEBUG_INFO_BTF=y` 和 `# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set`
 > —— `Config-kernel.in` 里 `KERNEL_DEBUG_INFO_REDUCED` 默认 `y` 且与 BTF 互斥，
 > 少写最后一行会让 `defconfig` 静默丢掉 BTF，固件能编译、honk 却起不来。
-> `WRT-CORE.yml` 在编译前会校验这三项与预编译 core 的落位，缺失即红。
+> `WRT-CORE.yml` 在编译前会校验这三个符号、`CONFIG_HONK_USE_KERNEL_BTF=y`、
+> `build_honk_core.sh` 入口是否存在、以及**不能有预编译 `honk-core.bin`**；
+> 正式构建还会校验 Zig / bpf-linker / cargo / rustup 等工具链命令，缺失即红。
 
 ### 3. 在线升级 `luci-app-online-upgrade`（全机型内置）
 

@@ -89,11 +89,17 @@ CONFIG_PACKAGE_ca-bundle=y
 #                        /etc/honk 默认配置；
 #   - luci-app-honk   —— LuCI 页面 + rpcd/ucode 接口 + Doona 静态面板。
 #
-# 为什么不从源码编译：honk-core 是 Rust + eBPF（zig / bpf-linker / nightly
-# rust-src / clang-llvm 全要），完整构建会挤爆 GitHub 6 小时上限。因此
-# Scripts/Packages-Honk.sh 在取包阶段下载上游**同版本 Release** 里的预编译
-# honk-core（静态 musl ELF，aarch64_generic / x86_64 各一份），包本身仍由
-# OpenWrt 正常打包，依赖在构建期由 apk/opkg 解析，不做首启安装。
+# 为什么从源码编译：上游 Release 只提供 aarch64_generic 的 ipk/apk；
+# H5000M 实机是 Cortex-A53，OpenWrt 给它打的包架构是 aarch64_cortex-a53，
+# apk 会直接拒绝 aarch64_generic 的包。因此不在取包阶段下载预编译 core，
+# 改为让 honk 的 Build/Compile 调用包内 build_honk_core.sh 源码编译；
+# 产物架构跟随 target，最终 honk apk 是 aarch64_cortex-a53，实机可正常安装。
+# 源码编译需要 Rust(nightly/rust-src) + Zig + bpf-linker + clang/llvm；
+# Scripts/Packages-Honk.sh 在 defconfig 前装好工具链并写入 GITHUB_PATH，
+# 构建时间预计增加 15~30 分钟，仍远低于 GitHub 6 小时上限。
+# 注：上游 Makefile 的可选依赖 +HONK_USE_VMLINUX_BTF:vmlinux-btf 在目标
+# 源码树没有对应包，make defconfig 会打印一条 warning；本配置固定选
+# 内核 BTF（CONFIG_HONK_USE_KERNEL_BTF=y），不会引用该可选包。
 #
 # 导入由配置文件驱动：workflow 只要看到下面这行
 # CONFIG_PACKAGE_luci-app-honk=y 就调用 Scripts/Packages-Honk.sh，

@@ -1,37 +1,32 @@
 #!/bin/bash
 # SPDX-License-Identifier: MIT
 # luci-app-honk 取包：把 QiuSimons/luci-app-honk 的 honk / luci-app-honk
-# 两个包放进 package/，并用上游同版本 Release 里的预编译 honk-core 顶替
-# 源码编译（Rust + eBPF 工具链太重，会挤爆 GitHub 6 小时构建上限）。
+# 两个包放进 package/，并在 defconfig 前准备 honk-core 的源码编译工具链。
+#
+# ── 为什么不再用上游预编译 core ──────────────────────────────────────────
+# 上游 Release 只发 aarch64_generic 的 ipk/apk；H5000M 实机是 Cortex-A53，
+# OpenWrt 给它打的包架构是 aarch64_cortex-a53，apk 会直接拒绝
+# aarch64_generic 的包。改为在 honk 的 Build/Compile 里用包内
+# build_honk_core.sh 从源码编译，产物架构跟随 target，最终 honk apk 的
+# 架构就是 aarch64_cortex-a53，实机可以正常安装。
+#
+# ── 工具链 ──────────────────────────────────────────────────────────────
+# honk-core 是 Rust + eBPF（zig / bpf-linker / nightly）程序，源码编译需要：
+#   - rustup / cargo（stable 用于构建，脚本内部再装 nightly + rust-src）
+#   - Zig（版本由上游 release.yml 的 setup-zig 钉死）
+#   - bpf-linker（版本与 sha256 由上游 .github/ci/pins.env 钉死）
+#   - clang / llvm / libbpf-dev / cmake / libclang-dev / zstd / xz
+# 本脚本把它们装到 $HOME，并把 $HOME/.cargo/bin 与 Zig 目录写进
+# $GITHUB_PATH；后续 make 步骤的 Build/Compile 直接继承 PATH。
 #
 # 用法（在 OpenWrt 源码树的 package/ 目录下执行）：
 #   $GITHUB_WORKSPACE/Scripts/Packages-Honk.sh
 #
 # 环境变量（均可选）：
-#   HONK_REPO   上游仓库，默认 QiuSimons/luci-app-honk
-#   HONK_REF    上游分支/tag/commit，默认 honk_2026.11.15_a9925bd-r1
-#               （与 honk/Makefile 的 PKG_VERSION 严格同源：同一个 tag
-#                里的包骨架与 Release 资产一一对应，避免「包版本领先/落后
-#                于预编译 core」的半旧半新组合）
-#   HONK_TAG    强制指定 Release tag；留空时 REF 是 honk_* 就直接复用，
-#               否则按 Makefile 的 PKG_VERSION/PKG_RELEASE 推导
-#   HONK_ARCH   目标架构，仅 aarch64_generic / x86_64；留空按 WRT_TARGET 推导
-#
-# ── 为什么不写进 Scripts/Packages.sh ──────────────────────────────────────
-# Packages.sh 是全机型共用入口，任何改动都会连带影响 H5000M / AP3000M / X86
-# 的所有变体。honk 目前只服务作者自用的 H5000M-WIFI-YES-NETMONITOR（Release
-# 单独归组「自用」），因此独立成脚本，由 WRT-CORE 中
-# env.WRT_HONK == 'true' 的步骤调用；其余配置不执行本脚本。
-#
-# ── 依赖闭环 ─────────────────────────────────────────────────────────────
-# 本脚本只负责「把包和二进制放到位」，依赖交给 OpenWrt 正常解析：
-#   - honk/Makefile 的 DEPENDS（kmod-sched-core / kmod-sched-bpf / kmod-veth /
-#     kmod-nft-queue / v2ray-geoip / v2ray-geosite / ca-bundle）由 defconfig
-#     与 apk 打包器在构建期校验，不再走「首启 apk add」那种离线安装；
-#   - luci-app-honk/Makefile 的 LUCI_DEPENDS（+honk +luci-base
-#     +rpcd-mod-ucode +unzip）同样交给 luci.mk 解析；
-#   - eBPF CO-RE 需要的内核 BTF 不在本脚本里造，由配置文件显式打开
-#     CONFIG_KERNEL_DEBUG_INFO_BTF=y（见 Config/H5000M-WIFI-YES-NETMONITOR.txt）。
+#   HONK_REPO 上游仓库，默认 QiuSimons/luci-app-honk
+#   HONK_REF  上游分支/tag/commit，默认 honk_2026.11.15_a9925bd-r1
+#             （包骨架与 HONK_SRC_VERSION 同源，升级时一起改）
+#   WRT_TEST  true 时跳过工具链安装（TEST 模式只出配置、不编译固件）
 set -euo pipefail
 
 PKG1="honk"
@@ -39,52 +34,18 @@ PKG2="luci-app-honk"
 REPO="${HONK_REPO:-QiuSimons/luci-app-honk}"
 REF="${HONK_REF:-honk_2026.11.15_a9925bd-r1}"
 UPSTREAM=".${PKG1}-upstream"
+TOOL_TMP=""
 
 say() { echo "==> $*"; }
 die() { echo "::error::$*" >&2; exit 1; }
+cleanup() { [ -n "${TOOL_TMP:-}" ] && rm -rf "$TOOL_TMP" || true; }
+trap cleanup EXIT INT TERM
 
 # ===========================================================================
-# 0) 目标架构 → 上游 Release 资产里的架构段
-# ===========================================================================
-# honk-core 只支持 aarch64 / x86_64（上游 Makefile 用
-# HONK_RUST_ARCH_DEPENDS:=@(aarch64||x86_64) 做约束）。这里提前判定，
-# 让「架构不支持」在取包阶段带着清晰说明失败，而不是等 defconfig 把包
-# 静默丢掉、最后固件里少一个插件。
-HONK_ARCH="${HONK_ARCH:-}"
-if [ -z "$HONK_ARCH" ]; then
-	case "${WRT_TARGET:-}" in
-		x86*) HONK_ARCH="x86_64" ;;
-		mediatek) HONK_ARCH="aarch64_generic" ;;
-		aarch64*) HONK_ARCH="aarch64_generic" ;;
-		"") : ;;
-		*) die "honk: 不支持的目标平台 '${WRT_TARGET}'（仅支持 mediatek aarch64 与 x86_64）" ;;
-	esac
-fi
-# WRT_TARGET 未导出时（本地手跑）回退读配置文件，避免依赖调用方的环境
-if [ -z "$HONK_ARCH" ]; then
-	CFG_ROOT="${GITHUB_WORKSPACE:-$(pwd)/../..}/Config"
-	if [ -n "${WRT_CONFIG:-}" ] && [ -f "${CFG_ROOT}/${WRT_CONFIG}.txt" ]; then
-		if grep -q '^CONFIG_TARGET_x86=y' "${CFG_ROOT}/${WRT_CONFIG}.txt"; then
-			HONK_ARCH="x86_64"
-		else
-			HONK_ARCH="aarch64_generic"
-		fi
-	fi
-fi
-[ -n "$HONK_ARCH" ] || die "honk: 无法判定目标架构（HONK_ARCH / WRT_TARGET / WRT_CONFIG 均为空）"
-
-case "$HONK_ARCH" in
-	aarch64_generic|x86_64) ;;
-	*) die "honk: 不支持的目标架构 '${HONK_ARCH}'（上游仅提供 aarch64_generic / x86_64）" ;;
-esac
-say "目标架构 ${HONK_ARCH}"
-
-# ===========================================================================
-# 1) 取上游包骨架（honk + luci-app-honk）
+# 0) 取上游包骨架（honk + luci-app-honk）
 # ===========================================================================
 # 用 git init + fetch 而不是 `git clone --branch`：REF 既可能是 tag，也可能
-# 是分支或 commit SHA，后者不接受 --branch。--depth=1 只取目标提交，仓库里
-# 的 PIC/README 等发布构建用不到的目录随后统一清掉。
+# 是分支或 commit SHA，后者不接受 --branch。--depth=1 只取目标提交。
 say "拉取 ${REPO}@${REF}"
 rm -rf "./${PKG1}" "./${PKG2}" "./${UPSTREAM}"
 git init -q "./${UPSTREAM}"
@@ -127,7 +88,7 @@ chmod +x \
 	"./${PKG2}/root/usr/share/honk/download_dashboard.sh"
 
 # ===========================================================================
-# 2) 包骨架自检（防上游回归）
+# 1) 包骨架自检（防上游回归）
 # ===========================================================================
 MK="./${PKG1}/Makefile"
 LMK="./${PKG2}/Makefile"
@@ -135,7 +96,7 @@ LMK="./${PKG2}/Makefile"
 [ -f "$LMK" ] || die "${LMK} 不存在"
 
 grep -q 'HONK_SRC_VERSION' "$MK" || die "${MK} 未声明 HONK_SRC_VERSION：上游包结构可能已变更"
-grep -q 'build_honk_core.sh' "$MK" || die "${MK} 不再调用 build_honk_core.sh：预编译 core 的落点会失效"
+grep -q 'build_honk_core.sh' "$MK" || die "${MK} 不再调用 build_honk_core.sh：源码编译路径失效"
 grep -q 'HONK_RUST_ARCH_DEPENDS' "$MK" || die "${MK} 缺少架构约束（上游可能已放弃 aarch64/x86_64 限制）"
 grep -q 'luci.mk' "$LMK" || die "${LMK} 未 include feeds/luci/luci.mk"
 
@@ -145,101 +106,131 @@ REL="$(sed -n 's/^PKG_RELEASE:=//p' "$MK" | head -n1)"
 [ -n "$REL" ] || die "${MK} 未声明 PKG_RELEASE"
 say "包版本 ${VER}-r${REL}"
 
-# ===========================================================================
-# 3) Release tag 对齐
-# ===========================================================================
-# 默认 REF 本身就是发布 tag（honk_<PKG_VERSION 的 ~ 换成 _>-r<REL>），
-# 这里默认直接复用；只有把 REF 改成 master / 某个 commit 时才按 Makefile
-# 推导。推导出来的 tag 若在上游不存在，会在下一步资产页解析时明确报错，
-# 而不是让构建在几十页日志之后才暴露「包版本与资产版本错位」。
-TAG="${HONK_TAG:-}"
-if [ -z "$TAG" ]; then
-	case "$REF" in
-		honk_*) TAG="$REF" ;;
-		*) TAG="honk_$(printf '%s' "$VER" | tr '~' '_')-r${REL}" ;;
-	esac
-fi
-say "Release tag ${TAG}"
+# 当前方案必须走源码编译：清掉任何预编译 core / stamp，避免 --if-needed
+# 误判为「已是最新」而跳过编译（预编译 aarch64_generic 正是要淘汰的路径）。
+rm -f "./${PKG1}/files/honk-core.bin" "./${PKG1}/files/honk-core.bin.stamp"
 
 # ===========================================================================
-# 4) 按架构下载上游预编译包，抽出静态 honk-core
+# 2) 源码编译工具链（Rust / Zig / bpf-linker / clang...）
 # ===========================================================================
-# 上游 Release 同时发布 24.10 的 ipk 与 25.12 的 apk。这里刻意取 ipk：
-#   - honk-core 是静态 musl ELF，与 OpenWrt 发行版的打包格式无关；
-#   - ipk 是 ar + data.tar.gz，ar/tar 在 runner 上是标配，解包链路最短；
-#   - apk（25.12 起）是 apk v3 二进制容器，需要 apk 工具才能解，平白多一层
-#     失败点，而我们要的只是里面的 /usr/bin/honk-core。
-say "解析 ${REPO} 的 Release 资产页…"
-# 不用 api.github.com：Actions 里的 GITHUB_TOKEN 只对当前仓库有效，拿去调
-# QiuSimons 的 API 会 403；匿名调用又会被 runner 共享 IP 的 60 次/小时限流
-# 打回（本地演练已实测 403）。GitHub 的 releases/expanded_assets 页面是
-# 公开 HTML，不受 API 限流影响，上游自己的 download_dashboard.sh 也用它。
-ASSETS_HTML="$(curl -fsSL --retry 5 --retry-all-errors --max-time 60 \
-	-A "OpenWRT-CI honk fetch" \
-	"https://github.com/${REPO}/releases/expanded_assets/${TAG}")" \
-	|| die "honk: 无法读取 ${REPO} 的 Release '${TAG}' 资产页（网络或 tag 不存在）"
+install_honk_toolchain() {
+	local MK="./${PKG1}/Makefile"
+	local ZIG_DIR="$HOME/.honk-zig"
+	local CARGO_BIN_DIR
+	local ZIG_JSON ZIG_URL ZIG_SHA
+	local BPF_URL
 
-URL_PATH="$(printf '%s' "$ASSETS_HTML" \
-	| grep -o "/${REPO}/releases/download/${TAG}/[^\"']*" \
-	| grep -E "honk[-_].*[-_]${HONK_ARCH}-openwrt-24\\.10.*\\.ipk$" \
-	| head -n1 || true)"
-if [ -z "$URL_PATH" ] && [ -n "${HONK_TOKEN:-}" ]; then
-	say "资产页未匹配到 ipk，改用 API（HONK_TOKEN 已配置）"
-	REL_JSON="$(curl -fsSL --retry 5 --retry-all-errors --max-time 60 \
-		-H "Authorization: Bearer ${HONK_TOKEN}" \
-		-H "Accept: application/vnd.github+json" \
-		"https://api.github.com/repos/${REPO}/releases/tags/${TAG}")" \
-		|| die "honk: API 也读不到 Release '${TAG}'"
-	URL="$(printf '%s' "$REL_JSON" | jq -r --arg arch "$HONK_ARCH" \
-		'.assets[]? | select(.name | test("^honk[-_].*[-_]" + $arch + "-openwrt-24\\.[0-9.]+.*\\.ipk$")) | .browser_download_url' \
-		| head -n1 || true)"
+	say "准备 honk-core 源码编译工具链（Rust / Zig / bpf-linker）"
+
+	# 2.1 系统依赖：与上游 release.yml 的 Install dependencies 对齐
+	if command -v apt-get >/dev/null 2>&1; then
+		if sudo -n true 2>/dev/null; then
+			sudo apt-get update -qq || true
+			sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+				clang llvm libbpf-dev pkg-config cmake libclang-dev zstd xz-utils binutils \
+				|| die "honk: 安装源码编译依赖失败（clang/llvm/libbpf-dev/libclang-dev/zstd 等）"
+		else
+			say "无 sudo：跳过 apt 安装，假定 runner 已预装 clang/llvm/libbpf-dev 等"
+		fi
+	fi
+
+	# 2.2 rustup / cargo
+	if ! command -v rustup >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
+		say "安装 rustup（minimal profile）"
+		curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+			| sh -s -- -y --profile minimal --no-modify-path \
+			|| die "honk: rustup 安装失败"
+	fi
+	export PATH="$HOME/.cargo/bin:$PATH"
+	command -v cargo >/dev/null 2>&1 || die "honk: cargo 不在 PATH"
+	command -v rustup >/dev/null 2>&1 || die "honk: rustup 不在 PATH"
+	CARGO_BIN_DIR="$(dirname "$(command -v cargo)")"
+
+	# 2.3 读取上游钉死的 Zig / bpf-linker 版本与校验和
+	eval "$("./${PKG1}/honk_toolchain.sh" "$MK")"
+	[ -n "${ZIG_VERSION:-}" ] || die "honk: 未解析到 ZIG_VERSION（上游 release.yml 可能已变更）"
+	[ -n "${BPF_LINKER_VERSION:-}" ] || die "honk: 未解析到 BPF_LINKER_VERSION"
+	[ -n "${BPF_LINKER_SHA256:-}" ] || die "honk: 未解析到 BPF_LINKER_SHA256"
+
+	# 2.4 Zig：优先用官方 index.json 精确 URL + sha256；兼容新旧文件名
+	if [ -x "$ZIG_DIR/zig" ] && [ "$("$ZIG_DIR/zig" version 2>/dev/null)" = "$ZIG_VERSION" ]; then
+		say "复用 Zig ${ZIG_VERSION}"
+	else
+		rm -rf "$ZIG_DIR"
+		ZIG_JSON="$(curl -fsSL --retry 5 --retry-all-errors --max-time 60 \
+			https://ziglang.org/download/index.json)" \
+			|| die "honk: 读取 ziglang.org index.json 失败"
+		ZIG_URL="$(printf '%s' "$ZIG_JSON" | jq -r --arg v "$ZIG_VERSION" \
+			'.[$v]["x86_64-linux"].tarball // empty')"
+		ZIG_SHA="$(printf '%s' "$ZIG_JSON" | jq -r --arg v "$ZIG_VERSION" \
+			'.[$v]["x86_64-linux"].shasum // empty')"
+		if [ -z "$ZIG_URL" ]; then
+			for U in \
+				"https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" \
+				"https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz"; do
+				if curl -fsIL --max-time 30 "$U" >/dev/null 2>&1; then
+					ZIG_URL="$U"
+					break
+				fi
+			done
+		fi
+		[ -n "$ZIG_URL" ] || die "honk: 找不到 Zig ${ZIG_VERSION} 的 x86_64-linux 下载地址"
+		mkdir -p "$ZIG_DIR"
+		say "下载 Zig ${ZIG_VERSION}"
+		curl -fsSL --retry 5 --retry-all-errors --max-time 300 \
+			-o "$TOOL_TMP/zig.tar.xz" "$ZIG_URL" || die "honk: Zig 下载失败"
+		if [ -n "$ZIG_SHA" ]; then
+			echo "$ZIG_SHA  $TOOL_TMP/zig.tar.xz" | sha256sum -c - \
+				|| die "honk: Zig 压缩包 sha256 校验失败"
+		fi
+		tar -xJf "$TOOL_TMP/zig.tar.xz" -C "$ZIG_DIR" --strip-components=1 \
+			|| die "honk: Zig 解包失败（缺 xz？）"
+	fi
+	[ -x "$ZIG_DIR/zig" ] || die "honk: $ZIG_DIR/zig 不存在"
+
+	# 2.5 bpf-linker：始终按上游 version + sha256 重新落位，避免 runner
+	#     预装的版本与 honk 钉死的 0.11.0 不一致（bpf-linker --version 会误报 0.0.0）
+	mkdir -p "$HOME/.cargo/bin"
+	BPF_URL="https://github.com/aya-rs/bpf-linker/releases/download/v${BPF_LINKER_VERSION}/bpf-linker-x86_64-unknown-linux-musl.tar.zst"
+	say "下载 bpf-linker ${BPF_LINKER_VERSION}"
+	curl -fsSL --retry 5 --retry-all-errors --max-time 120 \
+		-o "$TOOL_TMP/bpf-linker.tar.zst" "$BPF_URL" \
+		|| die "honk: bpf-linker 下载失败"
+	echo "$BPF_LINKER_SHA256  $TOOL_TMP/bpf-linker.tar.zst" | sha256sum -c - \
+		|| die "honk: bpf-linker sha256 校验失败"
+	zstd -dc "$TOOL_TMP/bpf-linker.tar.zst" | tar -xf - -C "$HOME/.cargo/bin" \
+		|| die "honk: bpf-linker 解包失败（缺 zstd？）"
+	chmod +x "$HOME/.cargo/bin/bpf-linker"
+
+	export PATH="$HOME/.cargo/bin:$ZIG_DIR:$PATH"
+	command -v zig >/dev/null 2>&1 || die "honk: zig 不在 PATH"
+	command -v bpf-linker >/dev/null 2>&1 || die "honk: bpf-linker 不在 PATH"
+
+	# 2.6 让后续 make 步骤继承 PATH
+	if [ -n "${GITHUB_PATH:-}" ]; then
+		for P in "$HOME/.cargo/bin" "$ZIG_DIR" "$CARGO_BIN_DIR"; do
+			grep -qxF "$P" "$GITHUB_PATH" 2>/dev/null || echo "$P" >> "$GITHUB_PATH"
+		done
+	else
+		say "非 GitHub Actions：请把 $HOME/.cargo/bin 与 $ZIG_DIR 加入 PATH 后再 make"
+	fi
+
+	say "工具链就绪：zig $(zig version)，bpf-linker $(bpf-linker --version 2>/dev/null | head -n1)"
+}
+
+if [ "${WRT_TEST:-false}" = "true" ]; then
+	say "WRT_TEST=true，跳过 honk 源码编译工具链安装（TEST 模式不编译）"
 else
-	[ -n "$URL_PATH" ] || die "honk: Release '${TAG}' 没有 ${HONK_ARCH} 的 24.10 ipk 资产（上游资产命名可能已变更）"
-	URL="https://github.com${URL_PATH}"
+	TOOL_TMP="$(mktemp -d)"
+	install_honk_toolchain
 fi
-[ -n "${URL:-}" ] || die "honk: Release '${TAG}' 没有 ${HONK_ARCH} 的 24.10 ipk 资产（上游资产命名可能已变更）"
-say "下载 $(basename "$URL")"
 
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT INT TERM
-curl -fsSL --retry 5 --retry-all-errors --max-time 300 \
-	-o "$TMP/honk.ipk" "$URL" || die "honk: 预编译包下载失败"
+# ===========================================================================
+# 3) 源码编译路径确认
+# ===========================================================================
+[ -x "./${PKG1}/build_honk_core.sh" ] || die "${PKG1}/build_honk_core.sh 不可执行"
+[ ! -e "./${PKG1}/files/honk-core.bin" ] || die "${PKG1}/files/honk-core.bin 仍存在：必须由 Build/Compile 源码生成"
 
-mkdir -p "$TMP/unpack"
-( cd "$TMP" && ar x honk.ipk ) 2>/dev/null || \
-	( cd "$TMP" && tar xf honk.ipk ) || die "honk: 无法解开 ipk（缺 ar/tar？）"
-[ -f "$TMP/data.tar.gz" ] || die "honk: ipk 内没有 data.tar.gz，格式可能已变更"
-
-tar xzf "$TMP/data.tar.gz" -C "$TMP/unpack" ./usr/bin/honk-core 2>/dev/null \
-	|| tar xzf "$TMP/data.tar.gz" -C "$TMP/unpack" usr/bin/honk-core 2>/dev/null \
-	|| die "honk: data.tar.gz 内没有 honk-core（路径可能已变更）"
-[ -s "$TMP/unpack/usr/bin/honk-core" ] || die "honk: 抽出的 honk-core 为空"
-
-# 架构与静态链接核验：宁可现在失败，也不要把「宿主架构的 core」打进固件
-#（这种错误要到设备上 `honk-core: not found` / exec format error 才暴露）。
-command -v file >/dev/null 2>&1 || die "honk: runner 缺 file 命令，无法校验 honk-core 架构"
-FILE_DESC="$(file -b "$TMP/unpack/usr/bin/honk-core")"
-case "$HONK_ARCH" in
-	aarch64_generic) EXPECT_MACH="ARM aarch64" ;;
-	x86_64)          EXPECT_MACH="x86-64" ;;
-esac
-case "$FILE_DESC" in
-	*ELF\ 64-bit*"$EXPECT_MACH"*) ;;
-	*) die "honk: honk-core 不是 ${EXPECT_MACH} 的 ELF：${FILE_DESC}" ;;
-esac
-case "$FILE_DESC" in
-	*"statically linked"*) ;;
-	*) die "honk: honk-core 不是静态链接：${FILE_DESC}" ;;
-esac
-say "core 架构核验通过：${FILE_DESC}"
-
-# 落位到包目录：build_honk_core.sh --if-needed 看到「有 bin、无 .stamp」时
-# 直接判定为预编译产物并跳过全部 Rust/Zig/bpf-linker 工具链。
-# 必须显式删 .stamp：上游若在包里留下 stamp，脚本会按架构戳重编译。
-install -m 0755 "$TMP/unpack/usr/bin/honk-core" "./${PKG1}/files/honk-core.bin"
-rm -f "./${PKG1}/files/honk-core.bin.stamp"
-
-say "honk-core 就位：$(du -h "./${PKG1}/files/honk-core.bin" | cut -f1)"
 say "${PKG1} 目录：$(cd "./${PKG1}" && ls | tr '\n' ' ')"
 say "${PKG2} 目录：$(cd "./${PKG2}" && ls | tr '\n' ' ')"
-echo "==> 预编译 honk-core 已就位；依赖将由 defconfig / apk 在构建期解析，不做首启安装。"
+echo "==> honk-core 将按源码编译（Build/Compile → build_honk_core.sh），不再下载上游预编译 core。"
