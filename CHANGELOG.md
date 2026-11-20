@@ -1,4 +1,37 @@
 # 更新日志
+
+## [2026-11-21] 编译与清理顺序反转：先发布新固件，成功后再清理旧 Releases
+
+### 背景
+
+- 旧流程是 `自动清理`（Auto-Clean）每天 05:00（CST）先清空全部 Releases，再由各
+  `*-AUTO` 工作流通过 `workflow_run` 串联触发编译。
+- 全量编译按机型 / 变体分散在 6 个工作流中，整体耗时可达数小时；此期间 Releases 为空，
+  当天任一环节失败都可能让历史固件提前消失。
+
+### 改动
+
+- 6 个定时编译入口（`AP3000M-MT-AUTO` / `H5000M-MT-AUTO` / `H5000M-NETMONITOR-AUTO` /
+  `FM350-AUTO` / `NetWiz-AUTO` / `X86-MT-AUTO`）：触发方式由 `workflow_run`（自动清理完成）
+  改为每日 `schedule: 0 21 * * *`（05:00 CST）直接触发，保留手动 `workflow_dispatch`。
+- `.github/workflows/WRT-CORE.yml`：
+  - 在 `发布固件到 Release` 之后新增 `Clean Old Releases` 步骤——仅当本次发布成功后，
+    删除同一归组（`NetWiz` / `MT5700` / `MT5700M` / `FM350` / `自用` / `BASE`）的历史
+    `<组名>-<YY.MM.DD>` Tag 与 Release，本次 Tag 始终保留；组名前缀带 `-`，`MT5700`
+    不会误匹配 `MT5700M`，历史旧格式 Tag 不在自动清理范围内；
+  - `continue-on-error: true`，清理 API 抖动不会把已成功的编译标红；
+  - 定时触发不再经过 `workflow_run`，移除 `actions/checkout` 的
+    `allow-unsafe-pr-checkout: true`，恢复默认安全策略。
+- `.github/workflows/Auto-Clean.yml`：定时任务只清理 30 天以前的 Actions 运行记录，
+  不再删除 Releases；手动触发新增 `clean_releases` 开关，原有
+  `keep_latest_per_device` 保留每机型最新一个的能力不变。
+- `README.md`：同步更新工作流调度表与「先编译发布、后清理旧版」的顺序说明。
+
+### 效果
+
+- 编译或发布失败时旧固件不会被删除，始终保留可回滚的上一版；
+- 同组多机型 job 共享 Tag 的机制不变，新 Tag 刚发布时不会被其它 job 的清理误删。
+
 ## [2026-11-18] 自用配置接入 honk（eBPF 透明代理）：源码编译 honk-core + 内核 BTF 依赖闭环
 
 ### 背景

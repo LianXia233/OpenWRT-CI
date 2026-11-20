@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-# 定时自动编译：Auto-Clean 清理完成后同时构建 X86 的两种 MT 配置
+# 定时自动编译：每日定时同时构建 X86 的两种 MT 配置
 # （原 OWRT-ALL，重命名并改为 MT5700 / MT5700M 双矩阵并行）
 #   MT5700  —— 仅 luci-app-mt5700
 #   MT5700M —— luci-app-mt5700m + sms-tool_q + ubus-at-daemon
@@ -10,11 +10,10 @@
 name: X86 定时编译（MT 双配置）
 
 on:
-  # Auto-Clean 完成后自动触发
-  workflow_run:
-    workflows: ["自动清理"]
-    types:
-      - completed
+  # 每日定时自动编译（05:00 CST）。旧版本 Releases 由 WRT-CORE 在
+  # 本次固件发布成功后按分组清理，不再先清空再编译。
+  schedule:
+    - cron: 0 21 * * *
   # 手动编译
   workflow_dispatch:
     inputs:
