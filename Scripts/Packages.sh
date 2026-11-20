@@ -7,6 +7,8 @@
 # 注意：set -u 下第 5 个位置参数必须写 ${5:-}（下方 UPDATE_PACKAGE 已处理）。
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 #安装和更新软件包
 UPDATE_PACKAGE() {
 	local PKG_NAME=$1
@@ -324,8 +326,7 @@ FOLD_MT5700M() {
 	# 编译 Rust 后端（std-only，零第三方依赖，rust-lld 自包含链接）
 	if [ "${WRT_TEST:-false}" != "true" ]; then
 		if ! command -v rustup >/dev/null 2>&1; then
-			curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-				| sh -s -- -y --profile minimal --default-toolchain stable
+			bash "$SCRIPT_DIR/Install-Rustup.sh"
 		fi
 		export PATH="$HOME/.cargo/bin:$PATH"
 		rustup target add "$RUST_TARGET" >/dev/null 2>&1 || true
@@ -386,8 +387,7 @@ SETUP_RUST_FOR_MT5700() {
 	fi
 
 	if ! command -v rustup >/dev/null 2>&1; then
-		curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-			| sh -s -- -y --profile minimal --default-toolchain stable
+		bash "$SCRIPT_DIR/Install-Rustup.sh"
 	fi
 	export PATH="$HOME/.cargo/bin:$PATH"
 	rustup target add "$RUST_TARGET" >/dev/null 2>&1 || true

@@ -1,4 +1,34 @@
 # 更新日志
+
+## [2026-11-21] CI 下载接入 FluxDown：init 脚本与 release 资产改为分段/单连接可回退下载
+
+### 背景
+
+- `init_build_environment.sh`、honk 的 Zig / bpf-linker、taygedo 预编译资产此前都用
+  curl 单连接下载；上游在境内网络下偶发挂起、断连或返回截断内容，事后校验只能兜底。
+
+### 改动
+
+- 新增 `.github/actions/fluxdown-download/action.yml`（FluxDown CLI 0.6.8 composite
+  action，原样落地）：checksum 驱动解析、Range 探测分段、16 段/单连接回退、
+  size + digest 缓存校验、可选解压。
+- `.github/workflows/WRT-CORE.yml`：`init_build_environment.sh` 改由上述 action 下载到
+  `/tmp`；初始化步骤删除 curl 下载分支，只保留文件非空复核与执行重试。
+- `Scripts/Build-Honk-Prebuilt.sh`：新增 `fd_download()`，Zig 与 bpf-linker 下载改走
+  FluxDown；保留原 sha256 校验，失败自动降为单连接重试。
+- `Scripts/Packages-Taygedo.sh`：预编译 Release 资产下载改走 `fd_download()`，仍先写
+  `.part` 再原子替换，归档内容校验不变。
+- 新增 `Scripts/Install-Rustup.sh`：`Build-Honk-Prebuilt.sh` / `Build-Rust-Prebuilt.sh` /
+  `Build-Taygedo.sh` / `Packages.sh` / WRT-CORE 的 rustup 安装点统一调用；rustup-init
+  由 FluxDown 分段下载，摘要取自官方 `.sha256` 清单，替代 `curl | sh`。
+- `README.md`：补充 CI 下载策略与 action 目录说明。
+
+### 验证
+
+- FluxDown 0.6.8 在沙箱内完成安装、sha256 校验与实际下载；
+- 工作流 YAML 解析与全部 shell `bash -n` 通过；
+- 敏感信息扫描无命中。
+
 ## [2026-11-18] 自用配置接入 honk（eBPF 透明代理）：源码编译 honk-core + 内核 BTF 依赖闭环
 
 ### 背景

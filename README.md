@@ -231,6 +231,10 @@
 | **`Auto-Clean.yml`** | 每日定时 | 轮换保留最新构建 Release，自动清理历史废旧 Tag 与过期运行日志 |
 | **`Cache-Clean.yml`** | 每周定时 / 手动 | 回收 Actions 编译缓存，防止依赖冲突 |
 
+> **CI 下载策略**：构建期的文件下载统一走 `.github/actions/fluxdown-download`（FluxDown CLI：
+> Range 探测分段、不支持时降为单连接、失败自动重试并校验尺寸/摘要）；`curl` 仅用于探测
+> （HEAD / Range / 清单）与安装 FluxDown CLI 本身。
+
 ### Release 归组与文件命名规范
 
 产物 Tag 统一遵循 `<产品分类>-<YY.MM.DD>` 格式，同一天内的同类固件汇聚至统一 Release：
@@ -281,6 +285,7 @@ OpenWRT-CI/
 │   ├── NetWiz-AUTO.yml       # NetWiz 家族定时构建
 │   ├── Auto-Clean.yml        # 历史制品轮换与清理
 │   └── Cache-Clean.yml       # Actions 缓存回收
+├── .github/actions/fluxdown-download/action.yml  # FluxDown 大文件下载 composite action
 ├── Config/                   # 模块化 Kconfig 配置文件片段
 │   ├── Defaults.txt          # 出厂网络/无线默认值集中定义
 │   ├── GENERAL.txt           # 通用内核优化参数与基础插件

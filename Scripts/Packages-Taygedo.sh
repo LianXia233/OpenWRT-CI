@@ -40,6 +40,44 @@ MODE="${TAYGEDO_PREBUILT:-0}"
 say() { echo "==> $*"; }
 die() { echo "::error::$*" >&2; exit 1; }
 
+# ---------------------------------------------------------------------------
+# 大文件下载统一走 FluxDown CLI（CI 由 .github/actions/fluxdown-download 安装）。
+# 策略与 action.yml 对齐：优先 16 段；Range 不支持则降为 1 段；
+# 失败自动以单连接重试一次；可选 sha256 校验。
+# 用法：fd_download <url> <输出绝对路径> [sha256]
+# ---------------------------------------------------------------------------
+fd_download() {
+	local url="$1" out="$2" sha="${3:-}"
+	local dir base seg rc args
+	command -v fluxdown >/dev/null 2>&1 \
+		|| die "未找到 fluxdown CLI；CI 中应由 .github/actions/fluxdown-download 步骤安装"
+	dir="$(dirname "$out")"
+	base="$(basename "$out")"
+	mkdir -p "$dir"
+	# FluxDown 的 -d 在 CI 中要求绝对路径：先把输出目录规范化
+	dir="$(cd "$dir" && pwd)"
+	out="$dir/$base"
+
+	seg=16
+	rc="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -r 0-0 "$url" || true)"
+	case "$rc" in
+		206|416) ;;
+		*) seg=1 ;;
+	esac
+
+	args=(--local -d "$dir" -o "$base" -s "$seg")
+	[ -z "$sha" ] || args+=(--checksum "sha256=$sha")
+	if ! fluxdown add "${args[@]}" "$url"; then
+		echo "::warning::FluxDown ${seg} 段下载失败，降为单连接重试：$url" >&2
+		rm -f "$dir/$base"
+		args=(--local -d "$dir" -o "$base.retry" -s 1)
+		[ -z "$sha" ] || args+=(--checksum "sha256=$sha")
+		fluxdown add "${args[@]}" "$url" || die "FluxDown 下载失败：$url"
+		mv -f "$dir/$base.retry" "$dir/$base"
+	fi
+	[ -s "$dir/$base" ] || die "下载结果为空：$dir/$base"
+}
+
 # ===========================================================================
 # 0) 目标架构 → Rust musl triple
 # ===========================================================================
@@ -304,8 +342,7 @@ if [ "$REUSE" = "1" ] && [ -s "$DL_FILE" ] && [ "$(cat "$STAMP" 2>/dev/null)" = 
 	say "复用已下载资产：${DL_FILE}"
 else
 	say "下载 ${DL_URL}"
-	curl -fsSL --retry 3 --retry-all-errors --max-time 300 -o "${DL_FILE}.part" "$DL_URL" \
-		|| { rm -f "${DL_FILE}.part"; die "${PKG}: 下载 ${DL_URL} 失败"; }
+	fd_download "$DL_URL" "${DL_FILE}.part"
 	mv -f "${DL_FILE}.part" "$DL_FILE"
 	printf '%s\n' "$TAG" > "$STAMP"
 fi

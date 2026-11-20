@@ -213,6 +213,18 @@ jobs:
             echo "APT_MIRROR=azure" >> "$GITHUB_ENV"
           fi
 
+      # 上游初始化脚本统一改由 FluxDown 下载（技能要求：CI 下载走 FluxDown，
+      # curl 仅用于探测与安装 CLI）。脚本约 12 KB，单连接即可。
+      - name: 下载 init_build_environment.sh（FluxDown）
+        # 脚本小、失败快；限时避免网络僵死拖到 job 级超时
+        timeout-minutes: 10
+        uses: ./.github/actions/fluxdown-download
+        with:
+          url: https://build-scripts.immortalwrt.org/init_build_environment.sh
+          output: init_build_environment.sh
+          segments: '1'
+          cache-dir: /tmp
+
       - name: 初始化编译环境
         # 上游依赖约 661 MB，正常 3~5 分钟。2026-11-07 的失败形式是：镜像探测
         # 时吞吐正常，随后 bulk 下载断连，job 拖到 60~106 分钟后被 runner 判定
@@ -293,12 +305,12 @@ jobs:
           sudo -E apt -yqq autoclean
           sudo -E apt -yqq clean
           sudo -E apt -yqq install dos2unix libfuse-dev ccache
-          # 上游脚本先落盘再执行（原来用 `bash <(curl -sL ...)`，curl 无超时、
-          # 下载失败时组装的空脚本也会“成功”退出）。--fail 让 4xx/5xx 立即失败，
-          # --max-time 防挂死。
-          curl -fsSL --connect-timeout 15 --max-time 180 \
-            -o /tmp/init_build_environment.sh \
-            https://build-scripts.immortalwrt.org/init_build_environment.sh
+          # 上游脚本已由上一「FluxDown」步骤落盘（Range 探测 + 单连接回退 +
+          # 尺寸复核），这里只复核文件非空。
+          [ -s /tmp/init_build_environment.sh ] || {
+            echo "::error::init_build_environment.sh 缺失或为空" >&2
+            exit 1
+          }
           # 上游 check_system() 的代号白名单只到 noble，26.04 会直接 exit 1；
           # 注入兼容补丁，把脚本内代号映射为已验证的 noble 参数集（补丁幂等）。
           python3 "$GITHUB_WORKSPACE/.github/scripts/patch-init-env.py"
@@ -1312,8 +1324,7 @@ jobs:
             echo "使用交叉链接器: $LINKER"
 
             if ! command -v rustup >/dev/null 2>&1; then
-              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-                | sh -s -- -y --profile minimal --default-toolchain stable
+              bash "$GITHUB_WORKSPACE/Scripts/Install-Rustup.sh"
             fi
             export PATH="$HOME/.cargo/bin:$PATH"
             rustup target add aarch64-unknown-linux-musl

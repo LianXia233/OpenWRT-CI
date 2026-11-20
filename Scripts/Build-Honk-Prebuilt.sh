@@ -24,6 +24,8 @@
 # =============================================================================
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 PKG_DIR="${HONK_PKG_DIR:-./package/honk}"
 PKG_DIR="$(cd "$PKG_DIR" 2>/dev/null && pwd)" || {
 	echo "::error::[honk] 包目录不存在：${HONK_PKG_DIR:-./package/honk}" >&2
@@ -39,6 +41,44 @@ INFO="${BASE_DIR}/BUILD-INFO"
 say() { echo "==> [honk] $*"; }
 warn() { echo "::warning::[honk] $*"; }
 die() { echo "::error::[honk] $*" >&2; exit 1; }
+
+# ---------------------------------------------------------------------------
+# 大文件下载统一走 FluxDown CLI（CI 由 .github/actions/fluxdown-download 安装）。
+# 策略与 action.yml 对齐：优先 16 段；Range 不支持则降为 1 段；
+# 失败自动以单连接重试一次；可选 sha256 校验。
+# 用法：fd_download <url> <输出绝对路径> [sha256]
+# ---------------------------------------------------------------------------
+fd_download() {
+	local url="$1" out="$2" sha="${3:-}"
+	local dir base seg rc args
+	command -v fluxdown >/dev/null 2>&1 \
+		|| die "未找到 fluxdown CLI；CI 中应由 .github/actions/fluxdown-download 步骤安装"
+	dir="$(dirname "$out")"
+	base="$(basename "$out")"
+	mkdir -p "$dir"
+	# FluxDown 的 -d 在 CI 中要求绝对路径：先把输出目录规范化
+	dir="$(cd "$dir" && pwd)"
+	out="$dir/$base"
+
+	seg=16
+	rc="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -r 0-0 "$url" || true)"
+	case "$rc" in
+		206|416) ;;
+		*) seg=1 ;;
+	esac
+
+	args=(--local -d "$dir" -o "$base" -s "$seg")
+	[ -z "$sha" ] || args+=(--checksum "sha256=$sha")
+	if ! fluxdown add "${args[@]}" "$url"; then
+		echo "::warning::[honk] FluxDown ${seg} 段下载失败，降为单连接重试：$url" >&2
+		rm -f "$dir/$base"
+		args=(--local -d "$dir" -o "$base.retry" -s 1)
+		[ -z "$sha" ] || args+=(--checksum "sha256=$sha")
+		fluxdown add "${args[@]}" "$url" || die "FluxDown 下载失败：$url"
+		mv -f "$dir/$base.retry" "$dir/$base"
+	fi
+	[ -s "$dir/$base" ] || die "下载结果为空：$dir/$base"
+}
 
 # honk 源码编译所需系统依赖（clang/libclang/libbpf；与上游 release.yml 对齐）。
 # 必须在 Zig/bpf-linker 下载前调用：bpf-linker 是 .tar.zst（要 zstd），
@@ -145,9 +185,7 @@ export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
 export PATH="$CARGO_HOME/bin:$TOOL_BIN:$ZIG_DIR:$PATH"
 if ! command -v cargo >/dev/null 2>&1; then
 	say "未检测到 cargo，安装 rustup（minimal profile）"
-	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-		| sh -s -- -y --profile minimal --default-toolchain stable \
-		|| die "rustup 安装失败"
+	bash "$SCRIPT_DIR/Install-Rustup.sh" || die "rustup 安装失败"
 	# shellcheck disable=SC1091
 	. "$CARGO_HOME/env"
 fi
@@ -193,8 +231,7 @@ PY
 	fi
 	[ -n "$ZIG_URL" ] || die "找不到 Zig ${ZIG_VERSION} 的 x86_64-linux 下载地址"
 	ZIG_TMP="$(mktemp -d)"
-	curl -fsSL --retry 5 --retry-all-errors --max-time 300 \
-		-o "$ZIG_TMP/zig.tar.xz" "$ZIG_URL" || die "Zig 下载失败"
+	fd_download "$ZIG_URL" "$ZIG_TMP/zig.tar.xz" "$ZIG_SHA"
 	if [ -n "$ZIG_SHA" ]; then
 		echo "$ZIG_SHA  $ZIG_TMP/zig.tar.xz" | sha256sum -c - || die "Zig sha256 校验失败"
 	fi
@@ -218,8 +255,7 @@ BPF_URL="https://github.com/aya-rs/bpf-linker/releases/download/v${BPF_LINKER_VE
 if [ ! -x "$CARGO_HOME/bin/bpf-linker" ]; then
 	say "安装 bpf-linker ${BPF_LINKER_VERSION}"
 	mkdir -p "$TOOL_BIN"
-	curl -fsSL --retry 5 --retry-all-errors --max-time 120 \
-		-o "$TOOL_BIN/bpf-linker.tar.zst" "$BPF_URL" || die "bpf-linker 下载失败"
+	fd_download "$BPF_URL" "$TOOL_BIN/bpf-linker.tar.zst" "$BPF_LINKER_SHA256"
 	echo "${BPF_LINKER_SHA256}  $TOOL_BIN/bpf-linker.tar.zst" | sha256sum -c - \
 		|| die "bpf-linker sha256 校验失败"
 	zstd -dc "$TOOL_BIN/bpf-linker.tar.zst" | tar -xf - -C "$TOOL_BIN" \

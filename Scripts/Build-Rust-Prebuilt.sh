@@ -40,6 +40,8 @@
 # =============================================================================
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # ---------------------------------------------------------------------------
 # 0) 参数
 # ---------------------------------------------------------------------------
@@ -222,9 +224,7 @@ fi
 # ---------------------------------------------------------------------------
 if ! command -v cargo >/dev/null 2>&1; then
 	say "未检测到 cargo，安装 rustup（minimal profile）"
-	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-		| sh -s -- -y --profile minimal --default-toolchain stable \
-		|| die "rustup 安装失败"
+	bash "$SCRIPT_DIR/Install-Rustup.sh" || die "rustup 安装失败"
 	# shellcheck disable=SC1091
 	. "$HOME/.cargo/env"
 fi
