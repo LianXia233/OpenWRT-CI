@@ -224,16 +224,20 @@
 | 工作流文件 | 触发机制 | 职责与产物说明 |
 | :--- | :--- | :--- |
 | **`WRT-BUILD.yml`** | 手动 `workflow_dispatch` | 自定义按需编译：自选目标机型、源码上游与 MT 模组方案；支持 `TEST=true` 语法预演验证 |
-| **`*-MT-AUTO.yml`** | 每日定时 / 手动 | H5000M / AP3000M / X86 基础配置自动化定时编译与 Release 发布 |
-| **`FM350-AUTO.yml`** | 每日定时 / 手动 | 全系机型 FM350 变体固件统一编译发版 |
-| **`NetWiz-AUTO.yml`** | 每日定时 / 手动 | NetWiz 家族全组合变体自动化编译发版 |
-| **`H5000M-NETMONITOR-AUTO.yml`** | 每日定时 / 手动 | 作者个人自用配置自动定时编译 |
-| **`Auto-Clean.yml`** | 每日定时 | 轮换保留最新构建 Release，自动清理历史废旧 Tag 与过期运行日志 |
+| **`*-MT-AUTO.yml`** | 每日定时 05:00 (CST) / 手动 | H5000M / AP3000M / X86 基础配置自动化定时编译与 Release 发布 |
+| **`FM350-AUTO.yml`** | 每日定时 05:00 (CST) / 手动 | 全系机型 FM350 变体固件统一编译发版 |
+| **`NetWiz-AUTO.yml`** | 每日定时 05:00 (CST) / 手动 | NetWiz 家族全组合变体自动化编译发版 |
+| **`H5000M-NETMONITOR-AUTO.yml`** | 每日定时 05:00 (CST) / 手动 | 作者个人自用配置自动定时编译 |
+| **`Auto-Clean.yml`** | 每日定时 05:00 (CST) / 手动 | 定时仅轮换 30 天以前的 Actions 日志；手动触发可清理 Releases（可选每个归组保留最新一个） |
 | **`Cache-Clean.yml`** | 每周定时 / 手动 | 回收 Actions 编译缓存，防止依赖冲突 |
 
 > **CI 下载策略**：构建期的文件下载统一走 `.github/actions/fluxdown-download`（FluxDown CLI：
 > Range 探测分段、不支持时降为单连接、失败自动重试并校验尺寸/摘要）；`curl` 仅用于探测
 > （HEAD / Range / 清单）与安装 FluxDown CLI 本身。
+
+> **编译与清理顺序**：每日定时先编译并发布新固件，`WRT-CORE` 在本次发布成功后才删除同一归组的
+> 历史 Release；当天编译或发布失败时，该归组的上一版固件原样保留，不会出现「旧版已清空、
+> 新版又没编出来」的空窗。
 
 ### Release 归组与文件命名规范
 
@@ -283,7 +287,7 @@ OpenWRT-CI/
 │   ├── *-MT-AUTO.yml         # MT 方案定时构建发版
 │   ├── FM350-AUTO.yml        # FM350 变体定时构建
 │   ├── NetWiz-AUTO.yml       # NetWiz 家族定时构建
-│   ├── Auto-Clean.yml        # 历史制品轮换与清理
+│   ├── Auto-Clean.yml        # 日志轮换与手动 Release 清理
 │   └── Cache-Clean.yml       # Actions 缓存回收
 ├── .github/actions/fluxdown-download/action.yml  # FluxDown 大文件下载 composite action
 ├── Config/                   # 模块化 Kconfig 配置文件片段
