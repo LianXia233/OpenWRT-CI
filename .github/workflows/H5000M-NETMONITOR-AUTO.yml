@@ -22,11 +22,10 @@
 name: H5000M 自用定时编译（NetMonitor + Taygedo）
 
 on:
-  # Auto-Clean 完成后自动触发
-  workflow_run:
-    workflows: ["自动清理"]
-    types:
-      - completed
+  # 每日定时自动编译（05:00 CST）。旧版本 Releases 由 WRT-CORE 在
+  # 本次固件发布成功后按分组清理，不再先清空再编译。
+  schedule:
+    - cron: 0 21 * * *
   # 也可手动触发
   workflow_dispatch:
     inputs:
