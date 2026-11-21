@@ -16,7 +16,12 @@ UPDATE_PACKAGE() {
 	local PKG_BRANCH=$3
 	local PKG_SPECIAL=${4:-}
 	local PKG_LIST=("$PKG_NAME" ${5:-})  # 第5个参数为自定义名称列表（可省略）
+	local PKG_SUBDIR=${6:-}             # sub 模式：仓库内要提取的子目录（相对仓库根）
 	local REPO_NAME=${PKG_REPO#*/}
+	local CLONE_DIR=$REPO_NAME
+	# sub 模式用独立克隆目录：同一个 package/ 下可能已存在同名仓库目录
+	# （viking 组整体克隆在 ./packages），直接 clone 会因目录非空失败。
+	[[ "$PKG_SPECIAL" == "sub" ]] && CLONE_DIR="${PKG_NAME}-src"
 
 	echo " "
 
@@ -38,7 +43,7 @@ UPDATE_PACKAGE() {
 	done
 
 	# 克隆 GitHub 仓库
-	git clone --depth=1 --single-branch --branch $PKG_BRANCH "https://github.com/$PKG_REPO.git"
+	git clone --depth=1 --single-branch --branch $PKG_BRANCH "https://github.com/$PKG_REPO.git" "$CLONE_DIR"
 
 	# 处理克隆的仓库
 	if [[ "$PKG_SPECIAL" == "pkg" ]]; then
@@ -49,6 +54,14 @@ UPDATE_PACKAGE() {
 	elif [[ "$PKG_SPECIAL" == "all" ]]; then
 		find ./$REPO_NAME/ -mindepth 1 -maxdepth 1 -type d -exec cp -rf {} ./ \;
 		rm -rf ./$REPO_NAME/
+	elif [[ "$PKG_SPECIAL" == "sub" ]]; then
+		if [ ! -d "./$CLONE_DIR/$PKG_SUBDIR" ]; then
+			echo "::error::sub 模式子目录不存在：$CLONE_DIR/$PKG_SUBDIR" >&2
+			exit 1
+		fi
+		rm -rf "./$PKG_NAME"
+		cp -rf "./$CLONE_DIR/$PKG_SUBDIR" "./$PKG_NAME"
+		rm -rf "./$CLONE_DIR"
 	fi
 }
 
@@ -56,7 +69,7 @@ UPDATE_PACKAGE() {
 # UPDATE_PACKAGE "OpenAppFilter" "destan19/OpenAppFilter" "master" "" "custom_name1 custom_name2"
 # UPDATE_PACKAGE "open-app-filter" "destan19/OpenAppFilter" "master" "" "luci-app-appfilter oaf" 这样会把原有的open-app-filter，luci-app-appfilter，oaf相关组件删除，不会出现coremark错误。
 
-# UPDATE_PACKAGE "包名" "项目地址" "项目分支" "pkg/name/all，可选，pkg为提取匹配包；name为重命名；all为提取全部一级包"
+# UPDATE_PACKAGE "包名" "项目地址" "项目分支" "pkg/name/all/sub，可选，pkg为提取匹配包；name为重命名；all为提取全部一级包；sub为提取指定子目录" "" "sub 模式下的子目录路径"
 # 主题：默认 vantage；aurora（保留，含 config）与 argon（含配套修复）仍随固件构建，
 # 需要时由 WRT_THEME 切回，其余精简
 UPDATE_PACKAGE "argon" "sbwml/luci-theme-argon" "openwrt-25.12"
@@ -130,7 +143,18 @@ if [ "$MT_MODE" = "MT5700M" ]; then
 fi
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 UPDATE_PACKAGE "timecontrol" "sirpdboy/luci-app-timecontrol" "main"
-UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac miniupnpd sing-box luci-app-homeproxy luci-app-timewol luci-app-upnp luci-app-wolplus luci-app-wolultra"
+UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac miniupnpd sing-box luci-app-timewol luci-app-upnp luci-app-wolplus luci-app-wolultra"
+
+# ===== luci-app-homeproxy：切换到自用源 LianXia233/packages =====
+# 该仓库是 VIKINGYFY/packages 的 fork，在 homeproxy 上维护了自用定制
+# （订阅节点域名优先使用机场 DoH、失败回落国内 DoH、DNS 地址解析加固等），
+# 当前版本 20261121-r2。viking 组仍整体克隆在 ./packages 下提供 sing-box 等
+# 其余包，因此先剔除该克隆里的同名包（避免两个源同时提供 luci-app-homeproxy），
+# 再用 sub 模式单独取包放到 package/ 根目录（Handles.sh 的 homeproxy 资源预置
+# 与 ucode 修复均按根目录的 luci-app-homeproxy* 查找）。
+# 依赖 sing-box (>=1.15.0_alpha13-r2) 仍由 viking 组提供，版本正好一致。
+rm -rf ./packages/luci-app-homeproxy
+UPDATE_PACKAGE "luci-app-homeproxy" "LianXia233/packages" "main" "sub" "" "luci-app-homeproxy"
 
 # ===== sing-box 过时补丁清理（2026-09-24 四机型全灭根因）=====
 # VIKINGYFY/packages 的 sing-box 自带 patches/100-fix-dns-tcp-close.patch，它是针对
@@ -205,7 +229,7 @@ FIX_MINIUPNPD_STALE_PATCHES() {
 }
 FIX_MINIUPNPD_STALE_PATCHES
 
-# luci-app-homeproxy（viking feed）20260914-r2 起把 LUCI_EXTRA_DEPENDS 提升为
+# luci-app-homeproxy（LianXia233/packages，源自 viking feed）20260914-r2 起把 LUCI_EXTRA_DEPENDS 提升为
 #   sing-box (>=1.15.0)
 # 但同一 feed 的 sing-box 仅有 1.15.0_alpha3；apk 版本比较中 `_alpha3` 属
 # pre-release 后缀（_alpha 排在「无后缀」之前），故 1.15.0_alpha3 不满足 >=1.15.0：

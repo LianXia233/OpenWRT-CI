@@ -1,5 +1,38 @@
 # 更新日志
 
+## [2026-11-21] luci-app-homeproxy 切换自用源 LianXia233/packages
+
+### 背景
+
+- `luci-app-homeproxy` 此前随 viking 包组整体从 `VIKINGYFY/packages` 获取。
+- 自用 fork `LianXia233/packages` 在 viking 上游基础上维护了 homeproxy 定制：
+  订阅节点域名优先使用机场 DoH、失败回落国内 DoH、DNS 地址解析加固等，
+  当前版本 `20261121-r2`。
+
+### 变更
+
+- `Scripts/Packages.sh`：`UPDATE_PACKAGE` 新增 `sub` 模式（第 6 个参数指定仓库内
+  子目录，使用独立克隆目录 `<包名>-src`，避免与已在 `package/` 下的 `./packages`
+  冲突）。
+- `Scripts/Packages.sh`：viking 组清理名单移除 `luci-app-homeproxy`，改为单独从
+  `LianXia233/packages` 取包：先删除 `./packages/luci-app-homeproxy`，再以 sub
+  模式放到 `package/` 根目录（`Handles.sh` 的资源预置与 ucode 修复按根目录查找）。
+- `sing-box` 等其余 viking 包来源不变；homeproxy 的
+  `sing-box (>=1.15.0_alpha13-r2)` 约束与 viking 组实际版本
+  `1.15.0_alpha13-r2` 一致，`FIX_HOMEPROXY_SINGBOX` 无需改写。
+- `Scripts/Handles.sh`：homeproxy ucode 兼容覆盖改为按需触发——仅当目标脚本仍含
+  `init_action`（`update_subscriptions.uc`）或 `isnan`（`generate_client.uc`）时才
+  覆盖，避免把 fork 的机场 DoH 等定制回退。
+
+### 验证
+
+- 沙箱模拟 `wrt/package` 执行导入：得到根目录 `luci-app-homeproxy`
+  （`20261121-r2`，含 `fetch_provider_dns`），`./packages/sing-box` 保留，
+  旧 `./packages/luci-app-homeproxy` 与临时克隆目录均已清理。
+- 兼容覆盖分支实测：新脚本无遗留符号时跳过且文件哈希不变；注入 `init_action`
+  后覆盖逻辑正常触发。
+- `bash -n` 通过，改动文件保持 LF。
+
 ## [2026-11-21] CI 下载接入 FluxDown：init 脚本与 release 资产改为分段/单连接可回退下载
 
 ### 背景

@@ -199,23 +199,33 @@ if [ -n "$HP_DIR" ]; then
 	fi
 fi
 
-#修复homeproxy ucode兼容性问题
+#修复homeproxy ucode兼容性问题（仅在目标脚本仍引用被移除符号时覆盖）
 # update_subscriptions.uc: luci.sys.init_action不存在 → system()调用
 # generate_client.uc: math.isnan不存在 → type() === 'double'
+# 上游 2026-11 起已自修，LianXia233/packages 的 homeproxy 还含机场 DoH 兜底
+# 等定制；无条件覆盖会把上游新功能回退，因此按符号检测决定是否覆盖。
 HP_SCRIPTS="$HP_DIR/root/etc/homeproxy/scripts"
 HP_FIXES="$GITHUB_WORKSPACE/Scripts/homeproxy"
 if [ -n "$HP_DIR" ] && [ -d "$HP_SCRIPTS" ] && [ -d "$HP_FIXES" ]; then
 	echo " "
-	if cp -f "$HP_FIXES/update_subscriptions.uc" "$HP_SCRIPTS/" && \
-	   cp -f "$HP_FIXES/generate_client.uc" "$HP_SCRIPTS/"; then
+	HP_FIX_APPLIED=0
+	if [ -f "$HP_SCRIPTS/update_subscriptions.uc" ] && \
+	   grep -q 'init_action' "$HP_SCRIPTS/update_subscriptions.uc"; then
+		cp -f "$HP_FIXES/update_subscriptions.uc" "$HP_SCRIPTS/" && HP_FIX_APPLIED=1
+	fi
+	if [ -f "$HP_SCRIPTS/generate_client.uc" ] && \
+	   grep -q 'isnan' "$HP_SCRIPTS/generate_client.uc"; then
+		cp -f "$HP_FIXES/generate_client.uc" "$HP_SCRIPTS/" && HP_FIX_APPLIED=1
+	fi
+	if [ "$HP_FIX_APPLIED" -eq 1 ]; then
 		echo "homeproxy ucode compatibility fixes applied!"
 	else
-		echo "homeproxy ucode fix failed; continuing!"
+		echo "homeproxy ucode compatibility fixes not required, skip!"
 	fi
 fi
 
 #生成器依赖 homeproxy.uc 的 hasForceProxyRules 导出
-# 覆盖版 generate_client.uc 会 import 该符号，而 viking 源未导出，ucode 直接报
+# 覆盖版 generate_client.uc 会 import 该符号，而上游 homeproxy.uc 未导出，ucode 直接报
 # Syntax error: Module .../homeproxy.uc does not export 'hasForceProxyRules'
 if [ -n "$HP_DIR" ] && [ -d "$HP_SCRIPTS" ] && \
    grep -q 'hasForceProxyRules' "$HP_SCRIPTS/generate_client.uc" 2>/dev/null && \
