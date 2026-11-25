@@ -229,18 +229,42 @@ if ! command -v cargo >/dev/null 2>&1; then
 	. "$HOME/.cargo/env"
 fi
 export PATH="$HOME/.cargo/bin:$PATH"
-say "rustc $(rustc --version 2>/dev/null | awk '{print $2}') / cargo $(cargo --version 2>/dev/null | awk '{print $2}')"
 
-if ! rustup target add "$TRIPLE" >/dev/null 2>&1; then
+# 包目录（或其上级）可能带 rust-toolchain / rust-toolchain.toml，cargo 一进该
+# 目录就会被 rustup 切到文件锁定的工具链。target 必须装在「实际生效的那套」
+# 上：只给默认工具链装 target 时，覆盖后的工具链没有 std，编译期直接报
+#   error[E0463]: can't find crate for `core`
+# 2026-11-25 luci-app-mt5700 引入 rust-toolchain.toml 锁 1.98.0，五个 MT5700
+# 工作流同时全红即此症状（日志里还会出现 missing active toolchain 被
+# auto-installed 的 warn）。这里统一以包目录解析出的生效工具链为准。
+active_toolchain() {
+	(cd "$SRC_DIR" && rustup show active-toolchain 2>/dev/null | awk '{print $1}')
+}
+TOOLCHAIN="$(active_toolchain || true)"
+if [ -z "$TOOLCHAIN" ]; then
+	# 解析时会顺带安装缺失的工具链；镜像缺件时回退官方源再试一次。
+	say "解析包内生效工具链失败（镜像缺件？），回退官方分发源重试"
+	TOOLCHAIN="$(RUSTUP_DIST_SERVER=https://static.rust-lang.org \
+		RUSTUP_UPDATE_ROOT=https://static.rust-lang.org/rustup \
+		active_toolchain || true)"
+fi
+[ -n "$TOOLCHAIN" ] || die "rustup 无法解析 ${SRC_DIR} 的生效工具链"
+TOOLCHAIN_ARGS=(--toolchain "$TOOLCHAIN")
+
+# 版本必须取自生效工具链：WRT_ROOT 下的默认工具链可能与包内锁定版本不同，
+# 先前日志打印的版本会在排障时误导（显示 1.100.0，实际编译用 1.98.0）。
+say "生效工具链 ${TOOLCHAIN}：rustc $(cd "$SRC_DIR" && rustc --version 2>/dev/null | awk '{print $2}') / cargo $(cd "$SRC_DIR" && cargo --version 2>/dev/null | awk '{print $2}')"
+
+if ! rustup target add "${TOOLCHAIN_ARGS[@]}" "$TRIPLE" >/dev/null 2>&1; then
 	# 环境若配置了镜像（RUSTUP_DIST_SERVER），缺件时回退官方源再试一次；
 	# GitHub 托管 runner 默认直连官方，本分支只是兜底。
 	say "rustup target add 失败（镜像缺件？），回退官方分发源重试"
 	RUSTUP_DIST_SERVER=https://static.rust-lang.org \
 		RUSTUP_UPDATE_ROOT=https://static.rust-lang.org/rustup \
-		rustup target add "$TRIPLE" >/dev/null 2>&1 || true
+		rustup target add "${TOOLCHAIN_ARGS[@]}" "$TRIPLE" >/dev/null 2>&1 || true
 fi
-rustup target list --installed 2>/dev/null | grep -qx "$TRIPLE" \
-	|| die "rustup 未能安装 target ${TRIPLE}"
+rustup target list --installed "${TOOLCHAIN_ARGS[@]}" 2>/dev/null | grep -qx "$TRIPLE" \
+	|| die "rustup 未能为工具链 ${TOOLCHAIN} 安装 target ${TRIPLE}"
 
 # ---------------------------------------------------------------------------
 # 4) 定位交叉链接器（OpenWrt staging_dir 的 musl gcc，与固件工具链同源）
@@ -355,12 +379,14 @@ fi
 install -m 0755 "$BIN_PATH" "$OUT_BIN"
 
 # BUILD-INFO 记录编译要素（幂等复用与排障都靠它）；BUILD-INDEX 汇总本轮清单。
-RUSTC_VER="$(rustc --version 2>/dev/null | awk '{print $2}')"
+# 取版本同样在 SRC_DIR 内执行，保证记录的是实际参与编译的工具链。
+RUSTC_VER="$(cd "$SRC_DIR" && rustc --version 2>/dev/null | awk '{print $2}')"
 LINKER_NOTE="${LINKER:-rust-lld(self-contained)}"
 {
 	echo "pkg=${PKG_NAME}"
 	echo "bin=${BIN_NAME}"
 	echo "triple=${TRIPLE}"
+	echo "toolchain=${TOOLCHAIN}"
 	echo "rustc=${RUSTC_VER}"
 	echo "linker=${LINKER_NOTE}"
 	echo "src_rev=${SRC_REV}"

@@ -1181,6 +1181,13 @@ jobs:
               find ./wrt/package -maxdepth 4 -type f -name Cargo.lock -print0 2>/dev/null \
                 | sort -z | xargs -0 cat 2>/dev/null
 
+              # 包内 rust-toolchain(.toml) 会切换编译用的工具链；版本一变，旧的
+              # .rust-build/<包>/target 与缓存 key 绑定的工具链就不同了，必须
+              # 计入指纹，避免复用另一套 rustc 的增量目录。
+              find ./wrt/package -maxdepth 5 -type f \
+                \( -name rust-toolchain -o -name rust-toolchain.toml \) -print0 2>/dev/null \
+                | sort -z | xargs -0 cat 2>/dev/null
+
               # honk 的源码版本钉在包 Makefile 里；Cargo.lock 在 buildroot
               # 外 clone 的 honk-src 内，不在 package/ 下，必须单独计入指纹。
               cat ./wrt/package/honk/Makefile \
@@ -1211,6 +1218,10 @@ jobs:
         if: env.WRT_TEST != 'true'
         run: |
           cd ./wrt/
+
+          # 缓存恢复会带回上一轮的清单（其中可能含别的架构/变体条目），
+          # 本轮清单只应反映本轮实际产物，先清空再让脚本逐包追加。
+          : > ./.rust-build/BUILD-INDEX
 
           SCRIPT="$GITHUB_WORKSPACE/Scripts/Build-Rust-Prebuilt.sh"
           RC=0
