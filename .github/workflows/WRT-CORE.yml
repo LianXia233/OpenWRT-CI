@@ -1226,11 +1226,11 @@ jobs:
           SCRIPT="$GITHUB_WORKSPACE/Scripts/Build-Rust-Prebuilt.sh"
           RC=0
 
-          # ① luci-app-mt5700（MT5700 方案：at-webserver，含 rustls/ring）
+          # ① luci-app-mt5700（MT5700 方案：mt5700d，含 rustls/ring）
           if [ -f ./package/luci-app-mt5700/src/rust/Cargo.toml ] \
             && grep -qx 'CONFIG_PACKAGE_luci-app-mt5700=y' ./.config; then
-            echo "::group::① luci-app-mt5700（at-webserver）"
-            bash "$SCRIPT" ./package/luci-app-mt5700 src/rust at-webserver || RC=1
+            echo "::group::① luci-app-mt5700（mt5700d）"
+            bash "$SCRIPT" ./package/luci-app-mt5700 src/rust mt5700d || RC=1
             echo "::endgroup::"
           fi
 

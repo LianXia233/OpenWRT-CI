@@ -4,7 +4,7 @@
 # Build-Rust-Prebuilt.sh — 统一 Rust 后端预编译（官方 Rust SDK 交叉编译）
 #
 # 覆盖过去在 OpenWrt buildroot（build_dir）内调 cargo 的三个 Rust 插件：
-#   luci-app-mt5700（at-webserver）/ luci-app-h5000m-fancontrol / luci-app-fm350（fm350d）。
+#   luci-app-mt5700（mt5700d）/ luci-app-h5000m-fancontrol / luci-app-fm350（fm350d）。
 # 与仓库内已有的 taygedo / airpi 预编译路径同一思路：宿主机 rustup 官方工具链
 # 交叉编译，OpenWrt 侧只做二进制打包 —— rustc/cargo 始终来自 Rust 官方 SDK，
 # 绝不触发 OpenWrt 的 rust/host 源码构建（那套要 1.5~3 小时）。
@@ -353,7 +353,23 @@ else
 fi
 
 BIN_PATH="${CARGO_TARGET_DIR}/${TRIPLE}/release/${BIN_NAME}"
-[ -f "$BIN_PATH" ] || die "cargo 返回成功但未产出 ${BIN_PATH}"
+if [ ! -f "$BIN_PATH" ]; then
+	# 上游可能重命名后端二进制（2026-11-25 luci-app-mt5700 把 at-webserver
+	# 改成 mt5700d，调用方仍传旧名）。包内 src/Makefile 的 BIN 是安装段真正
+	# 读取的变量，产物名以它为准；连它也没产出才报错。
+	ALT_BIN="$(sed -n 's/^BIN[[:space:]]*[:+]*=[^#]*release\/\([A-Za-z0-9._-][A-Za-z0-9._-]*\)[[:space:]]*$/\1/p' \
+		"$PKG_MAKEFILE" 2>/dev/null | head -n1)"
+	if [ -n "$ALT_BIN" ] && [ -f "${CARGO_TARGET_DIR}/${TRIPLE}/release/${ALT_BIN}" ]; then
+		warn "cargo 未产出 ${BIN_NAME}，改用包内 Makefile 声明的 ${ALT_BIN}（上游重命名？）"
+		BIN_NAME="$ALT_BIN"
+		OUT_BIN="${RUST_OUT_BIN:-${DEFAULT_OUT_DIR}/${BIN_NAME}}"
+		OUT_DIR="$(dirname "$OUT_BIN")"
+		mkdir -p "$OUT_DIR"
+		BIN_PATH="${CARGO_TARGET_DIR}/${TRIPLE}/release/${BIN_NAME}"
+	else
+		die "cargo 返回成功但未产出 ${BIN_PATH}"
+	fi
+fi
 
 # ---------------------------------------------------------------------------
 # 7) 产物自检：尺寸 / 静态性 / 架构，坏产物不进 buildroot

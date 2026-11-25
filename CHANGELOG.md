@@ -1,5 +1,44 @@
 # 更新日志
 
+## [2026-11-26] 修复 MT5700 变体 Rust 预编译全红：包内工具链切换与后端改名
+
+### 背景
+
+- 2026-11-25 定时编译中，五个 MT5700 变体（X86、AP3000M、H5000M、NetWiz 家族）
+  同时停在「预编译全部 Rust 后端」，而 FM350 变体正常，说明问题只出在
+  `luci-app-mt5700` 这一个包上。
+- 上游 `LianXia233/luci-app-mt5700` 自 1.32.12 起在 `src/rust/` 引入
+  `rust-toolchain.toml` 锁定 `channel = "1.98.0"`。`Build-Rust-Prebuilt.sh`
+  只给 rustup 默认工具链（stable，1.100.0）装 musl target，cargo 进入包目录后
+  被 rustup 切到 1.98.0，那套工具链没有 std，编译期直接报
+  `error[E0463]: can't find crate for 'core'`。日志里 1.100.0 的版本行取自
+  包目录之外，进一步掩盖了真相。
+- 上游 2.0.0 起把 Rust 后端由 `at-webserver` 统一更名为 `mt5700d`
+  （`Cargo.toml` 的 `package.name` 与 `src/Makefile` 的 `BIN` 同步修改），
+  workflow 仍按旧名取产物，工具链修复后又撞上「cargo 成功但未产出」。
+
+### 变更
+
+- `Scripts/Build-Rust-Prebuilt.sh`：
+  - 编译前在包目录用 `rustup show active-toolchain` 解析实际生效的工具链
+    （包根/上级目录的 rust-toolchain 文件同样覆盖），target 安装、版本日志与
+    `BUILD-INFO` 的 `toolchain=` 字段全部跟随它；解析失败先回退官方分发源重试，
+    仍失败则明确报错，不再拖到编译期才暴露。
+  - cargo 产物缺失时，回退到包内 `src/Makefile` 声明的 `BIN` 名（安装段真正
+    读取的变量）重新取产物并给出 warning，上游再改名不会再直接红掉整条链路。
+- `.github/workflows/WRT-CORE.yml`：调用参数 `at-webserver` 改为 `mt5700d`；
+  Rust 依赖缓存键纳入 `rust-toolchain` 文件指纹，避免两套 rustc 共用同一增量
+  目录；预编译步骤开头清空 `BUILD-INDEX`，清单只反映本轮产物。
+- `Config/MT5700.txt`：注释同步为 `mt5700d`。
+
+### 验证
+
+- `bash -n`、workflow YAML 解析通过。
+- `workflow_dispatch` 触发 X86（run 45650129225，提交 8380791）：日志确认
+  `生效工具链 1.98.0-x86_64-unknown-linux-gnu：rustc 1.98.0`，musl target
+  安装成功，cargo 47 s 编译完成；同轮暴露的二进制改名问题即上述 BIN 回退修复
+  的由来。整轮最终结果见后续补记。
+
 ## [2026-11-21] luci-app-homeproxy 切换自用源 LianXia233/packages
 
 ### 背景
