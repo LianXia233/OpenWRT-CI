@@ -1418,6 +1418,120 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
 
+      # Go 工具链兜底 + 编译前硬校验。
+      # 2026-11-25 的 NetWiz 两套 X86 构建（run 45654150721）失败在这里：
+      #   - 上游 init_build_environment.sh 用 longsleep Launchpad PPA 装
+      #     golang-1.27-go，当天该 PPA 整段 503（InRelease 与 deb 都取不到）；
+      #   - 该脚本没有 set -e，apt 失败后仍照原样把 /usr/bin/go 软链到并不
+      #     存在的 /usr/lib/go-1.27/bin/go，然后以 0 退出；
+      #   - 缺口直到 30 分钟后的 dockerd 才暴露：hack/make/.binary 里
+      #     `go: command not found`（Error 127），注解里只剩看不懂的
+      #     「dockerd failed to build」。
+      # 同一时段的 X86（非 NetWiz）构建之所以正常，只是因为它恰好赶上 PPA
+      # 可用、/usr/bin/go 真实可执行（OpenWrt 的 hostpkg Go 来不及顶上）。
+      # 因此这里在编译前先把 Go 补齐（官方 tarball + 多镜像回退，不依赖
+      # Launchpad），再对「.config 确实需要 Go」的构建做硬校验：要么修好，
+      # 要么立刻失败并给出明确原因，不再白跑半小时。
+      - name: 预检 Go 工具链（PPA 失效时兜底安装）
+        if: env.WRT_TEST != 'true'
+        timeout-minutes: 20
+        run: |
+          cd ./wrt/
+
+          # 期望版本从 feeds 的 golang1.27 读取，跟随上游锁定的版本，不写死
+          GO_MK=feeds/packages/lang/golang/golang1.27/Makefile
+          GO_MM="$(sed -n 's/^GO_VERSION_MAJOR_MINOR:=//p' "$GO_MK" 2>/dev/null | head -n1 || true)"
+          GO_PATCH="$(sed -n 's/^GO_VERSION_PATCH:=//p' "$GO_MK" 2>/dev/null | head -n1 || true)"
+          GO_MM="${GO_MM:-1.27}"
+          GO_ROOT="/usr/lib/go-$GO_MM"
+
+          if "$GO_ROOT/bin/go" version >/dev/null 2>&1; then
+            echo "系统 Go 可用：$("$GO_ROOT/bin/go" version)"
+          else
+            echo "系统 Go 不可用（$GO_ROOT/bin/go 缺失或不可执行），改用官方 tarball 兜底安装"
+            # 清掉上游脚本遗留的悬空软链，否则 `command -v go` 会误报可用
+            sudo rm -f /usr/bin/go /usr/bin/gofmt
+
+            VER="go$GO_MM${GO_PATCH:+.$GO_PATCH}"
+            if [ -z "$GO_PATCH" ]; then
+              # 上游未写 patch（或写的是 RC）时，退到 go.dev 的当前版本号；
+              # 宿主 Go 只需可执行（既当 go 又当 external bootstrap），
+              # 不要求和 feeds 的补丁号严格一致。
+              VER="$(curl -fsSL --retry 3 --max-time 60 'https://go.dev/VERSION?m=text' 2>/dev/null | head -n1 || true)"
+              VER="${VER:-go$GO_MM}"
+            fi
+            echo "兜底目标版本：$VER"
+            URLS=(
+              "https://go.dev/dl/$VER.linux-amd64.tar.gz"
+              "https://golang.google.cn/dl/$VER.linux-amd64.tar.gz"
+              "https://mirrors.nju.edu.cn/golang/$VER.linux-amd64.tar.gz"
+              "https://mirrors.ustc.edu.cn/golang/$VER.linux-amd64.tar.gz"
+              "https://mirrors.aliyun.com/golang/$VER.linux-amd64.tar.gz"
+            )
+            TARBALL=/tmp/go-fallback.tgz
+            FETCHED=0
+            for url in "${URLS[@]}"; do
+              echo "尝试下载：$url"
+              rm -f "$TARBALL"
+              if curl -fsSL --retry 3 --retry-all-errors \
+                   --connect-timeout 20 --max-time 600 -o "$TARBALL" "$url"; then
+                FETCHED=1
+                break
+              fi
+            done
+            if [ "$FETCHED" != 1 ]; then
+              echo "::error::$VER 官方 tarball 全部镜像下载失败，Go 兜底安装失败"
+              exit 1
+            fi
+
+            # 落点与上游 init 脚本保持一致（/usr/lib/go-<major.minor>），
+            # 这样它既是宿主的 go，也能当 OpenWrt golang1.27 的 external bootstrap
+            gzip -t "$TARBALL"
+            # /usr/lib 下的旧目录属于 root，必须 sudo 清；/tmp 下是 tar 解出的
+            # root 属主文件，同样用 sudo 收尾，避免权限不足让步骤红掉
+            sudo rm -rf /tmp/go-fallback "$GO_ROOT"
+            mkdir -p /tmp/go-fallback
+            sudo tar -C /tmp/go-fallback -xzf "$TARBALL"
+            sudo mv /tmp/go-fallback/go "$GO_ROOT"
+            sudo ln -sfn "$GO_ROOT/bin/go" /usr/bin/go
+            sudo ln -sfn "$GO_ROOT/bin/gofmt" /usr/bin/gofmt
+            sudo rm -rf /tmp/go-fallback "$TARBALL"
+
+            if ! "$GO_ROOT/bin/go" version >/dev/null 2>&1; then
+              echo "::error::$VER 解包后仍无法执行，Go 兜底安装失败"
+              ls -l "$GO_ROOT/bin" || true
+              exit 1
+            fi
+            echo "已从官方 tarball 安装 Go：$("$GO_ROOT/bin/go" version)"
+          fi
+
+          # 缓存里可能残留一个「目录在、go 跑不起来」的 hostpkg Go，它会排在
+          # PATH 最前面从而盖住系统 Go。这种情况直接删掉坏目录，让 PATH 回退
+          # 到 /usr/bin/go；stamp 保留，避免又去源码编译一遍 Go。
+          HOSTPKG_GO="$PWD/staging_dir/hostpkg/lib/go-$GO_MM"
+          if [ -e "$HOSTPKG_GO" ] && ! "$HOSTPKG_GO/bin/go" version >/dev/null 2>&1; then
+            echo "::warning::hostpkg Go（$HOSTPKG_GO）不可执行，判定为缓存残留，清理后回退系统 Go"
+            rm -rf "$HOSTPKG_GO"
+          fi
+
+          # 硬校验：只有 .config 真的选中了 Go 依赖包时才要求 Go 可用，
+          # 避免纯 C 机型因为宿主没 Go 而误判失败
+          NEED_GO=0
+          if grep -qE '^CONFIG_PACKAGE_(golang|golang[0-9.]+|dockerd|docker|containerd|runc|docker-compose|luci-app-dockerman)=' ./.config; then
+            NEED_GO=1
+          fi
+
+          if [ "$NEED_GO" = 1 ]; then
+            if ! go version >/dev/null 2>&1; then
+              echo "::error::.config 选中了依赖 Go 的包，但 PATH 里的 go 无法执行；长期依赖 longsleep PPA，请检查上方兜底安装日志"
+              go version || true
+              exit 1
+            fi
+            echo "本机型需要 Go，已就绪：$(go version)"
+          else
+            echo ".config 未选中 Go 依赖包，跳过 Go 硬校验"
+          fi
+
       - name: 编译固件
         if: env.WRT_TEST != 'true'
         run: |

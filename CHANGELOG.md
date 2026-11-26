@@ -1,5 +1,59 @@
 # 更新日志
 
+## [2026-11-26] 修复 NetWiz 两套 X86 构建：宿主 Go 缺失（Launchpad PPA 503）
+
+### 背景
+
+- 2026-11-25 的 NetWiz 定时编译（run 45654150721）中，两套 X86 构建
+  （`X86-NETWIZ-MT5700`、`X86-NETWIZ-FM350`）都停在「编译固件」，其余三个
+  VIKINGYFY 源机型正常。注解只给出
+  `ERROR: package/feeds/packages/dockerd failed to build` 与
+  `make[3]: *** [.../dockerd-29.6.1/.built] Error 127`，看不出原因。
+- 真实原因是**宿主没有可用的 `go`**：`dockerd` 的 `hack/make/.binary` 走
+  `go: command not found`（127 即「命令不存在」）。同一日志里早有前兆——
+  `apt install -y golang-1.27-go` 报
+  `Error: Unable to locate package golang-1.27-go`，另一套 job 则是
+  `golang-1.27-src ... 503 Service Unavailable`，来源都是上游
+  `init_build_environment.sh` 依赖的 `ppa.launchpadcontent.net/longsleep/
+  golang-backports`。
+- 该脚本没有 `set -e`，apt 失败后仍照原样把 `/usr/bin/go` 软链到并不存在的
+  `/usr/lib/go-1.27/bin/go`，然后返回 0；CI 于是「环境初始化成功」，缺口
+  直到 30 分钟后才在 dockerd 处炸出来。同一时段的 `X86 定时编译`
+  （run 45652018618）只是恰好赶上 PPA 可用，`/usr/bin/go` 真实可执行，
+  所以看不出问题；两轮用的是同一份 `wrt-tc-x86-immortalwrt-master-73bc086`
+  工具链缓存（同为 1048723297 B），缓存本身没问题。
+
+### 变更
+
+- `.github/workflows/WRT-CORE.yml`：新增「预检 Go 工具链（PPA 失效时兜底安装）」
+  步骤，位置在「编译固件」之前。
+  - 先检查 `/usr/lib/go-<major.minor>/bin/go` 能否执行；不可用时清掉上游遗留的
+    悬空软链，改从官方 tarball 安装（`go.dev/dl` 为主，`golang.google.cn`、
+    nju / ustc / aliyun 镜像依次回退），落点仍是 `/usr/lib/go-<major.minor>`，
+    与上游 init 脚本、以及 OpenWrt `golang1.27` 的 external bootstrap 路径一致。
+  - 版本号从 `feeds/packages/lang/golang/golang1.27/Makefile` 的
+    `GO_VERSION_MAJOR_MINOR` / `GO_VERSION_PATCH` 读取（当前 `1.27.4`），
+    不写死；上游没写 patch 时退回 `go.dev/VERSION?m=text`。
+  - 安装后用 `go version` 实测，并要求文件头版本号匹配，避免半截文件当成功。
+  - 缓存里若残留「目录在、`go` 跑不起来」的 `staging_dir/hostpkg/lib/go-<ver>`
+    会盖住 PATH 前面的系统 Go，这里直接删掉坏目录（保留 stamp，不触发
+    源码重编），让 PATH 回退到 `/usr/bin/go`。
+  - 最后按 `.config` 判断是否需要 Go（`golang` / `dockerd` / `docker` /
+    `containerd` / `runc` / `docker-compose` / `luci-app-dockerman` 任一被选中），
+    需要就硬校验 `go version`，不通过立即 `::error::` 失败——纯 C 机型不受影响，
+    需要 Go 的机型也不会再白跑半小时才暴露。
+
+### 验证
+
+- `python -c 'yaml.safe_load(...)'` 解析通过，步骤数 44；新增步骤的 `run`
+  抽出来过 `bash -n`。
+- 版本解析与 `.config` 判定在本地演练通过：`1.27` / `4` → `go1.27.4`；
+  选中 `dockerd` 时 `NEED_GO=1`，只有 `curl` 时 `NEED_GO=0`；
+  `golang1.27/Makefile` 缺失时回退 `1.27` 且不触发 `errexit`。
+- 端到端验证依赖下一次定时/手动运行：确认「预检 Go 工具链」步骤输出
+  `系统 Go 可用` 或 `已从官方 tarball 安装 Go`，且 dockerd 不再报
+  `go: command not found`。
+
 ## [2026-11-26] 修复 MT5700 变体 Rust 预编译全红：包内工具链切换与后端改名
 
 ### 背景
