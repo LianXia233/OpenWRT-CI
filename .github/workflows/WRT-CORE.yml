@@ -1473,8 +1473,10 @@ jobs:
             for url in "${URLS[@]}"; do
               echo "尝试下载：$url"
               rm -f "$TARBALL"
+              # 单镜像 180s（75MB 左右，1MB/s 也能下完），5 个镜像最坏 15 分钟，
+              # 留在本步骤 20 分钟上限之内，失败时给出 ::error:: 而不是被超时截断
               if curl -fsSL --retry 3 --retry-all-errors \
-                   --connect-timeout 20 --max-time 600 -o "$TARBALL" "$url"; then
+                   --connect-timeout 20 --max-time 180 -o "$TARBALL" "$url"; then
                 FETCHED=1
                 break
               fi
