@@ -1,2396 +1,447 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>OpenWRT-CI · 高性能 5G CPE &amp; 路由器定制固件工坊</title>
+  <meta name="description" content="基于 ImmortalWrt 深度定制 · 专为 Hiveton H5000M 5G CPE、AirPi AP3000M 与通用 X86_64 打造。支持 NetWiz 智能向导、MT5700 / FM350-GL 5G 模组、多网络智能切换与温控。">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230284c7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect width='20' height='8' x='2' y='14' rx='2'/><path d='M6 18h.01'/><path d='M10 18h.01'/><path d='M15 10v4'/><path d='M17.8 7.2a6 6 0 0 0-7.6 0'/><path d='M20.6 4.4a10 10 0 0 0-13.2 0'/></svg>" type="image/svg+xml">
   <script>
-    // 两种高品质壁纸随机加载引擎
-    const WALLPAPERS = [
+    window.WALLPAPERS = [
       'https://files.seeusercontent.com/2026/10/31/aE1a/145952531_p1.jpg',
       'https://files.seeusercontent.com/2026/06/29/uu4H/bg1.jpg'
     ];
     (function() {
-      const chosen = WALLPAPERS[Math.floor(Math.random() * WALLPAPERS.length)];
+      const chosen = window.WALLPAPERS[Math.floor(Math.random() * window.WALLPAPERS.length)];
       document.documentElement.style.setProperty('--wallpaper-url', "url('" + chosen + "')");
       window.currentWallpaperUrl = chosen;
     })();
   </script>
-
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>OpenWRT-CI · 高性能 5G CPE & 路由器定制固件工坊</title>
-  <meta name="description" content="基于 ImmortalWrt 深度定制 · 专为 Hiveton H5000M 5G CPE、AirPi AP3000M 与通用 X86_64 打造。支持 NetWiz 智能向导、MT5700 / FM350-GL 5G 模组、多网络智能切换与温控。">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230284c7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect width='20' height='8' x='2' y='14' rx='2'/><path d='M6 18h.01'/><path d='M10 18h.01'/><path d='M15 10v4'/><path d='M17.8 7.2a6 6 0 0 0-7.6 0'/><path d='M20.6 4.4a10 10 0 0 0-13.2 0'/></svg>" type="image/svg+xml">
-  
-  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-  <style>
-    :root {
-      --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-
-      /* Material Design 3 Light / White Glass Theme */
-      --md-sys-color-primary: #0284c7;
-      --md-sys-color-on-primary: #ffffff;
-      --md-sys-color-primary-container: #e0f2fe;
-      --md-sys-color-on-primary-container: #0369a1;
-
-      --md-sys-color-secondary: #059669;
-      --md-sys-color-secondary-container: #d1fae5;
-      --md-sys-color-on-secondary-container: #065f46;
-
-      --md-sys-color-tertiary: #6366f1;
-      --md-sys-color-tertiary-container: #e0e7ff;
-      --md-sys-color-on-tertiary-container: #3730a3;
-
-      --md-sys-color-surface: rgba(255, 255, 255, 0.68);
-      --md-sys-color-surface-variant: rgba(241, 245, 249, 0.62);
-      --md-sys-color-card: rgba(255, 255, 255, 0.65);
-      --md-sys-color-card-hover: rgba(255, 255, 255, 0.82);
-
-      --md-sys-color-on-surface: #0f172a;
-      --md-sys-color-on-surface-variant: #1e293b;
-      --md-sys-color-outline: rgba(255, 255, 255, 0.95);
-      --md-sys-color-outline-variant: rgba(255, 255, 255, 0.6);
-
-      /* Glassmorphism Acrylic Shadows & Specular Highlights */
-      --elevation-1: 0 2px 8px 0 rgba(15, 23, 42, 0.04), inset 0 1px 1px rgba(255, 255, 255, 0.95);
-      --elevation-2: 0 8px 32px 0 rgba(15, 23, 42, 0.08), 0 2px 8px -2px rgba(15, 23, 42, 0.04), inset 0 1.5px 1.5px rgba(255, 255, 255, 0.95), inset 0 -1px 2px rgba(255, 255, 255, 0.35);
-      --elevation-3: 0 16px 48px -4px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.06), inset 0 2px 2px rgba(255, 255, 255, 1);
-      --elevation-4: 0 24px 60px -8px rgba(15, 23, 42, 0.16);
-
-      /* Radius */
-      --radius-sm: 8px;
-      --radius-md: 16px;
-      --radius-lg: 24px;
-      --radius-xl: 32px;
-      --radius-full: 9999px;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      font-family: var(--font-sans);
-      color: var(--md-sys-color-on-surface);
-      line-height: 1.6;
-      min-height: 100vh;
-      position: relative;
-      background-color: #f8fafc;
-      overflow-x: hidden;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    /* Fixed Background Layer (Zero blur: crisp, clear anime character display) */
-    .bg-wallpaper-layer {
-      position: fixed;
-      inset: 0;
-      z-index: -2;
-      background-image: var(--wallpaper-url, url('https://files.seeusercontent.com/2026/10/31/aE1a/145952531_p1.jpg'));
-      background-position: center 20%; /* Precision focus on character face and twin-tails */
-      background-size: cover;
-      background-repeat: no-repeat;
-      transform: translateZ(0);
-      transition: filter 0.3s ease;
-    }
-
-    /* Soft ambient vignette overlay: preserves character face & eyes at center, gentle white tint at bottom */
-    .bg-overlay-layer {
-      position: fixed;
-      inset: 0;
-      z-index: -1;
-      background: radial-gradient(
-        ellipse at 50% 25%,
-        rgba(255, 255, 255, 0.02) 0%,
-        rgba(255, 255, 255, 0.18) 55%,
-        rgba(241, 245, 249, 0.52) 100%
-      );
-      pointer-events: none;
-    }
-
-    /* Immersion Mode: Click "纯享壁纸" to fade out content and view character fully */
-    body.immersive-mode .main-content-flow {
-      opacity: 0.08 !important;
-      pointer-events: none;
-      filter: blur(2px);
-    }
-    body.immersive-mode .immersive-exit-tip {
-      display: flex !important;
-    }
-
-    a {
-      color: inherit;
-      text-decoration: none;
-    }
-
-    .container {
-      width: 100%;
-      max-width: 1240px;
-      margin: 0 auto;
-      padding: 0 1.5rem;
-    }
-
-    /* MD3 Acrylic Frosted Glass Cards (增强毛玻璃高级透质感) */
-    .md-card {
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.74) 0%, rgba(255, 255, 255, 0.54) 100%);
-      backdrop-filter: blur(24px) saturate(190%) contrast(102%);
-      -webkit-backdrop-filter: blur(24px) saturate(190%) contrast(102%);
-      border: 1px solid rgba(255, 255, 255, 0.92);
-      box-shadow: var(--elevation-2);
-      border-radius: var(--radius-lg);
-      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), background 0.25s ease;
-    }
-
-    .md-card:hover {
-      box-shadow: var(--elevation-3);
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.84) 0%, rgba(255, 255, 255, 0.65) 100%);
-      transform: translateY(-2px);
-    }
-
-    /* App Header: High-blur Frosted Acrylic Glass */
-    header {
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      background: rgba(255, 255, 255, 0.65);
-      backdrop-filter: blur(28px) saturate(200%);
-      -webkit-backdrop-filter: blur(28px) saturate(200%);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.85);
-      box-shadow: 0 4px 20px rgba(15, 23, 42, 0.04), inset 0 -1px 0 rgba(255, 255, 255, 0.6);
-      transition: all 0.3s ease;
-    }
-
-    .nav-inner {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      height: 4.5rem;
-    }
-
-    .brand-logo {
-      display: flex;
-      align-items: center;
-      gap: 0.85rem;
-      font-weight: 800;
-      font-size: 1.25rem;
-      color: var(--md-sys-color-on-surface);
-      letter-spacing: -0.02em;
-    }
-
-    .logo-icon {
-      width: 2.6rem;
-      height: 2.6rem;
-      display: grid;
-      place-items: center;
-      background: linear-gradient(135deg, var(--md-sys-color-primary), #0284c7);
-      border-radius: var(--radius-md);
-      color: #ffffff;
-      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
-    }
-
-    .brand-text span {
-      color: var(--md-sys-color-primary);
-    }
-
-    .nav-links {
-      display: flex;
-      align-items: center;
-      gap: 1.75rem;
-      list-style: none;
-      font-size: 0.925rem;
-      font-weight: 600;
-      color: var(--md-sys-color-on-surface-variant);
-    }
-
-    .nav-links a {
-      position: relative;
-      padding: 0.35rem 0;
-      transition: color 0.2s ease;
-    }
-
-    .nav-links a:hover {
-      color: var(--md-sys-color-primary);
-    }
-
-    .nav-links a::after {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: var(--md-sys-color-primary);
-      transform: scaleX(0);
-      transition: transform 0.2s ease;
-      border-radius: 2px;
-    }
-
-    .nav-links a:hover::after {
-      transform: scaleX(1);
-    }
-
-    .nav-actions {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-
-    /* Buttons (MD3 Style) */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      font-family: inherit;
-      font-size: 0.925rem;
-      font-weight: 600;
-      padding: 0.65rem 1.35rem;
-      border-radius: var(--radius-full);
-      cursor: pointer;
-      border: none;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      text-decoration: none;
-      white-space: nowrap;
-    }
-
-    .btn-primary {
-      background: var(--md-sys-color-primary);
-      color: var(--md-sys-color-on-primary);
-      box-shadow: 0 3px 12px rgba(2, 132, 199, 0.35);
-    }
-
-    .btn-primary:hover {
-      background: #0369a1;
-      transform: translateY(-2px);
-      box-shadow: 0 6px 18px rgba(2, 132, 199, 0.45);
-    }
-
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.9);
-      color: var(--md-sys-color-on-surface);
-      border: 1px solid rgba(148, 163, 184, 0.35);
-      box-shadow: var(--elevation-1);
-    }
-
-    .btn-secondary:hover {
-      background: #ffffff;
-      border-color: var(--md-sys-color-primary);
-      color: var(--md-sys-color-primary);
-      transform: translateY(-2px);
-      box-shadow: var(--elevation-2);
-    }
-
-    .btn-sm {
-      padding: 0.4rem 0.95rem;
-      font-size: 0.85rem;
-    }
-
-    .btn-icon {
-      width: 2.5rem;
-      height: 2.5rem;
-      border-radius: var(--radius-full);
-      padding: 0;
-      display: grid;
-      place-items: center;
-      background: rgba(255, 255, 255, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.3);
-      color: var(--md-sys-color-on-surface-variant);
-      cursor: pointer;
-    }
-
-    .btn-icon:hover {
-      color: var(--md-sys-color-primary);
-      border-color: var(--md-sys-color-primary);
-    }
-
-    /* Hero Section */
-    .hero-section {
-      padding: 2.5rem 0 3.5rem;
-      text-align: center;
-      position: relative;
-    }
-
-    .hero-capsule {
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.50) 100%);
-      backdrop-filter: blur(26px) saturate(190%) contrast(102%);
-      -webkit-backdrop-filter: blur(26px) saturate(190%) contrast(102%);
-      border: 1px solid rgba(255, 255, 255, 0.95);
-      border-radius: var(--radius-xl);
-      padding: 3rem 2rem 2.25rem;
-      max-width: 920px;
-      margin: 1rem auto 3.5rem;
-      box-shadow: 0 10px 40px -5px rgba(15, 23, 42, 0.08), inset 0 1.5px 2px rgba(255, 255, 255, 1);
-      transition: all 0.3s ease;
-    }
-
-    .hero-capsule:hover {
-      box-shadow: 0 16px 50px -5px rgba(15, 23, 42, 0.12), inset 0 2px 2px rgba(255, 255, 255, 1);
-    }
-
-    .main-content-flow {
-      transition: opacity 0.35s ease, filter 0.35s ease;
-    }
-
-    .hero-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.55rem;
-      background: rgba(255, 255, 255, 0.95);
-      border: 1px solid rgba(2, 132, 199, 0.3);
-      color: var(--md-sys-color-primary);
-      font-size: 0.85rem;
-      font-weight: 700;
-      padding: 0.4rem 1.15rem;
-      border-radius: var(--radius-full);
-      margin-bottom: 1.5rem;
-      box-shadow: 0 2px 10px rgba(2, 132, 199, 0.12);
-    }
-
-    .pulse-dot {
-      width: 0.6rem;
-      height: 0.6rem;
-      background-color: var(--md-sys-color-secondary);
-      border-radius: 50%;
-      box-shadow: 0 0 10px var(--md-sys-color-secondary);
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.4; transform: scale(0.85); }
-    }
-
-    .hero-title {
-      font-size: clamp(2.2rem, 5.2vw, 3.8rem);
-      font-weight: 800;
-      letter-spacing: -0.035em;
-      line-height: 1.18;
-      margin-bottom: 1.25rem;
-      color: #0f172a;
-      text-shadow: 0 2px 12px rgba(255, 255, 255, 0.8);
-    }
-
-    .hero-title .gradient-text {
-      background: linear-gradient(135deg, #0284c7 0%, #0369a1 50%, #4f46e5 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .hero-desc {
-      font-size: clamp(1.05rem, 2vw, 1.25rem);
-      color: #334155;
-      max-width: 840px;
-      margin: 0 auto 2.25rem;
-      line-height: 1.7;
-      font-weight: 500;
-      text-shadow: 0 1px 6px rgba(255, 255, 255, 0.9);
-    }
-
-    .hero-cta {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 1rem;
-      flex-wrap: wrap;
-      margin-bottom: 3.5rem;
-    }
-
-    /* Stat Bar */
-    .stat-bar {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 1.25rem;
-      margin-bottom: 4rem;
-    }
-
-    .stat-card {
-      padding: 1.5rem;
-      display: flex;
-      align-items: center;
-      gap: 1.15rem;
-      border-radius: var(--radius-lg);
-    }
-
-    .stat-icon {
-      width: 3.4rem;
-      height: 3.4rem;
-      display: grid;
-      place-items: center;
-      border-radius: var(--radius-md);
-      background: #f0f9ff;
-      color: var(--md-sys-color-primary);
-      flex-shrink: 0;
-      box-shadow: inset 0 0 0 1px rgba(2, 132, 199, 0.15);
-    }
-
-    .stat-info h4 {
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: #0f172a;
-      margin-bottom: 0.15rem;
-    }
-
-    .stat-info p {
-      font-size: 0.85rem;
-      color: #64748b;
-      font-weight: 500;
-    }
-
-    /* Section Headers */
-    .section-header {
-      text-align: center;
-      margin-bottom: 2.75rem;
-    }
-
-    .section-tag {
-      font-family: var(--font-mono);
-      font-size: 0.8rem;
-      font-weight: 700;
-      color: var(--md-sys-color-primary);
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      margin-bottom: 0.5rem;
-      display: inline-block;
-      background: #e0f2fe;
-      padding: 0.25rem 0.85rem;
-      border-radius: var(--radius-full);
-    }
-
-    .section-title {
-      font-size: clamp(1.8rem, 3.5vw, 2.5rem);
-      font-weight: 800;
-      letter-spacing: -0.025em;
-      color: #0f172a;
-      margin-bottom: 0.85rem;
-      text-shadow: 0 1px 8px rgba(255, 255, 255, 0.8);
-    }
-
-    .section-desc {
-      color: #475569;
-      max-width: 720px;
-      margin: 0 auto;
-      font-size: 1.05rem;
-      line-height: 1.65;
-    }
-
-    /* Firmware Filter & Download Hub */
-    .download-hub {
-      margin-bottom: 5rem;
-    }
-
-    .filter-panel {
-      padding: 1.75rem;
-      border-radius: var(--radius-xl);
-      margin-bottom: 2rem;
-    }
-
-    .filter-row {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 1.25rem;
-      justify-content: space-between;
-      margin-bottom: 1.25rem;
-    }
-
-    .filter-group {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .filter-label {
-      font-size: 0.875rem;
-      font-weight: 700;
-      color: #1e293b;
-      margin-right: 0.4rem;
-    }
-
-    /* MD3 Acrylic Filter Chips (毛玻璃选项卡) */
-    .chip {
-      padding: 0.45rem 0.95rem;
-      font-size: 0.85rem;
-      font-weight: 600;
-      border-radius: var(--radius-full);
-      background: rgba(255, 255, 255, 0.72);
-      backdrop-filter: blur(18px) saturate(180%);
-      -webkit-backdrop-filter: blur(18px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.9);
-      color: #334155;
-      cursor: pointer;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03), inset 0 1px 1px rgba(255, 255, 255, 0.95);
-    }
-
-    .chip:hover {
-      color: var(--md-sys-color-primary);
-      border-color: var(--md-sys-color-primary);
-      background: rgba(255, 255, 255, 0.9);
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15);
-    }
-
-    .chip.active {
-      background: var(--md-sys-color-primary);
-      color: #ffffff;
-      border-color: var(--md-sys-color-primary);
-      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
-    }
-
-    .search-input-box {
-      position: relative;
-      flex: 1;
-      min-width: 260px;
-      max-width: 380px;
-    }
-
-    .search-input-box input {
-      width: 100%;
-      background: rgba(255, 255, 255, 0.72);
-      backdrop-filter: blur(18px) saturate(180%);
-      -webkit-backdrop-filter: blur(18px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.92);
-      border-radius: var(--radius-full);
-      padding: 0.65rem 1.15rem 0.65rem 2.65rem;
-      color: #0f172a;
-      font-family: inherit;
-      font-size: 0.875rem;
-      font-weight: 600;
-      outline: none;
-      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.03);
-      transition: all 0.2s ease;
-    }
-
-    .search-input-box input:focus {
-      background: rgba(255, 255, 255, 0.92);
-      border-color: var(--md-sys-color-primary);
-      box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.18);
-    }
-
-    .search-input-box svg {
-      position: absolute;
-      left: 1rem;
-      top: 50%;
-      transform: translateY(-50%);
-      color: #64748b;
-    }
-
-    /* Meta & Acceleration Control Bar */
-    .hub-meta-bar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1.25rem;
-      padding-top: 1.25rem;
-      border-top: 1px solid rgba(148, 163, 184, 0.2);
-      font-size: 0.875rem;
-    }
-
-    .status-indicator-box {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      font-weight: 600;
-      color: #1e293b;
-    }
-
-    .acceleration-box {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-    }
-
-    .accel-title {
-      font-weight: 700;
-      color: #0f172a;
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-    }
-
-    /* MD3 Segmented Control for Acceleration & Opacity (毛玻璃分段胶囊) */
-    .segmented-control {
-      display: inline-flex;
-      background: rgba(255, 255, 255, 0.68);
-      backdrop-filter: blur(20px) saturate(180%);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.9);
-      border-radius: var(--radius-full);
-      padding: 0.22rem;
-      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.03);
-    }
-
-    .segment-btn {
-      padding: 0.35rem 0.85rem;
-      font-size: 0.8rem;
-      font-weight: 700;
-      border-radius: var(--radius-full);
-      cursor: pointer;
-      color: #64748b;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      border: none;
-      background: none;
-    }
-
-    .segment-btn.active {
-      background: rgba(255, 255, 255, 0.96);
-      color: var(--md-sys-color-primary);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), inset 0 1px 1px rgba(255, 255, 255, 1);
-    }
-
-    /* Firmware Grid */
-    .firmware-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-      gap: 1.75rem;
-    }
-
-    .fw-card {
-      padding: 1.85rem;
-      border-radius: var(--radius-lg);
-      display: flex;
-      flex-direction: column;
-      position: relative;
-    }
-
-    .fw-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 0.75rem;
-      margin-bottom: 1rem;
-    }
-
-    .fw-device-title {
-      font-size: 1.22rem;
-      font-weight: 800;
-      color: #0f172a;
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-    }
-
-    .fw-badge {
-      font-size: 0.75rem;
-      font-weight: 700;
-      padding: 0.25rem 0.75rem;
-      border-radius: var(--radius-full);
-      letter-spacing: 0.03em;
-    }
-
-    .fw-badge-netwiz {
-      background: #d1fae5;
-      color: #065f46;
-    }
-
-    .fw-badge-mt {
-      background: #e0f2fe;
-      color: #0369a1;
-    }
-
-    .fw-badge-fm350 {
-      background: #fef3c7;
-      color: #92400e;
-    }
-
-    .fw-badge-base {
-      background: #e0e7ff;
-      color: #3730a3;
-    }
-
-    .fw-filename-box {
-      font-family: var(--font-mono);
-      font-size: 0.8rem;
-      background: rgba(255, 255, 255, 0.62);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      border: 1px solid rgba(255, 255, 255, 0.9);
-      border-radius: var(--radius-md);
-      padding: 0.6rem 0.85rem;
-      margin-bottom: 1.15rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem;
-      color: #1e293b;
-      box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.9), 0 2px 6px rgba(0, 0, 0, 0.02);
-    }
-
-    .fw-filename-text {
-      min-width: 0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      font-weight: 600;
-    }
-
-    .copy-btn {
-      background: none;
-      border: none;
-      color: #94a3b8;
-      cursor: pointer;
-      padding: 0.25rem;
-      border-radius: 4px;
-      display: grid;
-      place-items: center;
-      transition: color 0.2s;
-    }
-
-    .copy-btn:hover {
-      color: var(--md-sys-color-primary);
-    }
-
-    .fw-desc-text {
-      font-size: 0.875rem;
-      color: #475569;
-      margin-bottom: 1.15rem;
-      line-height: 1.6;
-      font-weight: 500;
-    }
-
-    .fw-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.45rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .fw-tag-pill {
-      font-size: 0.75rem;
-      font-weight: 600;
-      background: rgba(241, 245, 249, 0.9);
-      color: #334155;
-      padding: 0.2rem 0.65rem;
-      border-radius: var(--radius-full);
-      border: 1px solid rgba(203, 213, 225, 0.6);
-    }
-
-    .fw-meta-row {
-      margin-top: auto;
-      padding-top: 1rem;
-      border-top: 1px solid rgba(148, 163, 184, 0.2);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem;
-      font-size: 0.825rem;
-      color: #64748b;
-      margin-bottom: 1.15rem;
-      font-weight: 500;
-    }
-
-    .fw-actions {
-      display: flex;
-      gap: 0.75rem;
-    }
-
-    .fw-actions .btn {
-      flex: 1;
-    }
-
-    /* Device Showcase */
-    .device-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-      gap: 1.75rem;
-      margin-bottom: 5rem;
-    }
-
-    .device-card {
-      padding: 2.25rem;
-      border-radius: var(--radius-xl);
-    }
-
-    .device-badge-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 1.25rem;
-    }
-
-    .device-name {
-      font-size: 1.5rem;
-      font-weight: 800;
-      color: #0f172a;
-      margin-bottom: 0.4rem;
-    }
-
-    .device-soc {
-      font-family: var(--font-mono);
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: var(--md-sys-color-primary);
-      margin-bottom: 1.25rem;
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-    }
-
-    .device-specs-list {
-      list-style: none;
-      font-size: 0.925rem;
-      color: #334155;
-      margin-bottom: 1.75rem;
-    }
-
-    .device-specs-list li {
-      padding: 0.5rem 0;
-      display: flex;
-      align-items: flex-start;
-      gap: 0.65rem;
-      border-bottom: 1px dashed rgba(148, 163, 184, 0.25);
-    }
-
-    .device-specs-list li:last-child {
-      border-bottom: none;
-    }
-
-    .device-specs-list svg {
-      flex-shrink: 0;
-      margin-top: 0.25rem;
-      color: var(--md-sys-color-secondary);
-    }
-
-    /* Feature Columns */
-    .features-section {
-      margin-bottom: 5rem;
-    }
-
-    .feature-columns {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1.5rem;
-    }
-
-    .feat-card {
-      padding: 2rem;
-      border-radius: var(--radius-lg);
-    }
-
-    .feat-icon-bubble {
-      width: 3.25rem;
-      height: 3.25rem;
-      border-radius: var(--radius-md);
-      display: grid;
-      place-items: center;
-      margin-bottom: 1.25rem;
-      background: var(--md-sys-color-primary-container);
-      color: var(--md-sys-color-on-primary-container);
-      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15);
-    }
-
-    .feat-card h3 {
-      font-size: 1.25rem;
-      font-weight: 800;
-      color: #0f172a;
-      margin-bottom: 0.75rem;
-    }
-
-    .feat-card p {
-      font-size: 0.925rem;
-      color: #475569;
-      line-height: 1.65;
-      font-weight: 500;
-    }
-
-    /* Default Parameters */
-    .specs-table-wrapper {
-      margin-bottom: 5rem;
-    }
-
-    .specs-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1.25rem;
-    }
-
-    .spec-item-card {
-      padding: 1.65rem;
-      border-radius: var(--radius-lg);
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    .spec-label {
-      font-size: 0.8rem;
-      font-weight: 700;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 0.5rem;
-    }
-
-    .spec-val-box {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.75rem;
-    }
-
-    .spec-value {
-      font-family: var(--font-mono);
-      font-size: 1.3rem;
-      font-weight: 800;
-      color: var(--md-sys-color-primary);
-    }
-
-    .spec-note {
-      font-size: 0.825rem;
-      color: #64748b;
-      margin-top: 0.65rem;
-      font-weight: 500;
-    }
-
-    /* Tutorial Tabs */
-    .tutorial-section {
-      margin-bottom: 5rem;
-    }
-
-    .tutorial-tabs {
-      display: flex;
-      gap: 0.75rem;
-      margin-bottom: 1.5rem;
-      flex-wrap: wrap;
-    }
-
-    .tut-tab-btn {
-      padding: 0.65rem 1.35rem;
-      border-radius: var(--radius-full);
-      background: rgba(255, 255, 255, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.35);
-      color: #475569;
-      font-weight: 700;
-      font-size: 0.9rem;
-      cursor: pointer;
-      box-shadow: var(--elevation-1);
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .tut-tab-btn:hover {
-      color: var(--md-sys-color-primary);
-      border-color: var(--md-sys-color-primary);
-      transform: translateY(-1px);
-    }
-
-    .tut-tab-btn.active {
-      background: var(--md-sys-color-primary);
-      color: #ffffff;
-      border-color: var(--md-sys-color-primary);
-      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
-    }
-
-    .tut-content-box {
-      padding: 2.5rem;
-      border-radius: var(--radius-xl);
-    }
-
-    .step-item {
-      display: flex;
-      gap: 1.35rem;
-      margin-bottom: 1.85rem;
-    }
-
-    .step-item:last-child {
-      margin-bottom: 0;
-    }
-
-    .step-number {
-      width: 2.4rem;
-      height: 2.4rem;
-      border-radius: 50%;
-      background: #e0f2fe;
-      color: var(--md-sys-color-primary);
-      font-weight: 800;
-      font-family: var(--font-mono);
-      display: grid;
-      place-items: center;
-      flex-shrink: 0;
-      border: 1px solid rgba(2, 132, 199, 0.25);
-      box-shadow: 0 2px 6px rgba(2, 132, 199, 0.15);
-    }
-
-    .step-body h4 {
-      font-size: 1.1rem;
-      font-weight: 800;
-      color: #0f172a;
-      margin-bottom: 0.4rem;
-    }
-
-    .step-body p {
-      font-size: 0.925rem;
-      color: #475569;
-      line-height: 1.65;
-    }
-
-    /* Callout */
-    .callout {
-      padding: 1.35rem 1.65rem;
-      border-radius: var(--radius-lg);
-      display: flex;
-      align-items: flex-start;
-      gap: 1rem;
-      margin: 1.5rem 0;
-      font-size: 0.925rem;
-      line-height: 1.6;
-    }
-
-    .callout-info {
-      background: #e0f2fe;
-      border: 1px solid rgba(2, 132, 199, 0.3);
-      color: #0369a1;
-    }
-
-    .callout-info strong {
-      color: #0c4a6e;
-    }
-
-    /* Toast Notification */
-    .toast-container {
-      position: fixed;
-      bottom: 2rem;
-      right: 2rem;
-      z-index: 9999;
-      pointer-events: none;
-    }
-
-    .toast {
-      background: rgba(15, 23, 42, 0.95);
-      color: #ffffff;
-      padding: 0.85rem 1.35rem;
-      border-radius: var(--radius-full);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-      font-size: 0.875rem;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 0.65rem;
-      backdrop-filter: blur(10px);
-      animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards, fadeOut 0.3s ease 2.7s forwards;
-    }
-
-    @keyframes slideIn {
-      from { transform: translateY(100%); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-
-    @keyframes fadeOut {
-      from { opacity: 1; }
-      to { opacity: 0; }
-    }
-
-    /* Footer: Frosted Glass */
-    footer {
-      border-top: 1px solid rgba(255, 255, 255, 0.9);
-      background: rgba(255, 255, 255, 0.65);
-      backdrop-filter: blur(28px) saturate(180%);
-      -webkit-backdrop-filter: blur(28px) saturate(180%);
-      padding: 3.5rem 0 2.5rem;
-      color: #475569;
-      font-size: 0.875rem;
-      box-shadow: 0 -8px 30px rgba(15, 23, 42, 0.03);
-    }
-
-    .footer-content {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      gap: 2rem;
-      margin-bottom: 2.5rem;
-    }
-
-    .footer-left {
-      max-width: 420px;
-    }
-
-    .footer-nav {
-      display: flex;
-      gap: 3.5rem;
-      flex-wrap: wrap;
-    }
-
-    .footer-col h5 {
-      color: #0f172a;
-      font-size: 0.95rem;
-      font-weight: 700;
-      margin-bottom: 1rem;
-    }
-
-    .footer-col ul {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 0.65rem;
-    }
-
-    .footer-col a:hover {
-      color: var(--md-sys-color-primary);
-    }
-
-    .footer-bottom {
-      border-top: 1px solid rgba(148, 163, 184, 0.2);
-      padding-top: 2rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 1rem;
-    }
-
-    /* Mobile Responsive Optimizations */
-    @media (max-width: 820px) {
-      .container {
-        padding: 0 1rem;
-      }
-      .nav-links {
-        display: none;
-      }
-      .nav-inner {
-        height: auto;
-        min-height: 3.6rem;
-        flex-wrap: wrap;
-        gap: 0.5rem 0.75rem;
-        padding-top: 0.55rem;
-        padding-bottom: 0.55rem;
-      }
-      .brand-logo {
-        font-size: 1.05rem;
-        gap: 0.6rem;
-      }
-      .logo-icon {
-        width: 2.1rem;
-        height: 2.1rem;
-      }
-      /* 手机端隐藏透光度调节（桌面专属功能），避免顶栏溢出 */
-      #opacitySwitcher {
-        display: none;
-      }
-      .nav-actions {
-        gap: 0.5rem;
-        margin-left: auto;
-      }
-      .hero-section {
-        padding: 1.5rem 0 2.25rem;
-      }
-      .hero-capsule {
-        padding: 2rem 1.25rem 1.75rem;
-        margin: 0.5rem auto 2.5rem;
-        border-radius: var(--radius-lg);
-      }
-      .stat-bar {
-        gap: 0.85rem;
-        margin-bottom: 2.5rem;
-      }
-      .stat-card {
-        padding: 1.1rem 1.15rem;
-        gap: 0.85rem;
-      }
-      .stat-icon {
-        width: 2.8rem;
-        height: 2.8rem;
-      }
-      .download-hub,
-      .features-section,
-      .specs-table-wrapper,
-      .tutorial-section {
-        margin-bottom: 3rem;
-      }
-      .filter-panel {
-        padding: 1.15rem;
-        border-radius: var(--radius-lg);
-      }
-      .filter-row {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 0.85rem;
-      }
-      .search-input-box {
-        max-width: 100%;
-        min-width: 0;
-      }
-      /* 16px 起步，避免 iOS 聚焦输入框时页面自动放大 */
-      .search-input-box input {
-        font-size: 1rem;
-      }
-      .hub-meta-bar {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.85rem;
-      }
-      .acceleration-box {
-        width: 100%;
-        justify-content: space-between;
-      }
-      .segmented-control {
-        width: 100%;
-        display: flex;
-      }
-      .segment-btn {
-        flex: 1;
-        text-align: center;
-        padding: 0.4rem 0.5rem;
-        white-space: nowrap;
-      }
-      .firmware-grid {
-        grid-template-columns: 1fr;
-        gap: 1.1rem;
-      }
-      /* 防止长文件名撑破网格（grid item 默认 min-width:auto） */
-      .firmware-grid > .fw-card {
-        min-width: 0;
-      }
-      .fw-card {
-        padding: 1.3rem 1.15rem;
-      }
-      .fw-header {
-        flex-wrap: wrap;
-      }
-      .fw-meta-row {
-        flex-wrap: wrap;
-        row-gap: 0.3rem;
-      }
-      .device-grid {
-        grid-template-columns: 1fr;
-        gap: 1.1rem;
-        margin-bottom: 3rem;
-      }
-      .device-card {
-        padding: 1.5rem 1.25rem;
-        border-radius: var(--radius-lg);
-      }
-      .device-soc {
-        flex-wrap: wrap;
-      }
-      .feature-columns {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-      }
-      .feat-card {
-        padding: 1.4rem 1.25rem;
-      }
-      .specs-grid {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-      }
-      .spec-item-card {
-        padding: 1.25rem 1.15rem;
-      }
-      .tutorial-tabs {
-        gap: 0.5rem;
-      }
-      .tut-tab-btn {
-        flex: 1 1 100%;
-        text-align: center;
-        padding: 0.6rem 1rem;
-      }
-      .tut-content-box {
-        padding: 1.5rem 1.25rem;
-        border-radius: var(--radius-lg);
-      }
-      .footer-content {
-        flex-direction: column;
-        gap: 1.75rem;
-      }
-      .footer-nav {
-        gap: 1.75rem;
-      }
-      .footer-bottom {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-      .toast-container {
-        left: 1rem;
-        right: 1rem;
-        bottom: 1.25rem;
-        display: flex;
-        justify-content: center;
-      }
-      .toast {
-        max-width: 100%;
-      }
-    }
-
-    /* Small Phones (≤480px) */
-    @media (max-width: 480px) {
-      /* 顶栏按钮收缩为纯图标，防止溢出 */
-      .nav-actions .btn span {
-        display: none;
-      }
-      .nav-actions .btn {
-        padding: 0.4rem 0.6rem;
-      }
-      .hero-title {
-        font-size: clamp(1.65rem, 8vw, 2.2rem);
-      }
-      .hero-cta {
-        flex-direction: column;
-        gap: 0.65rem;
-      }
-      .hero-cta .btn {
-        width: 100%;
-      }
-      .device-badge-row {
-        flex-wrap: wrap;
-        gap: 0.4rem;
-      }
-      .step-item {
-        gap: 0.85rem;
-      }
-    }
-  
-    /* 纯享壁纸模式 (Zen Mode) */
-    body.zen-mode .main-content-flow {
-      opacity: 0 !important;
-      pointer-events: none;
-      transform: scale(0.98);
-      transition: opacity 0.35s ease, transform 0.35s ease;
-    }
-    body.zen-mode .bg-overlay-layer {
-      background: rgba(0, 0, 0, 0.02) !important;
-    }
-    body.zen-mode #zenExitHint {
-      display: flex !important;
-    }
-
-    /* 浮动壁纸控制面板 */
-    .wallpaper-control-panel {
-      position: fixed;
-      top: 76px;
-      right: 20px;
-      z-index: 200;
-      width: 320px;
-      background: rgba(255, 255, 255, 0.95);
-      backdrop-filter: blur(20px) saturate(180%);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.9);
-      border-radius: var(--radius-lg);
-      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(15, 23, 42, 0.05);
-      padding: 18px;
-    }
-    .wallpaper-control-panel.hidden {
-      display: none !important;
-    }
-    @media (max-width: 640px) {
-      .wallpaper-control-panel {
-        left: 12px;
-        right: 12px;
-        width: auto;
-        top: 68px;
-      }
-    }
-
-    /* 优化 4 大保姆级刷机指南 Tab 在 PC 和手机端的排版 */
-    .tutorial-tabs {
-      background: #f1f5f9;
-      padding: 5px;
-      border-radius: 16px;
-      border: 1px solid rgba(226, 232, 240, 0.9);
-      margin-bottom: 1.5rem;
-    }
-    .tut-tab-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      min-height: 42px;
-      border-radius: 11px;
-      border: 1px solid transparent;
-      background: transparent;
-      font-weight: 600;
-      color: #475569;
-      cursor: pointer;
-      box-shadow: none;
-      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    .tut-tab-btn:hover {
-      background: rgba(255, 255, 255, 0.6);
-      color: #0f172a;
-      transform: none;
-    }
-    .tut-tab-btn.active {
-      background: #ffffff;
-      color: var(--md-sys-color-primary);
-      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.16), 0 1px 3px rgba(0, 0, 0, 0.05);
-      font-weight: 700;
-      border-color: rgba(2, 132, 199, 0.2);
-    }
-
-    @media (min-width: 768px) {
-      .tutorial-tabs {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 8px;
-        width: 100%;
-      }
-      .tut-tab-btn {
-        width: 100%;
-      }
-    }
-
-    @media (max-width: 767px) {
-      .tutorial-tabs {
-        display: flex;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-        flex-wrap: nowrap;
-        gap: 6px;
-      }
-      .tutorial-tabs::-webkit-scrollbar {
-        display: none;
-      }
-      .tut-tab-btn {
-        flex-shrink: 0;
-        white-space: nowrap;
-        padding: 8px 16px;
-        font-size: 0.85rem;
-      }
-      .tut-scroll-hint {
-        display: flex !important;
-      }
-    }
-
-    .tut-scroll-hint {
-      display: none;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 11px;
-      color: #64748b;
-      margin-bottom: 12px;
-      padding: 0 4px;
-    }
-
-  /* ============================================================
-   Phase 3 移动端落地补丁 · B = openwrtci.html (OpenWRT-CI, main:/docs)
-   注入位置：本文件最后一个 style 结束标签之前，新建【独立】块，
-             【必须】排在现有 @media (max-width:767px) 块（1438-1459）之后，
-             不要插进现有 @media (max-width:640px) 块（1381-1388）内部。
-   约束：全部规则包在 max-width:640px 内 -> >=641px 零影响（768 零改动）；
-         仅 640 / 360 两个宽度断点；纯 CSS，幂等，自包含。
-   注意：767 块排在 640 块之后会覆盖同名类，冲突选择器一律提高
-         特异性（如 .tutorial-tabs .tut-tab-btn / .container .stat-bar）。
-   ============================================================ */
-
-@media (max-width: 640px) {
-
-  /* ---- 1. 兜底与安全区（B 原 body 已有 overflow-x:hidden，此处显式保留） ---- */
-  body {
-    overflow-x: hidden;
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  /* ---- 2. 顶栏 56px / 隐藏 nav-links ---- */
-  .nav-inner { min-height: 56px !important; }
-  header .nav-links { display: none !important; }
-  #opacitySwitcher { display: none !important; }
-  .nav-actions { gap: 8px !important; }
-
-  /* ---- 3. 字号阶梯（Phase 1） ---- */
-  .hero-title, h1 {
-    font-size: clamp(26px, 7vw, 34px) !important;
-    line-height: 1.25 !important;
-  }
-  .section-title, h2 {
-    font-size: clamp(20px, 5.2vw, 24px) !important;
-    line-height: 1.3 !important;
-  }
-  h3, h4 {
-    font-size: clamp(16px, 4.2vw, 18px) !important;
-  }
-  .hero-desc, .section-desc {
-    font-size: clamp(14px, 3.8vw, 16px) !important;
-  }
-
-  /* ---- 4. 中文断行（弃 break-all，balance，隐藏标题硬 br） ---- */
-  h1, h2, h3 {
-    word-break: normal !important;
-    line-break: strict;
-    overflow-wrap: break-word;
-    text-wrap: balance;
-  }
-  /* 只隐藏标题内硬 br；教程正文里的 <br>（2617/2641/2642）保持不变 */
-  h1 br, h2 br { display: none !important; }
-  .nowrap { white-space: nowrap !important; }
-  p, li, td, th, span {
-    word-break: normal !important;
-    overflow-wrap: break-word;
-  }
-
-  /* ---- 5. 正文阅读宽度（min(32ch,100%) / 左对齐 / 1.6） ---- */
-  .hero-desc, .section-desc {
-    max-width: min(32ch, 100%) !important;
-    margin-left: 0 !important;
-    margin-right: auto !important;
-    text-align: left !important;
-    line-height: 1.6 !important;
-  }
-  .hero-badge {
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-    font-size: 12px !important;
-    line-height: 1.4 !important;
-    white-space: normal !important;
-  }
-
-  /* ---- 6. 首屏：CTA 2+1 网格（B 已有 .hero-cta 类，直接接管） ---- */
-  .hero-capsule .hero-cta {
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    align-items: stretch !important;
-    justify-content: stretch !important;
-    gap: 12px !important;
-    margin-bottom: 20px !important;
-  }
-  .hero-capsule .hero-cta > a {
-    min-width: 0 !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-    white-space: normal !important;
-    font-size: 14px !important;
-  }
-  .hero-capsule .hero-cta > a:first-child {
-    grid-column: 1 / -1 !important;
-    min-height: 48px !important;
-  }
-  .hero-capsule .hero-cta > a:not(:first-child) {
-    min-height: 44px !important;
-  }
-
-  /* ---- 7. 首屏：统计卡改单行横滚 + scroll-snap（提高特异性对抗 820 块） ---- */
-  .container .stat-bar {
-    display: flex !important;
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    overscroll-behavior-x: contain;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    gap: 12px !important;
-    max-width: 100%;
-    min-width: 0;
-    padding-bottom: 6px;
-    margin-bottom: 20px !important;
-  }
-  .container .stat-bar > .stat-card {
-    flex: 0 0 min(72vw, 260px) !important;
-    min-width: 0;
-    scroll-snap-align: start;
-    padding: 16px !important;
-  }
-
-  /* ---- 8. 筛选 chip 2 列网格（只命中直接含 .chip 的组） ---- */
-  .filter-group:has(> .chip) {
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 12px !important;
-  }
-  .filter-group:has(> .chip) > .chip {
-    min-width: 0 !important;
-    max-width: 100%;
-    box-sizing: border-box !important;
-    white-space: normal !important;
-    text-align: center;
-    line-height: 1.35;
-  }
-  .segmented-control .segment-btn {
-    white-space: normal !important;
-    font-size: 12px !important;
-    min-height: 44px !important;
-  }
-
-  /* ---- 9. 溢出与横向滚动容器 ---- */
-  div[style*="overflow-x:auto"],
-  div[class*="overflow-x-auto"] {
-    max-width: 100% !important;
-    min-width: 0;
-    overflow-x: auto !important;
-    overscroll-behavior-x: contain;
-  }
-  /* 横向 Tab：scroll-snap + 右侧渐隐提示。
-     底色用 background-color（非 background 简写），保证 background-image
-     渐隐提示不被擦除；提高特异性对抗 767px 块。 */
-  .tutorial-tabs {
-    scroll-snap-type: x proximity;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-x: contain;
-    max-width: 100%;
-    min-width: 0;
-    background-color: #f1f5f9 !important;
-    background-image: linear-gradient(90deg,
-        rgba(241, 245, 249, 0) calc(100% - 26px),
-        rgba(241, 245, 249, 0.96) 100%) !important;
-  }
-  .tutorial-tabs .tut-tab-btn {
-    scroll-snap-align: start;
-    min-height: 44px !important;
-    min-width: 44px !important;
-    max-width: 100%;
-    box-sizing: border-box !important;
-  }
-  .tut-scroll-hint {
-    font-size: 12px !important;
-    line-height: 1.4;
-  }
-  code, pre {
-    overflow-wrap: anywhere !important;
-    word-break: normal !important;
-    max-width: 100%;
-    box-sizing: border-box;
-  }
-  pre { white-space: pre-wrap !important; }
-
-  /* ---- 10. 触控目标 >=44px / 输入 16px / range 44px 热区 ---- */
-  .btn, .btn-sm, .btn-icon,
-  .chip,
-  .segment-btn,
-  .copy-btn,
-  .brand-logo,
-  .tutorial-tabs .tut-tab-btn,
-  .mobile-menu-btn,
-  .floating-btn,
-  a[href="#downloads"][class*="btn"],
-  footer a {
-    min-height: 44px !important;
-    min-width: 44px !important;
-    max-width: 100%;
-    box-sizing: border-box !important;
-    display: inline-flex !important;
-    align-items: center;
-    justify-content: center;
-  }
-  /* 句内纯文字链：inline 元素上 min-height 无效，用 padding 扩大热区；
-     不改 display，避免覆盖任何响应式 display:none。 */
-  a[class*="underline"]:not([class*="rounded"]),
-  a:not([class]) {
-    padding-top: 15px !important;
-    padding-bottom: 15px !important;
-    padding-left: 4px !important;
-    padding-right: 4px !important;
-    min-height: 44px !important;
-    min-width: 44px !important;
-    box-sizing: border-box !important;
-  }
-  input:not([type="range"]),
-  select,
-  textarea {
-    font-size: 16px !important;
-    min-height: 44px !important;
-    max-width: 100%;
-    box-sizing: border-box !important;
-  }
-  .search-input-box input { font-size: 16px !important; }
-  input[type="range"] {
-    min-height: 44px !important;
-    padding-top: 18px !important;
-    padding-bottom: 18px !important;
-    box-sizing: border-box !important;
-    background-clip: content-box !important;
-    -webkit-background-clip: content-box !important;
-    touch-action: pan-y;
-  }
-
-  /* ---- 11. <=10px 小字提到 12px（滑块刻度 / "4 Tabs"） ---- */
-  [style*="font-size:10px"],
-  [class*="text-[10px]"] {
-    font-size: 12px !important;
-  }
-
-  /* ---- 12. 卡片/区块间距（卡片 16 / 区块 20 / 组 12） ---- */
-  .hero-capsule { padding: 20px 16px !important; }
-  .fw-card, .device-card, .feat-card, .spec-item-card, .tut-content-box {
-    padding: 16px !important;
-  }
-
-  /* ---- 13. 毛玻璃 blur 12px ----
-     注意：刻意【不】覆盖 .md-card / .chip 的 background-color，
-     B 的 opacitySlider 通过 --md-sys-color-card / --md-sys-color-surface
-     变量动态调节透光度，此处加 !important 会打断该 JS；
-     背景相关一律只用 background-color 非简写（见 .tutorial-tabs）。 */
-  .md-card {
-    backdrop-filter: blur(12px) saturate(150%) !important;
-    -webkit-backdrop-filter: blur(12px) saturate(150%) !important;
-  }
-
-  /* ---- 14. 锚点 / 浮动工具避让 / a11y ---- */
-  #downloads {
-    scroll-margin-top: calc(64px + env(safe-area-inset-top));
-  }
-  .wallpaper-control-panel {
-    top: calc(68px + env(safe-area-inset-top)) !important;
-    max-height: calc(100dvh - 80px - env(safe-area-inset-top));
-    overflow-y: auto;
-  }
-  .toast-container {
-    bottom: calc(20px + env(safe-area-inset-bottom)) !important;
-  }
-  a:focus-visible,
-  button:focus-visible,
-  input:focus-visible,
-  select:focus-visible,
-  textarea:focus-visible,
-  [tabindex]:focus-visible {
-    outline: 2px solid #0284c7 !important;
-    outline-offset: 2px;
-  }
-}
-
-/* ---- 并列追加：降低动效（自带 640 条件，>=641 零影响） ---- */
-@media (max-width: 640px) and (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-/* ---- 并列追加：横屏隐藏浮动工具 ---- */
-@media (max-width: 640px) and (orientation: landscape) {
-  .wallpaper-control-panel,
-  .toast-container { display: none !important; }
-}
-
-/* ---- 最后并列追加：360 单列降级 ---- */
-@media (max-width: 360px) {
-  .hero-capsule .hero-cta {
-    grid-template-columns: 1fr !important;
-  }
-  .hero-capsule .hero-cta > a:first-child {
-    grid-column: auto !important;
-  }
-  .filter-group:has(> .chip) {
-    grid-template-columns: 1fr !important;
-  }
-  .container .stat-bar > .stat-card {
-    flex-basis: min(86vw, 260px) !important;
-  }
-}
-</style>
+  <link rel="stylesheet" href="assets/styles.css">
 </head>
-<body>
+<body data-overlay="standard">
+  <div class="bg-wallpaper-layer" aria-hidden="true"></div>
+  <div class="bg-overlay-layer" aria-hidden="true"></div>
 
-  <!-- 纯享壁纸退出提示 (Zen Mode) -->
-  <div id="zenExitHint" style="display:none; position:fixed; inset:0; z-index:999; align-items:center; justify-content:center; cursor:pointer; background:rgba(0,0,0,0.1); backdrop-filter:blur(1px);" onclick="toggleZenMode()">
-    <div style="background:rgba(255,255,255,0.92); padding:12px 24px; border-radius:30px; display:flex; align-items:center; gap:10px; font-size:14px; font-weight:600; color:#0f172a; box-shadow:0 20px 40px rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.9);">
-      <span style="width:10px; height:10px; border-radius:50%; background:#0284c7;"></span>
-      🖼️ 正在纯享高清壁纸 · 单击屏幕任意处或按 ESC 恢复
-    </div>
-  </div>
+  <button class="zen-exit-pill" id="zenExitBtn" type="button">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    退出纯享壁纸 (ESC)
+  </button>
 
-  <!-- 浮动壁纸控制面板 -->
-  <div id="wallpaperControlPanel" class="wallpaper-control-panel hidden">
-    <div style="display:flex; align-items:center; justify-content:space-between; padding-bottom:12px; margin-bottom:12px; border-bottom:1px solid rgba(226,232,240,0.8);">
-      <div style="display:flex; align-items:center; gap:8px; font-weight:700; font-size:14px; color:#0f172a;">
-        <span>🎛️</span>
-        <span>壁纸透视与毛玻璃调节</span>
-      </div>
-      <button id="closeWallpaperPanel" style="border:none; background:transparent; font-size:20px; color:#94a3b8; cursor:pointer; line-height:1; padding:2px;">&times;</button>
-    </div>
-    <div style="display:flex; flex-direction:column; gap:14px;">
-      <div>
-        <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#475569; margin-bottom:6px;">
-          <span>卡片透光度 (壁纸可见度)</span>
-          <span id="opacityValLabel" style="font-family:monospace; color:#0284c7; font-weight:700;">68%</span>
-        </div>
-        <input type="range" id="opacitySlider" min="40" max="96" value="68" style="width:100%; height:6px; accent-color:#0284c7; cursor:pointer;">
-        <div style="display:flex; justify-content:space-between; font-size:10px; color:#94a3b8; margin-top:4px;">
-          <span>超通透 (40%)</span>
-          <span>磨砂 (68%)</span>
-          <span>实白 (96%)</span>
-        </div>
-      </div>
-      <div>
-        <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#475569; margin-bottom:6px;">
-          <span>背景微虚化 (景深感)</span>
-          <span id="blurValLabel" style="font-family:monospace; color:#0284c7; font-weight:700;">0 px</span>
-        </div>
-        <input type="range" id="blurSlider" min="0" max="10" value="0" step="1" style="width:100%; height:6px; accent-color:#0284c7; cursor:pointer;">
-      </div>
-      
-        <!-- 两种精美壁纸切换与随机按钮 -->
-        <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; font-weight:600; color:#64748b;">
-            <span>随机/指定壁纸</span>
-            <span id="currentWallpaperLabel" style="color:#0284c7; font-weight:700;">二次元主视觉</span>
-          </div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-            <button type="button" onclick="switchWallpaper(0)" id="wpBtn0" style="padding:7px 10px; border-radius:10px; border:1px solid #cbd5e1; background:#ffffff; font-size:11px; font-weight:700; color:#0f172a; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px; box-shadow:0 2px 5px rgba(0,0,0,0.05); transition:all 0.2s;">
-              <span>🌸</span> 二次元视觉
-            </button>
-            <button type="button" onclick="switchWallpaper(1)" id="wpBtn1" style="padding:7px 10px; border-radius:10px; border:1px solid #cbd5e1; background:#ffffff; font-size:11px; font-weight:700; color:#0f172a; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px; box-shadow:0 2px 5px rgba(0,0,0,0.05); transition:all 0.2s;">
-              <span>🌊</span> 经典蔚蓝
-            </button>
-          </div>
-          <button type="button" onclick="switchWallpaper()" style="width:100%; padding:7px 10px; border-radius:10px; border:1px solid #e2e8f0; background:#f8fafc; font-size:11px; font-weight:600; color:#475569; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:all 0.2s;">
-            <span>🎲</span> 随机换另一张壁纸
-          </button>
-        </div>
-
-        <button onclick="toggleZenMode()" style="width:100%; padding:10px; border-radius:12px; background:linear-gradient(135deg, #0284c7, #6366f1); border:none; color:#ffffff; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 4px 12px rgba(2,132,199,0.25);">
-        <span>🖼️</span> 一键纯享全屏壁纸
-      </button>
-    </div>
-  </div>
-
-
-  <!-- Fixed Wallpaper Layers -->
-  <div class="bg-wallpaper-layer"></div>
-  <div class="bg-overlay-layer"></div>
-
-  <!-- Toast Notification Container -->
-  <div class="toast-container" id="toastContainer"></div>
-
-  <!-- Immersion Mode Exit Banner -->
-  <div class="immersive-exit-tip" id="exitImmersiveTip" onclick="toggleImmersiveMode(false)" style="display:none; position:fixed; top:2rem; left:50%; transform:translateX(-50%); z-index:99999; background:rgba(15,23,42,0.88); color:#fff; padding:0.65rem 1.6rem; border-radius:var(--radius-full); font-weight:700; font-size:0.9rem; backdrop-filter:blur(16px); cursor:pointer; box-shadow:0 10px 30px rgba(0,0,0,0.35); align-items:center; gap:0.6rem; border:1px solid rgba(255,255,255,0.2);">
-    <span>✨ 点击屏幕任意处退出壁纸欣赏模式</span>
-  </div>
-
-  <!-- Header -->
-  <header>
+  <header class="site-header">
     <div class="container nav-inner">
       <a href="#" class="brand-logo">
-        <div class="logo-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-            <rect width="20" height="8" x="2" y="14" rx="2"/>
-            <path d="M6 18h.01"/><path d="M10 18h.01"/>
-            <path d="M15 10v4"/><path d="M17.8 7.2a6 6 0 0 0-7.6 0"/><path d="M20.6 4.4a10 10 0 0 0-13.2 0"/>
-          </svg>
-        </div>
-        <div class="brand-text">
-          OpenWRT-CI <span>PRO</span>
-        </div>
+        <span class="logo-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 18h.01M10 18h.01M15 10v4"/></svg>
+        </span>
+        <span>OpenWRT-CI</span>
+        <span class="brand-badge">PRO</span>
       </a>
 
-      <ul class="nav-links">
-        <li><a href="#downloads">固件下载</a></li>
-        <li><a href="#devices">机型硬件</a></li>
-        <li><a href="#features">方案特性</a></li>
-        <li><a href="#defaults">出厂参数</a></li>
-        <li><a href="#tutorials">刷机指引</a></li>
-      </ul>
+      <nav class="nav-links" id="navLinks">
+        <a href="#downloads">固件下载</a>
+        <a href="#devices">机型硬件</a>
+        <a href="#features">方案特性</a>
+        <a href="#defaults">出厂参数</a>
+        <a href="#tutorials">刷机指引</a>
+      </nav>
 
       <div class="nav-actions">
-
-        <!-- 壁纸控制开关 -->
-        <button class="btn btn-secondary btn-sm" id="toggleWallpaperMenu" title="调节壁纸透度与毛玻璃">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
-          <span class="hidden-xs">透视</span>
+        <button class="btn btn-ghost btn-sm" id="wallpaperToggleBtn" type="button" title="壁纸与白色主题设置">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+          <span>壁纸</span>
         </button>
 
-        <!-- Wallpaper Translucency Selector -->
-        <div class="segmented-control" id="opacitySwitcher" style="box-shadow:var(--elevation-1);" title="调节卡片毛玻璃透光度">
-          <button class="segment-btn" data-opacity="48">水漾 48%</button>
-          <button class="segment-btn active" data-opacity="65">经典磨砂 65%</button>
-          <button class="segment-btn" data-opacity="82">微透 82%</button>
-        </div>
-
-        <!-- Fullscreen Wallpaper View Button -->
-        <button class="btn btn-secondary btn-sm" id="viewWallpaperBtn" title="隐藏卡片欣赏高清原画">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-          <span>赏壁纸</span>
-        </button>
-
-        <!-- GitHub Repo Link -->
-        <a href="https://github.com/LianXia233/OpenWRT-CI" target="_blank" class="btn btn-secondary btn-sm">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-          </svg>
+        <a href="https://github.com/LianXia233/OpenWRT-CI" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
           <span>GitHub</span>
         </a>
+
+        <button class="btn btn-ghost btn-icon mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="展开菜单">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+        </button>
+
+        <div class="wallpaper-panel" id="wallpaperPanel">
+          <div class="wp-panel-head">
+            <span>壁纸与白色主题</span>
+            <button class="btn btn-ghost btn-sm" id="zenModeBtn" type="button">纯享壁纸</button>
+          </div>
+          <div class="wp-section-label"><span>背景壁纸</span></div>
+          <div class="wp-thumbs">
+            <button class="wp-thumb-btn" data-wp-index="0" type="button" title="壁纸 1">
+              <img src="https://files.seeusercontent.com/2026/10/31/aE1a/145952531_p1.jpg" alt="壁纸 1" loading="lazy">
+            </button>
+            <button class="wp-thumb-btn" data-wp-index="1" type="button" title="壁纸 2">
+              <img src="https://files.seeusercontent.com/2026/06/29/uu4H/bg1.jpg" alt="壁纸 2" loading="lazy">
+            </button>
+          </div>
+          <div class="wp-section-label"><span>白底通透预设</span></div>
+          <div class="wp-mode-pills">
+            <button class="wp-mode-btn active" data-overlay-mode="standard" type="button">标准轻透</button>
+            <button class="wp-mode-btn" data-overlay-mode="clear" type="button">极简纯白</button>
+            <button class="wp-mode-btn" data-overlay-mode="vibrant" type="button">沉浸透视</button>
+          </div>
+          <div class="wp-section-label"><span>壁纸虚化</span><span id="blurValLabel">3px</span></div>
+          <input class="wp-range" id="blurSlider" type="range" min="0" max="16" value="3">
+          <div class="wp-section-label"><span>卡片白底不透明度</span><span id="alphaValLabel">86%</span></div>
+          <input class="wp-range" id="alphaSlider" type="range" min="60" max="98" value="86">
+        </div>
       </div>
     </div>
   </header>
 
-  <main class="main-content-flow">
-
-  <!-- Hero Section -->
-  <section class="hero-section">
-    <div class="container">
-      <div class="hero-capsule md-card">
-        <div class="hero-badge">
-          <span class="pulse-dot"></span>
-          GitHub Actions 全自动云端流水线 · 每日定时编译
-        </div>
-
-        <h1 class="hero-title">
-          <span class="nowrap">高性能</span> <span class="nowrap">5G CPE</span> & <span class="nowrap">软路由</span><br>
-          <span class="gradient-text">OpenWRT <span class="nowrap">定制固件</span><span class="nowrap">云端工坊</span></span>
-        </h1>
-
-        <p class="hero-desc">
-          基于 <strong>ImmortalWrt</strong> 深度优化定制。深度适配 <strong>Hiveton H5000M 5G CPE</strong>（WiFi 7）、<strong>AirPi AP3000M</strong>（WiFi 6 射频自愈）与通用 <strong>X86_64</strong> 架构。预装 NetWiz 智能向导、多网络调度、PWM 阶梯温控、硬件加解密隧道加速。
-        </p>
-
-        <div class="hero-cta">
-          <a href="#downloads" class="btn btn-primary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
-            </svg>
-            立即筛选下载固件
-          </a>
-          <a href="#defaults" class="btn btn-secondary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-            默认参数速查
-          </a>
-          <a href="#tutorials" class="btn btn-secondary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-            </svg>
-            刷机与救砖教程
-          </a>
-        </div>
-      </div>
-
-      <!-- Quick Stats -->
-      <div class="stat-bar">
-        <div class="stat-card md-card">
-          <div class="stat-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+  <main class="main-content">
+    <section class="hero-section">
+      <div class="container">
+        <div class="hero-card glass-card">
+          <div class="hero-eyebrow">
+            <span>ImmortalWrt 24.10 · GitHub Actions 每日云编译</span>
           </div>
-          <div class="stat-info">
-            <h4>MediaTek Filogic</h4>
-            <p>MT7986 / MT7981B & X86</p>
+          <h1 class="hero-title">
+            高性能 5G CPE &amp; 软路由<br>
+            <span class="gradient-text">OpenWRT 定制固件云端工坊</span>
+          </h1>
+          <p class="hero-subtitle">
+            专为 Hiveton H5000M 5G CPE、AirPi AP3000M Wi-Fi 6 路由器与 X86_64 软路由深度定制。
+            内置 NetWiz 网络向导、MT5700 / FM350-GL 5G 模组驱动、PWM 智能温控与多网络无缝切换。
+          </p>
+          <div class="hero-cta">
+            <a href="#downloads" class="btn btn-primary">立即筛选下载固件</a>
+            <a href="#defaults" class="btn btn-secondary">默认参数速查</a>
+            <a href="#tutorials" class="btn btn-secondary">刷机与救砖教程</a>
           </div>
         </div>
 
-        <div class="stat-card md-card">
-          <div class="stat-icon" style="color:var(--md-sys-color-secondary); background:#ecfdf5; box-shadow: inset 0 0 0 1px rgba(5, 150, 105, 0.15);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>
+        <div class="stat-bar">
+          <div class="stat-card glass-card">
+            <div class="stat-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h10v10H7z"/></svg>
+            </div>
+            <div class="stat-info">
+              <h4>MediaTek Filogic</h4>
+              <p>MT7986 / MT7981B &amp; X86</p>
+            </div>
           </div>
-          <div class="stat-info">
-            <h4>WiFi 7 / WiFi 6</h4>
-            <p>160MHz 满血无线频宽</p>
+          <div class="stat-card glass-card">
+            <div class="stat-icon" style="background:var(--emerald-soft); color:var(--emerald);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>
+            </div>
+            <div class="stat-info">
+              <h4>WiFi 7 / WiFi 6</h4>
+              <p>160MHz 满血无线频宽</p>
+            </div>
           </div>
-        </div>
-
-        <div class="stat-card md-card">
-          <div class="stat-icon" style="color:var(--md-sys-color-tertiary); background:#eef2ff; box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.15);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h10v10H7z"/><path d="M10 10h4v4h-4z"/></svg>
+          <div class="stat-card glass-card">
+            <div class="stat-icon" style="background:var(--indigo-soft); color:var(--indigo);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>
+            </div>
+            <div class="stat-info">
+              <h4>5G 模组原生加速</h4>
+              <p>MT5700 / FM350-GL 拨号</p>
+            </div>
           </div>
-          <div class="stat-info">
-            <h4>5G 模组原生加速</h4>
-            <p>MT5700 / FM350-GL 拨号</p>
-          </div>
-        </div>
-
-        <div class="stat-card md-card">
-          <div class="stat-icon" style="color:#d97706; background:#fffbeb; box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.15);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-          </div>
-          <div class="stat-info">
-            <h4>NetWiz 智能向导</h4>
-            <p>三层守护自愈看门狗体系</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Firmware Download Hub -->
-  <section class="download-hub" id="downloads">
-    <div class="container">
-      <div class="section-header">
-        <span class="section-tag">FIRMWARE RELEASES</span>
-        <h2 class="section-title">固件下载矩阵中心</h2>
-        <p class="section-desc">
-          所有固件按产品与变体方案精准归类，文件名统一为「机型-模组插件-编译日期-固件类型」。直连本仓库 GitHub Releases，提供实时动态更新与高速下载节点。
-        </p>
-      </div>
-
-      <!-- Filter Panel -->
-      <div class="filter-panel md-card">
-        <!-- Row 1: Device Filter -->
-        <div class="filter-row">
-          <div class="filter-group">
-            <span class="filter-label">硬件机型：</span>
-            <button class="chip active" data-filter-type="device" data-value="ALL">全部机型 (All)</button>
-            <button class="chip" data-filter-type="device" data-value="H5000M">Hiveton H5000M (WiFi 7)</button>
-            <button class="chip" data-filter-type="device" data-value="AP3000M">AirPi AP3000M (WiFi 6)</button>
-            <button class="chip" data-filter-type="device" data-value="X86">X86_64 软路由/工控机</button>
-          </div>
-
-          <!-- Search Input -->
-          <div class="search-input-box">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input type="text" id="searchInput" placeholder="搜索机型、模组插件、编译日期、文件名...">
-          </div>
-        </div>
-
-        <!-- Row 2: Variant & Format Filter -->
-        <div class="filter-row">
-          <div class="filter-group">
-            <span class="filter-label">模组/方案：</span>
-            <button class="chip active" data-filter-type="variant" data-value="ALL">全部方案</button>
-            <button class="chip" data-filter-type="variant" data-value="NETWIZ">🌟 NetWiz 向导家族 (力荐)</button>
-            <button class="chip" data-filter-type="variant" data-value="MT5700">⚡ MT5700 方案 (Rust轻量)</button>
-            <button class="chip" data-filter-type="variant" data-value="MT5700M">MT5700M 方案 A</button>
-            <button class="chip" data-filter-type="variant" data-value="FM350">📡 FM350-GL 变体</button>
-            <button class="chip" data-filter-type="variant" data-value="SELFUSE">自用配置 (SelfUse)</button>
-            <button class="chip" data-filter-type="variant" data-value="BASE">🔧 基础母配置</button>
-          </div>
-
-          <div class="filter-group">
-            <span class="filter-label">刷写类型：</span>
-            <button class="chip active" data-filter-type="format" data-value="ALL">全部</button>
-            <button class="chip" data-filter-type="format" data-value="sysupgrade">Sysupgrade (系统升级)</button>
-            <button class="chip" data-filter-type="format" data-value="factory">Factory (出厂直刷)</button>
-            <button class="chip" data-filter-type="format" data-value="x86-img">EFI / GRUB (X86镜像)</button>
-          </div>
-        </div>
-
-        <!-- Hub Meta Bar -->
-        <div class="hub-meta-bar">
-          <div class="status-indicator-box">
-            <span class="pulse-dot"></span>
-            <span id="releaseStatusText">GitHub API 实时链接准备中...</span>
-            <button class="btn btn-secondary btn-sm" id="refreshBtn" title="刷新最新发布">
-              <svg id="refreshIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
-              <span>实时刷新</span>
-            </button>
-          </div>
-
-          <!-- Acceleration switch including gh.acg2.mom -->
-          <div class="acceleration-box">
-            <span class="accel-title">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--md-sys-color-primary)" stroke-width="2.3"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              加速源：
-            </span>
-            <div class="segmented-control" id="proxySwitcher">
-              <button class="segment-btn active" data-proxy="acg2">gh.acg2.mom (推荐)</button>
-              <button class="segment-btn" data-proxy="ghproxy">GHProxy</button>
-              <button class="segment-btn" data-proxy="none">GitHub 直连</button>
+          <div class="stat-card glass-card">
+            <div class="stat-icon" style="background:var(--amber-soft); color:var(--amber);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <div class="stat-info">
+              <h4>NetWiz 智能向导</h4>
+              <p>三层守护自愈看门狗体系</p>
             </div>
           </div>
         </div>
       </div>
+    </section>
 
-      <!-- Firmware Cards Grid -->
-      <div class="firmware-grid" id="firmwareContainer">
-        <!-- Injected via JavaScript -->
-      </div>
-    </div>
-  </section>
-
-  <!-- Hardware Showcase -->
-  <section class="device-showcase" id="devices">
-    <div class="container">
-      <div class="section-header">
-        <span class="section-tag">HARDWARE PLATFORMS</span>
-        <h2 class="section-title">三大适配硬件平台剖析</h2>
-        <p class="section-desc">
-          针对 MediaTek Filogic SoC 架构特性与 x86_64 硬件深度优化，榨干每一寸硬件算力。
-        </p>
-      </div>
-
-      <div class="device-grid">
-        <!-- H5000M -->
-        <div class="device-card md-card">
-          <div class="device-badge-row">
-            <span class="fw-badge fw-badge-mt">5G CPE 旗舰</span>
-            <span style="font-size:0.8rem; color:#64748b; font-weight:600;">WiFi 7 BE160</span>
-          </div>
-          <h3 class="device-name">Hiveton H5000M</h3>
-          <div class="device-soc">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h10v10H7z"/></svg>
-            MediaTek Filogic 830 (MT7986A · 4x A53 @ 2.0GHz)
-          </div>
-          <ul class="device-specs-list">
-            <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              <span><strong>无线规格</strong>：2.4G <code>BE 40MHz</code> + 5G <code>BE 160MHz</code> 同步 802.11be WiFi 7，吞吐跑满</span>
-            </li>
-            <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              <span><strong>5G 模组适配</strong>：原生 M.2 扩展槽，完美支持 MT5700 / FM350-GL 高速拨号</span>
-            </li>
-            <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              <span><strong>双温区智能温控</strong>：CPU + 5G 模组独立温感探针，PWM 阶梯曲线智能静音调速</span>
-            </li>
-            <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              <span><strong>轻量 NAS 引擎</strong>：NVMe 高速固态挂载，支持 BTRFS 文件系统与 Samba4 共享</span>
-            </li>
-          </ul>
-          <a href="#downloads" onclick="filterByDevice('H5000M')" class="btn btn-secondary btn-sm" style="width:100%;">查看 H5000M 全部固件 →</a>
-        </div>
-
-        <!-- AP3000M -->
-        <div class="device-card md-card">
-          <div class="device-badge-row">
-            <span class="fw-badge fw-badge-netwiz">双频 WiFi 6 路由</span>
-            <span style="font-size:0.8rem; color:#64748b; font-weight:600;">独家射频自愈</span>
-          </div>
-          <h3 class="device-name">AirPi AP3000M</h3>
-          <div class="device-soc">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h10v10H7z"/></svg>
-            MediaTek Filogic 820 (MT7981B · 2x A53 @ 1.3GHz)
-          </div>
-          <ul class="device-specs-list">
-            <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              <span><strong>独家射频救砖</strong>：出厂 factory 分区为空时，<strong>首次启动自动注入</strong> 28~29 dBm 满功率 EEPROM</span>
-            </li>
-            <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              <span><strong>无线性能</strong>：2.4G <code>AX 40MHz</code> + 5G <code>AX 160MHz</code>，告别无线断流虚弱</span>
-            </li>
-            <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              <span><strong>Rust 独立温控</strong>：内置 musl 静态二进制 <code>airpi-fanctl</code>，零依赖极速温控</span>
-            </li>
-            <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              <span><strong>向导网络支持</strong>：支持 NetWiz 全套向导与多网络切换容灾</span>
-            </li>
-          </ul>
-          <a href="#downloads" onclick="filterByDevice('AP3000M')" class="btn btn-secondary btn-sm" style="width:100%;">查看 AP3000M 全部固件 →</a>
-        </div>
-
-        <!-- X86_64 -->
-        <div class="device-card md-card">
-          <div class="device-badge-row">
-            <span class="fw-badge fw-badge-base">通用软路由</span>
-            <span style="font-size:0.8rem; color:#64748b; font-weight:600;">Docker + 虚拟化</span>
-          </div>
-          <h3 class="device-name">X86_64 通用架构</h3>
-          <div class="device-soc">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h10v10H7z"/></svg>
-            Intel / AMD 全系处理器 (N100 / J4125 / Core 等)
-          </div>
-          <ul class="device-specs-list">
-            <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              <span><strong>容器化扩展</strong>：内置 Docker 引擎与 <code>luci-app-dockerman</code>，应用一键部署</span>
-            </li>
-            <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              <span><strong>多网卡驱动支持</strong>：Intel I225/I226 2.5G 网卡、Realtek 8125 等全系网卡免驱</span>
-            </li>
-            <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              <span><strong>虚拟化镜像齐备</strong>：支持 EFI、GRUB、ISO 安装盘以及 PVE/ESXi 直刷 VMDK 镜像</span>
-            </li>
-            <li>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              <span><strong>内核加速</strong>：<code>kmod-cryptodev</code> 硬件加解密加速，AES 加解密吞吐飙升</span>
-            </li>
-          </ul>
-          <a href="#downloads" onclick="filterByDevice('X86')" class="btn btn-secondary btn-sm" style="width:100%;">查看 X86_64 全部固件 →</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Core Features -->
-  <section class="features-section" id="features">
-    <div class="container">
-      <div class="section-header">
-        <span class="section-tag">CORE ARCHITECTURE</span>
-        <h2 class="section-title">核心系统方案与插件矩阵</h2>
-        <p class="section-desc">
-          精细化功能分层设计，确保不同使用场景下的极致稳定性与拓展能力。
-        </p>
-      </div>
-
-      <div class="feature-columns">
-        <!-- Feat 1 -->
-        <div class="feat-card md-card">
-          <div class="feat-icon-bubble">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </div>
-          <h3>NetWiz 网络向导与三层守护</h3>
-          <p>
-            新手友好的一站式配网流程。内置 <code>netwiz-monitor</code> 周期巡检、<code>netwiz-recovery</code> 智能自愈与 <code>netwiz-watchdog</code> 看门狗守护。断网、误删基础组件时自动触发离线保险箱自愈。
+    <section class="section-block" id="downloads">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-tag">FIRMWARE RELEASES</span>
+          <h2 class="section-title">固件下载矩阵中心</h2>
+          <p class="section-desc">
+            所有固件按机型与方案精准归类，直连本仓库 GitHub Releases，支持多加速源切换与 SHA256 校验下载。
           </p>
         </div>
 
-        <!-- Feat 2 -->
-        <div class="feat-card md-card">
-          <div class="feat-icon-bubble" style="color:var(--md-sys-color-secondary); background:var(--md-sys-color-secondary-container);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>
+        <div class="filter-panel glass-card">
+          <div class="filter-row">
+            <div class="filter-group">
+              <span class="filter-label">硬件机型：</span>
+              <button class="chip active" data-filter-type="device" data-value="ALL" type="button">全部机型</button>
+              <button class="chip" data-filter-type="device" data-value="H5000M" type="button">Hiveton H5000M (WiFi 7)</button>
+              <button class="chip" data-filter-type="device" data-value="AP3000M" type="button">AirPi AP3000M (WiFi 6)</button>
+              <button class="chip" data-filter-type="device" data-value="X86" type="button">X86_64 软路由</button>
+            </div>
+            <div class="search-input-box">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" id="searchInput" placeholder="搜索机型、模组插件、日期、文件名...">
+            </div>
           </div>
-          <h3>5G 模组控制 (MT5700 / FM350)</h3>
-          <p>
-            方案 B (<code>MT5700</code>) 基于 Rust musl 静态二进制后端，轻量不占内存；FM350 采用纯净 RNDIS 数据通道无内核冲突。支持实时 5G 信号（RSRP/RSRQ/SINR）、锁频锁小区与高速拨号。
-          </p>
+
+          <div class="filter-row">
+            <div class="filter-group">
+              <span class="filter-label">模组/方案：</span>
+              <button class="chip active" data-filter-type="variant" data-value="ALL" type="button">全部方案</button>
+              <button class="chip" data-filter-type="variant" data-value="NETWIZ" type="button">NetWiz 向导 (力荐)</button>
+              <button class="chip" data-filter-type="variant" data-value="MT5700" type="button">MT5700 (Rust轻量)</button>
+              <button class="chip" data-filter-type="variant" data-value="MT5700M" type="button">MT5700M 方案A</button>
+              <button class="chip" data-filter-type="variant" data-value="FM350" type="button">FM350-GL 变体</button>
+              <button class="chip" data-filter-type="variant" data-value="SELFUSE" type="button">自用 (SelfUse)</button>
+              <button class="chip" data-filter-type="variant" data-value="BASE" type="button">基础母配置</button>
+            </div>
+            <div class="filter-group">
+              <span class="filter-label">刷写类型：</span>
+              <button class="chip active" data-filter-type="format" data-value="ALL" type="button">全部</button>
+              <button class="chip" data-filter-type="format" data-value="sysupgrade" type="button">Sysupgrade</button>
+              <button class="chip" data-filter-type="format" data-value="factory" type="button">Factory</button>
+              <button class="chip" data-filter-type="format" data-value="x86-img" type="button">X86 镜像</button>
+            </div>
+          </div>
+
+          <div class="hub-meta-bar">
+            <div class="status-indicator-box">
+              <span class="pulse-dot"></span>
+              <span id="releaseStatusText">GitHub API 实时链接准备中...</span>
+              <button class="btn btn-secondary btn-sm" id="refreshBtn" type="button">
+                <svg id="refreshIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                <span>实时刷新</span>
+              </button>
+            </div>
+            <div class="acceleration-box">
+              <span class="accel-title">加速源：</span>
+              <div class="segmented-control" id="proxySwitcher">
+                <button class="segment-btn active" data-proxy="acg2" type="button">gh.acg2.mom (推荐)</button>
+                <button class="segment-btn" data-proxy="ghproxy" type="button">GHProxy</button>
+                <button class="segment-btn" data-proxy="none" type="button">GitHub 直连</button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Feat 3 -->
-        <div class="feat-card md-card">
-          <div class="feat-icon-bubble" style="color:var(--md-sys-color-tertiary); background:var(--md-sys-color-tertiary-container);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
-          </div>
-          <h3>多网络智能切换 (NetMode)</h3>
-          <p>
-            内置 <code>luci-app-h5000m-netmode</code>。支持「仅 5G 蜂窝」「仅 WAN 有线」「双链路负载均衡 / 主备毫秒级切流」。联动 mwan3 探针，遇到主线路网络故障瞬间切流，不断网。
-          </p>
+        <div class="firmware-grid" id="firmwareContainer"></div>
+      </div>
+    </section>
+
+    <section class="section-block" id="devices">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-tag">HARDWARE PLATFORMS</span>
+          <h2 class="section-title">三大适配硬件平台剖析</h2>
+          <p class="section-desc">针对 MediaTek Filogic SoC 架构特性与 x86_64 硬件深度优化，榨干每一寸硬件算力。</p>
         </div>
 
-        <!-- Feat 4 -->
-        <div class="feat-card md-card">
-          <div class="feat-icon-bubble" style="color:#d97706; background:#fef3c7;">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        <div class="grid-3">
+          <div class="device-card glass-card glass-card-interactive">
+            <div class="device-badge-row">
+              <span class="fw-badge fw-badge-mt">5G CPE 旗舰</span>
+              <span style="font-size:0.8rem; color:var(--text-muted); font-weight:700;">WiFi 7 BE160</span>
+            </div>
+            <h3 class="device-name">Hiveton H5000M</h3>
+            <div class="device-soc">MediaTek Filogic 830 (MT7986A · 4x A53 @ 2.0GHz)</div>
+            <ul class="device-specs-list">
+              <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span><strong>无线规格</strong>：2.4G <code>BE 40MHz</code> + 5G <code>BE 160MHz</code> 802.11be WiFi 7</span></li>
+              <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span><strong>5G 模组适配</strong>：原生 M.2 扩展槽，支持 MT5700 / FM350-GL 高速拨号</span></li>
+              <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span><strong>双温区智能温控</strong>：CPU + 5G 模组独立温感，PWM 阶梯静音调速</span></li>
+              <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span><strong>轻量 NAS 引擎</strong>：NVMe 固态挂载，支持 BTRFS 与 Samba4 共享</span></li>
+            </ul>
+            <a href="#downloads" onclick="window.appFilterByDevice('H5000M')" class="btn btn-secondary btn-sm" style="margin-top:auto;">查看 H5000M 全部固件 →</a>
           </div>
-          <h3>硬件加解密与零配置组网</h3>
-          <p>
-            内核级预置 <code>kmod-cryptodev</code> 与 <code>kmod-tls</code>，代理隧道直接跑在芯片硬件加速引擎上。同时集成 Tailscale 与 EasyTier，即使无公网 IP 也能实现高速安全的异地内网穿透。
-          </p>
+
+          <div class="device-card glass-card glass-card-interactive">
+            <div class="device-badge-row">
+              <span class="fw-badge fw-badge-netwiz">双频 WiFi 6 路由</span>
+              <span style="font-size:0.8rem; color:var(--text-muted); font-weight:700;">独家射频自愈</span>
+            </div>
+            <h3 class="device-name">AirPi AP3000M</h3>
+            <div class="device-soc">MediaTek Filogic 820 (MT7981B · 2x A53 @ 1.3GHz)</div>
+            <ul class="device-specs-list">
+              <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span><strong>独家射频救砖</strong>：factory 分区为空时首次启动自动注入 28~29 dBm EEPROM</span></li>
+              <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span><strong>无线性能</strong>：2.4G <code>AX 40MHz</code> + 5G <code>AX 160MHz</code>，稳定不虚弱</span></li>
+              <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span><strong>Rust 独立温控</strong>：内置 musl 静态二进制 <code>airpi-fanctl</code></span></li>
+              <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span><strong>向导网络支持</strong>：支持 NetWiz 全套向导与多网络切换容灾</span></li>
+            </ul>
+            <a href="#downloads" onclick="window.appFilterByDevice('AP3000M')" class="btn btn-secondary btn-sm" style="margin-top:auto;">查看 AP3000M 全部固件 →</a>
+          </div>
+
+          <div class="device-card glass-card glass-card-interactive">
+            <div class="device-badge-row">
+              <span class="fw-badge fw-badge-base">通用软路由</span>
+              <span style="font-size:0.8rem; color:var(--text-muted); font-weight:700;">Docker + 虚拟化</span>
+            </div>
+            <h3 class="device-name">X86_64 通用架构</h3>
+            <div class="device-soc">Intel / AMD 全系处理器 (N100 / J4125 / Core 等)</div>
+            <ul class="device-specs-list">
+              <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span><strong>容器化扩展</strong>：内置 Docker 引擎与 <code>luci-app-dockerman</code></span></li>
+              <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span><strong>多网卡免驱</strong>：Intel I225/I226 2.5G、Realtek 8125 等全系支持</span></li>
+              <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span><strong>虚拟化镜像齐备</strong>：支持 EFI、GRUB、ISO 及 PVE/ESXi 直刷 VMDK</span></li>
+              <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span><strong>内核加速</strong>：<code>kmod-cryptodev</code> 硬件加解密加速</span></li>
+            </ul>
+            <a href="#downloads" onclick="window.appFilterByDevice('X86')" class="btn btn-secondary btn-sm" style="margin-top:auto;">查看 X86_64 全部固件 →</a>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Default Parameters Quick Reference -->
-  <section class="specs-table-wrapper" id="defaults">
-    <div class="container">
-      <div class="section-header">
-        <span class="section-tag">FACTORY DEFAULTS</span>
-        <h2 class="section-title">固件默认出厂配置速查</h2>
-        <p class="section-desc">
-          所有出厂默认值统一写入 <code>Config/Defaults.txt</code>，首次刷机开机即用，支持一键复制。
-        </p>
-      </div>
-
-      <div class="specs-grid">
-        <!-- Spec 1: IP -->
-        <div class="spec-item-card md-card">
-          <span class="spec-label">管理后台 Web 地址</span>
-          <div class="spec-val-box">
-            <span class="spec-value">192.168.10.1</span>
-            <button class="copy-btn" onclick="copyText('192.168.10.1', '后台管理地址')" title="复制">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-            </button>
-          </div>
-          <div class="spec-note"><a href="http://192.168.10.1" target="_blank" style="color:var(--md-sys-color-primary); font-weight:600; text-decoration:underline;">http://192.168.10.1 ↗</a></div>
+    <section class="section-block" id="features">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-tag">CORE ARCHITECTURE</span>
+          <h2 class="section-title">核心系统方案与插件矩阵</h2>
+          <p class="section-desc">精细化功能分层设计，确保不同使用场景下的极致稳定性与拓展能力。</p>
         </div>
 
-        <!-- Spec 2: Password -->
-        <div class="spec-item-card md-card">
-          <span class="spec-label">默认管理员密码</span>
-          <div class="spec-val-box">
-            <span class="spec-value" style="color:var(--md-sys-color-secondary);">无 (初次开机免密)</span>
+        <div class="grid-2">
+          <div class="feat-card glass-card">
+            <div class="feat-icon-bubble">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <h3>NetWiz 网络向导与三层守护</h3>
+            <p>内置 <code>netwiz-monitor</code> 周期巡检、<code>netwiz-recovery</code> 智能自愈与 <code>netwiz-watchdog</code> 看门狗守护。断网或误删基础组件时自动触发离线保险箱自愈。</p>
           </div>
-          <div class="spec-note">用户名为 <code>root</code>，直接点击登录即可</div>
-        </div>
-
-        <!-- Spec 3: Hostname -->
-        <div class="spec-item-card md-card">
-          <span class="spec-label">系统主机名 (Hostname)</span>
-          <div class="spec-val-box">
-            <span class="spec-value">OWRT</span>
-            <button class="copy-btn" onclick="copyText('OWRT', '主机名')" title="复制">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-            </button>
+          <div class="feat-card glass-card">
+            <div class="feat-icon-bubble" style="background:var(--emerald-soft); color:var(--emerald);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>
+            </div>
+            <h3>5G 模组控制 (MT5700 / FM350)</h3>
+            <p>方案 B (<code>MT5700</code>) 基于 Rust musl 静态二进制后端；FM350 采用纯净 RNDIS 数据通道无内核冲突。支持实时 RSRP/RSRQ/SINR 监控、锁频锁小区与高速拨号。</p>
           </div>
-          <div class="spec-note">内网网络标识：<code>owrt.lan</code></div>
-        </div>
-
-        <!-- Spec 4: Wi-Fi SSID -->
-        <div class="spec-item-card md-card">
-          <span class="spec-label">默认 Wi-Fi 名称 (SSID)</span>
-          <div class="spec-val-box">
-            <span class="spec-value">OWRT</span>
-            <button class="copy-btn" onclick="copyText('OWRT', 'Wi-Fi 名称')" title="复制">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-            </button>
+          <div class="feat-card glass-card">
+            <div class="feat-icon-bubble" style="background:var(--indigo-soft); color:var(--indigo);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+            </div>
+            <h3>多网络智能切换 (NetMode)</h3>
+            <p>内置 <code>luci-app-h5000m-netmode</code>，支持「仅 5G 蜂窝」「仅 WAN 有线」「双链路负载均衡 / 主备毫秒级切流」，联动 mwan3 探针保证不断网。</p>
           </div>
-          <div class="spec-note">2.4G 与 5G 双频信号同名共用</div>
-        </div>
-
-        <!-- Spec 5: Wi-Fi Password -->
-        <div class="spec-item-card md-card">
-          <span class="spec-label">默认 Wi-Fi 密码</span>
-          <div class="spec-val-box">
-            <span class="spec-value">12345678</span>
-            <button class="copy-btn" onclick="copyText('12345678', 'Wi-Fi 密码')" title="复制">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-            </button>
+          <div class="feat-card glass-card">
+            <div class="feat-icon-bubble" style="background:var(--amber-soft); color:var(--amber);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <h3>硬件加解密与零配置组网</h3>
+            <p>内核级预置 <code>kmod-cryptodev</code> 与 <code>kmod-tls</code>，并集成 Tailscale 与 EasyTier，无公网 IP 也能实现高速安全的异地内网穿透。</p>
           </div>
-          <div class="spec-note">加密方式：WPA/WPA2-PSK 混合加密</div>
-        </div>
-
-        <!-- Spec 6: WiFi Channels -->
-        <div class="spec-item-card md-card">
-          <span class="spec-label">无线频宽 & 国家码</span>
-          <div class="spec-val-box">
-            <span class="spec-value" style="font-size:1.15rem;">CN · 160MHz 满血</span>
-          </div>
-          <div class="spec-note">H5000M: BE WiFi7 | AP3000M: AX WiFi6</div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Tutorials Section -->
-  <section class="tutorial-section" id="tutorials">
-    <div class="container">
-      <div class="section-header">
-        <span class="section-tag">STEP-BY-STEP GUIDES</span>
-        <h2 class="section-title">保姆级固件刷写与升级指南</h2>
-        <p class="section-desc">
-          覆盖原厂 Web 升级、U-Boot 救砖模式与 X86 软路由写盘详细流程。
-        </p>
-      </div>
+    <section class="section-block" id="defaults">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-tag">FACTORY DEFAULTS</span>
+          <h2 class="section-title">固件默认出厂配置速查</h2>
+          <p class="section-desc">所有出厂默认值统一写入 <code>Config/Defaults.txt</code>，首次刷机开机即用，支持一键复制。</p>
+        </div>
 
-      <div class="tut-scroll-hint">
-        <span>👈 左右滑动查看 4 大刷机指南 👉</span>
-        <span style="font-family:monospace; font-size:10px; background:#e2e8f0; padding:1px 6px; border-radius:4px;">4 Tabs</span>
-      </div>
-      <div class="tutorial-tabs">
-        <button class="tut-tab-btn active" data-tab="tab-sysupgrade">网页在线升级 (Sysupgrade)</button>
-        <button class="tut-tab-btn" data-tab="tab-uboot">H5000M / AP3000M U-Boot 救砖</button>
-        <button class="tut-tab-btn" data-tab="tab-x86">X86 物理机与虚拟机写盘</button>
-        <button class="tut-tab-btn" data-tab="tab-ap3000m-fix">AP3000M 射频校准救砖特性</button>
-      </div>
+        <div class="grid-3">
+          <div class="spec-item-card glass-card">
+            <span class="spec-label">管理后台 Web 地址</span>
+            <div class="spec-val-box">
+              <span class="spec-value">192.168.10.1</span>
+              <button class="copy-btn" onclick="window.appCopy('192.168.10.1', '后台管理地址')" type="button" title="复制">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+              </button>
+            </div>
+            <div class="spec-note"><a href="http://192.168.10.1" target="_blank" style="color:var(--primary); font-weight:700;">http://192.168.10.1 ↗</a></div>
+          </div>
 
-      <div class="tut-content-box md-card" id="tutorialContainer">
-        <!-- Injected via JavaScript based on active tab -->
-      </div>
-    </div>
-  </section>
+          <div class="spec-item-card glass-card">
+            <span class="spec-label">默认管理员密码</span>
+            <div class="spec-val-box">
+              <span class="spec-value" style="color:var(--emerald);">无 (初次开机免密)</span>
+            </div>
+            <div class="spec-note">用户名为 <code>root</code>，直接点击登录即可</div>
+          </div>
 
+          <div class="spec-item-card glass-card">
+            <span class="spec-label">系统主机名 (Hostname)</span>
+            <div class="spec-val-box">
+              <span class="spec-value">OWRT</span>
+              <button class="copy-btn" onclick="window.appCopy('OWRT', '主机名')" type="button" title="复制">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+              </button>
+            </div>
+            <div class="spec-note">内网网络标识：<code>owrt.lan</code></div>
+          </div>
+
+          <div class="spec-item-card glass-card">
+            <span class="spec-label">默认 Wi-Fi 名称 (SSID)</span>
+            <div class="spec-val-box">
+              <span class="spec-value">OWRT</span>
+              <button class="copy-btn" onclick="window.appCopy('OWRT', 'Wi-Fi 名称')" type="button" title="复制">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+              </button>
+            </div>
+            <div class="spec-note">2.4G 与 5G 双频信号同名共用</div>
+          </div>
+
+          <div class="spec-item-card glass-card">
+            <span class="spec-label">默认 Wi-Fi 密码</span>
+            <div class="spec-val-box">
+              <span class="spec-value">12345678</span>
+              <button class="copy-btn" onclick="window.appCopy('12345678', 'Wi-Fi 密码')" type="button" title="复制">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+              </button>
+            </div>
+            <div class="spec-note">加密方式：WPA/WPA2-PSK 混合加密</div>
+          </div>
+
+          <div class="spec-item-card glass-card">
+            <span class="spec-label">无线频宽 &amp; 国家码</span>
+            <div class="spec-val-box">
+              <span class="spec-value" style="font-size:1.1rem;">CN · 160MHz 满血</span>
+            </div>
+            <div class="spec-note">H5000M: BE WiFi7 | AP3000M: AX WiFi6</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-block" id="tutorials">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-tag">STEP-BY-STEP GUIDES</span>
+          <h2 class="section-title">保姆级固件刷写与升级指南</h2>
+          <p class="section-desc">覆盖原厂 Web 升级、U-Boot 救砖模式与 X86 软路由写盘详细流程。</p>
+        </div>
+
+        <div class="tutorial-tabs">
+          <button class="tut-tab-btn active" data-tab="tab-sysupgrade" type="button">网页在线升级 (Sysupgrade)</button>
+          <button class="tut-tab-btn" data-tab="tab-uboot" type="button">H5000M / AP3000M U-Boot 救砖</button>
+          <button class="tut-tab-btn" data-tab="tab-x86" type="button">X86 物理机与虚拟机写盘</button>
+          <button class="tut-tab-btn" data-tab="tab-ap3000m-fix" type="button">AP3000M 射频校准救砖特性</button>
+        </div>
+
+        <div class="tut-content-box glass-card" id="tutorialContainer"></div>
+      </div>
+    </section>
   </main>
 
-  <!-- Footer -->
-  <footer>
+  <footer class="site-footer">
     <div class="container">
       <div class="footer-content">
-        <div class="footer-left">
-          <div class="brand-logo" style="margin-bottom:1rem;">
-            <div class="logo-icon" style="width:2.2rem; height:2.2rem;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><rect width="20" height="8" x="2" y="14" rx="2"/></svg>
-            </div>
-            <div class="brand-text">OpenWRT-CI <span>PRO</span></div>
+        <div>
+          <div class="brand-logo" style="margin-bottom:10px;">
+            <span class="logo-icon" style="width:32px; height:32px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><rect width="20" height="8" x="2" y="14" rx="2"/></svg>
+            </span>
+            <span>OpenWRT-CI</span>
+            <span class="brand-badge">PRO</span>
           </div>
-          <p style="font-size:0.9rem; line-height:1.65; margin-bottom:1rem; color:#475569;">
+          <p style="font-size:0.88rem; color:var(--text-secondary); margin-bottom:8px;">
             基于开源 ImmortalWrt 项目深度打造的高性能 5G CPE、Wi-Fi 路由器与软路由固件。完全开源，遵循 MIT License。
           </p>
-          <div style="font-size:0.825rem; color:#64748b; font-weight:500;">
-            Powered by GitHub Actions & GitHub Pages
-          </div>
+          <div style="font-size:0.8rem; color:var(--text-muted);">Powered by GitHub Actions &amp; GitHub Pages</div>
         </div>
 
         <div class="footer-nav">
           <div class="footer-col">
             <h5>固件方案</h5>
             <ul>
-              <li><a href="#downloads" onclick="filterByVariant('NETWIZ')">NetWiz 向导方案</a></li>
-              <li><a href="#downloads" onclick="filterByVariant('MT5700')">MT5700 5G 方案</a></li>
-              <li><a href="#downloads" onclick="filterByVariant('FM350')">FM350-GL 方案</a></li>
-              <li><a href="#downloads" onclick="filterByDevice('H5000M')">H5000M 固件专区</a></li>
+              <li><a href="#downloads" onclick="window.appFilterByVariant('NETWIZ')">NetWiz 向导方案</a></li>
+              <li><a href="#downloads" onclick="window.appFilterByVariant('MT5700')">MT5700 5G 方案</a></li>
+              <li><a href="#downloads" onclick="window.appFilterByVariant('FM350')">FM350-GL 方案</a></li>
+              <li><a href="#downloads" onclick="window.appFilterByDevice('H5000M')">H5000M 固件专区</a></li>
             </ul>
           </div>
-
           <div class="footer-col">
             <h5>硬件平台</h5>
             <ul>
@@ -2400,823 +451,25 @@
               <li><a href="#tutorials">U-Boot 救砖指南</a></li>
             </ul>
           </div>
-
           <div class="footer-col">
             <h5>开源致敬</h5>
             <ul>
-              <li><a href="https://github.com/immortalwrt/immortalwrt" target="_blank">ImmortalWrt 源码</a></li>
-              <li><a href="https://github.com/VIKINGYFY/OpenWRT-CI" target="_blank">VIKINGYFY / OpenWRT-CI</a></li>
-              <li><a href="https://github.com/FAN789" target="_blank">FAN789 插件社区</a></li>
-              <li><a href="https://github.com/huchd0/luci-app-netwiz" target="_blank">luci-app-netwiz</a></li>
+              <li><a href="https://github.com/immortalwrt/immortalwrt" target="_blank" rel="noopener noreferrer">ImmortalWrt 源码</a></li>
+              <li><a href="https://github.com/VIKINGYFY/OpenWRT-CI" target="_blank" rel="noopener noreferrer">VIKINGYFY / OpenWRT-CI</a></li>
+              <li><a href="https://github.com/FAN789" target="_blank" rel="noopener noreferrer">FAN789 插件社区</a></li>
+              <li><a href="https://github.com/huchd0/luci-app-netwiz" target="_blank" rel="noopener noreferrer">luci-app-netwiz</a></li>
             </ul>
           </div>
         </div>
       </div>
-
       <div class="footer-bottom">
-        <div>&copy; 2026 OpenWRT-CI Custom Firmware. Designed with White Material Design.</div>
-        <div>
-          <a href="#" style="color:var(--md-sys-color-primary); font-weight:700;">返回顶部 ↑</a>
-        </div>
+        <div>&copy; 2026 OpenWRT-CI Custom Firmware · White Glassmorphic Theme</div>
+        <div><a href="#" style="color:var(--primary); font-weight:700;">返回顶部 ↑</a></div>
       </div>
     </div>
   </footer>
 
-  <!-- Interactive JavaScript -->
-  <script>
-    // ===== CONFIGURATION =====
-    const REPO_OWNER = 'LianXia233';
-    const REPO_NAME = 'OpenWRT-CI';
-
-    // Acceleration Proxy: 'acg2' (https://gh.acg2.mom/), 'ghproxy', 'none'
-    let currentProxy = 'acg2';
-
-    // Calculate current formatted date in Beijing Time (UTC+8) matching GitHub Actions WRT-CORE.yml: date +"%y.%m.%d"
-    function getBeijingDateTag() {
-      const now = new Date();
-      // UTC+8 offset
-      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-      const bjTime = new Date(utc + (3600000 * 8));
-      const yy = String(bjTime.getFullYear()).slice(-2);
-      const mm = String(bjTime.getMonth() + 1).padStart(2, '0');
-      const dd = String(bjTime.getDate()).padStart(2, '0');
-      return `${yy}.${mm}.${dd}`;
-    }
-
-    const CURRENT_TAG_DATE = getBeijingDateTag();
-
-    // Default Fallback Catalog with real-time computed links
-    function generatePresetFirmwares(tagDate) {
-      return [
-        {
-          id: 'h5000m-netwiz-mt5700',
-          device: 'H5000M',
-          deviceName: 'Hiveton H5000M 5G CPE',
-          variant: 'NETWIZ',
-          variantLabel: 'NetWiz 家族 · MT5700',
-          variantClass: 'fw-badge-netwiz',
-          format: 'sysupgrade',
-          filename: `H5000M-NetWiz-MT5700-aarch64-${tagDate}-sysupgrade.bin`,
-          size: '58.4 MB',
-          date: `20${tagDate.replace(/\./g, '-')}`,
-          tag: `NetWiz-${tagDate}`,
-          desc: '内置 NetWiz 网络向导 + MT5700 (Rust后端) 5G 模组驱动 + WiFi 7 双频 160MHz + 双温区温控',
-          tags: ['NetWiz向导', '5G拨号', 'WiFi 7', 'PWM温控', '自愈守护', 'sysupgrade'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/NetWiz-${tagDate}/H5000M-NetWiz-MT5700-aarch64-${tagDate}-sysupgrade.bin`
-        },
-        {
-          id: 'h5000m-mt5700',
-          device: 'H5000M',
-          deviceName: 'Hiveton H5000M 5G CPE',
-          variant: 'MT5700',
-          variantLabel: 'MT5700 方案 B (轻量)',
-          variantClass: 'fw-badge-mt',
-          format: 'sysupgrade',
-          filename: `H5000M-MT5700-aarch64-${tagDate}-sysupgrade.bin`,
-          size: '56.2 MB',
-          date: `20${tagDate.replace(/\./g, '-')}`,
-          tag: `MT5700-${tagDate}`,
-          desc: '母配置 + luci-app-mt5700 模组管理，Rust 极速后端，状态大屏，多网智能切换，推荐日常选用',
-          tags: ['MT5700', 'Rust后端', 'WiFi 7', 'NetMode多网', 'sysupgrade'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/MT5700-${tagDate}/H5000M-MT5700-aarch64-${tagDate}-sysupgrade.bin`
-        },
-        {
-          id: 'h5000m-fm350',
-          device: 'H5000M',
-          deviceName: 'Hiveton H5000M 5G CPE',
-          variant: 'FM350',
-          variantLabel: 'Fibocom FM350-GL',
-          variantClass: 'fw-badge-fm350',
-          format: 'sysupgrade',
-          filename: `H5000M-FM350-aarch64-${tagDate}-sysupgrade.bin`,
-          size: '57.8 MB',
-          date: `20${tagDate.replace(/\./g, '-')}`,
-          tag: `FM350-${tagDate}`,
-          desc: '专为广和通 FM350-GL 5G 模组定制，走 RNDIS 纯净通道无内核冲突，满血 WiFi 7 吞吐',
-          tags: ['FM350-GL', 'RNDIS通道', 'WiFi 7', 'PWM温控', 'sysupgrade'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/FM350-${tagDate}/H5000M-FM350-aarch64-${tagDate}-sysupgrade.bin`
-        },
-        {
-          id: 'h5000m-base',
-          device: 'H5000M',
-          deviceName: 'Hiveton H5000M 5G CPE',
-          variant: 'BASE',
-          variantLabel: '纯净基础母配置',
-          variantClass: 'fw-badge-base',
-          format: 'sysupgrade',
-          filename: `H5000M-BASE-aarch64-${tagDate}-sysupgrade.bin`,
-          size: '53.1 MB',
-          date: `20${tagDate.replace(/\./g, '-')}`,
-          tag: `BASE-${tagDate}`,
-          desc: '不含 5G 模组插件的基础高速固件，满血 WiFi 7，保留风扇温控与多网络智能切换组件',
-          tags: ['基础母配置', 'WiFi 7', 'Tailscale', 'Samba4', 'sysupgrade'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/BASE-${tagDate}/H5000M-BASE-aarch64-${tagDate}-sysupgrade.bin`
-        },
-        {
-          id: 'ap3000m-netwiz-mt5700',
-          device: 'AP3000M',
-          deviceName: 'AirPi AP3000M 路由器',
-          variant: 'NETWIZ',
-          variantLabel: 'NetWiz 家族 · MT5700',
-          variantClass: 'fw-badge-netwiz',
-          format: 'sysupgrade',
-          filename: `AP3000M-NetWiz-MT5700-aarch64-${tagDate}-sysupgrade.bin`,
-          size: '48.9 MB',
-          date: `20${tagDate.replace(/\./g, '-')}`,
-          tag: `NetWiz-${tagDate}`,
-          desc: 'AirPi AP3000M 专属，内置 NetWiz 向导与 EEPROM 射频自愈，双频 WiFi 6 160MHz 满血发射',
-          tags: ['NetWiz', 'EEPROM自愈', 'WiFi 6', 'airpi-fanctl', 'sysupgrade'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/NetWiz-${tagDate}/AP3000M-NetWiz-MT5700-aarch64-${tagDate}-sysupgrade.bin`
-        },
-        {
-          id: 'ap3000m-factory',
-          device: 'AP3000M',
-          deviceName: 'AirPi AP3000M 路由器',
-          variant: 'BASE',
-          variantLabel: 'U-Boot 出厂直刷 / 救砖',
-          variantClass: 'fw-badge-base',
-          format: 'factory',
-          filename: `AP3000M-BASE-aarch64-${tagDate}-factory.bin`,
-          size: '46.7 MB',
-          date: `20${tagDate.replace(/\./g, '-')}`,
-          tag: `BASE-${tagDate}`,
-          desc: 'AirPi AP3000M U-Boot 救砖底包，首次刷入写入真实 MAC 并恢复 factory 分区 28~29 dBm 射频',
-          tags: ['Factory直刷', '救砖专用', 'EEPROM校准', 'factory'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/BASE-${tagDate}/AP3000M-BASE-aarch64-${tagDate}-factory.bin`
-        },
-        {
-          id: 'ap3000m-fm350',
-          device: 'AP3000M',
-          deviceName: 'AirPi AP3000M 路由器',
-          variant: 'FM350',
-          variantLabel: 'FM350-GL 模组方案',
-          variantClass: 'fw-badge-fm350',
-          format: 'sysupgrade',
-          filename: `AP3000M-FM350-aarch64-${tagDate}-sysupgrade.bin`,
-          size: '49.5 MB',
-          date: `20${tagDate.replace(/\./g, '-')}`,
-          tag: `FM350-${tagDate}`,
-          desc: 'AP3000M 适配 FM350-GL 模组，免驱动冲突，内置 airpi-fanctl 智能风扇温控',
-          tags: ['FM350', 'EEPROM修复', 'WiFi 6', 'sysupgrade'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/FM350-${tagDate}/AP3000M-FM350-aarch64-${tagDate}-sysupgrade.bin`
-        },
-        {
-          id: 'x86-netwiz-mt5700',
-          device: 'X86',
-          deviceName: 'X86_64 软路由 / 工控机',
-          variant: 'NETWIZ',
-          variantLabel: 'NetWiz 家族 · Docker',
-          variantClass: 'fw-badge-netwiz',
-          format: 'x86-img',
-          filename: `X86-NetWiz-MT5700-x86-64-${tagDate}-efi.img.gz`,
-          size: '72.3 MB',
-          date: `20${tagDate.replace(/\./g, '-')}`,
-          tag: `NetWiz-${tagDate}`,
-          desc: 'X86 软路由专用，集成 Docker 容器引擎与 NetWiz 网络向导，EFI 引导开箱即用',
-          tags: ['Docker', 'NetWiz', 'EFI引导', 'x86-img', '硬件加解密'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/NetWiz-${tagDate}/X86-NetWiz-MT5700-x86-64-${tagDate}-efi.img.gz`
-        },
-        {
-          id: 'x86-base-grub',
-          device: 'X86',
-          deviceName: 'X86_64 软路由 / 工控机',
-          variant: 'BASE',
-          variantLabel: '传统 GRUB / 兼容镜像',
-          variantClass: 'fw-badge-base',
-          format: 'x86-img',
-          filename: `X86-BASE-x86-64-${tagDate}-combined.img.gz`,
-          size: '68.9 MB',
-          date: `20${tagDate.replace(/\./g, '-')}`,
-          tag: `BASE-${tagDate}`,
-          desc: '通用 Legacy BIOS / GRUB 引导固件，支持 PVE / ESXi / 物理机，内置 Tailscale 与 Samba4',
-          tags: ['GRUB引导', '软路由', 'Docker', 'x86-img'],
-          downloadUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/BASE-${tagDate}/X86-BASE-x86-64-${tagDate}-combined.img.gz`
-        }
-      ];
-    }
-
-    let currentFirmwares = generatePresetFirmwares(CURRENT_TAG_DATE);
-    let selectedDevice = 'ALL';
-    let selectedVariant = 'ALL';
-    let selectedFormat = 'ALL';
-    let searchQuery = '';
-
-    // ===== PROXY RESOLVER FUNCTION =====
-    function getAcceleratedUrl(originalUrl) {
-      if (!originalUrl) return '#';
-      if (currentProxy === 'acg2') {
-        // gh.acg2.mom proxy format: https://gh.acg2.mom/<url>
-        return `https://gh.acg2.mom/${originalUrl}`;
-      } else if (currentProxy === 'ghproxy') {
-        return `https://ghproxy.net/${originalUrl}`;
-      }
-      return originalUrl;
-    }
-
-    // ===== RENDER FIRMWARES =====
-    function renderFirmwares() {
-      const container = document.getElementById('firmwareContainer');
-      const filtered = currentFirmwares.filter(item => {
-        if (selectedDevice !== 'ALL' && item.device !== selectedDevice) return false;
-        if (selectedVariant !== 'ALL' && item.variant !== selectedVariant) return false;
-        if (selectedFormat !== 'ALL' && item.format !== selectedFormat) return false;
-        if (searchQuery) {
-          const query = searchQuery.toLowerCase();
-          const matchFilename = item.filename.toLowerCase().includes(query);
-          const matchDesc = item.desc.toLowerCase().includes(query);
-          const matchTags = item.tags.some(t => t.toLowerCase().includes(query));
-          const matchDevice = item.deviceName.toLowerCase().includes(query);
-          if (!matchFilename && !matchDesc && !matchTags && !matchDevice) return false;
-        }
-        return true;
-      });
-
-      if (filtered.length === 0) {
-        container.innerHTML = `
-          <div class="md-card" style="grid-column: 1 / -1; padding: 3.5rem; text-align: center; color: #64748b;">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin: 0 auto 1rem; color: #94a3b8;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <h3 style="font-size: 1.25rem; font-weight: 800; margin-bottom: 0.5rem; color: #0f172a;">未找到匹配的固件</h3>
-            <p>请尝试更改筛选条件或清除搜索关键词</p>
-            <button class="btn btn-secondary btn-sm" onclick="resetFilters()" style="margin-top: 1rem;">重置筛选条件</button>
-          </div>
-        `;
-        return;
-      }
-
-      container.innerHTML = filtered.map(item => {
-        const downloadLink = getAcceleratedUrl(item.downloadUrl);
-        return `
-          <div class="fw-card md-card" data-id="${item.id}">
-            <div class="fw-header">
-              <div>
-                <div class="fw-device-title">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--md-sys-color-primary)" stroke-width="2.3"><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 18h.01"/><path d="M10 18h.01"/><path d="M15 10v4"/></svg>
-                  ${item.deviceName}
-                </div>
-              </div>
-              <span class="fw-badge ${item.variantClass}">${item.variantLabel}</span>
-            </div>
-
-            <div class="fw-filename-box">
-              <span class="fw-filename-text" title="${item.filename}">${item.filename}</span>
-              <button class="copy-btn" onclick="copyText('${item.filename}', '文件名')" title="复制文件名">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-              </button>
-            </div>
-
-            <p class="fw-desc-text">
-              ${item.desc}
-            </p>
-
-            <div class="fw-tags">
-              ${item.tags.map(t => `<span class="fw-tag-pill">${t}</span>`).join('')}
-            </div>
-
-            <div class="fw-meta-row">
-              <span>大小：<strong style="color:#0f172a;">${item.size}</strong></span>
-              <span>版本：<strong style="color:#0f172a;">${item.tag}</strong></span>
-              <span>编译日期：<strong style="color:#0f172a;">${item.date}</strong></span>
-            </div>
-
-            <div class="fw-actions">
-              <a href="${downloadLink}" class="btn btn-primary" target="_blank" download>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                立即下载
-              </a>
-              <button class="btn btn-secondary btn-icon" onclick="copyText('${downloadLink}', '下载直链')" title="复制加速直链">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-              </button>
-              ${item.checksumUrl ? `<a href="${getAcceleratedUrl(item.checksumUrl)}" class="btn btn-secondary btn-sm" target="_blank" title="下载 SHA256 校验文件（sha256sum -c 核对完整性）">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                SHA256
-              </a>` : ''}
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    // ===== GITHUB API RELEASES INTEGRATION (REAL-TIME ONLY FOR LianXia233) =====
-    async function fetchReleases() {
-      const statusEl = document.getElementById('releaseStatusText');
-      const refreshIcon = document.getElementById('refreshIcon');
-      refreshIcon.style.animation = 'spin 1s linear infinite';
-      statusEl.textContent = '正在实时查询最新发布...';
-
-      try {
-        // Cache bust with timestamp to guarantee real-time data
-        const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?_t=${Date.now()}`);
-        if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-        const releases = await response.json();
-
-        if (Array.isArray(releases) && releases.length > 0) {
-          statusEl.textContent = `已连接 GitHub Releases (${releases.length} 个最新发版)`;
-
-          const parsedItems = [];
-          // 与 WRT-CORE.yml「整理并打包固件」的命名规范严格对应：
-          //   <机型>-<模组插件>-<架构>-<编译日期>-<固件类型>.<扩展名>
-          // 架构段（aarch64 / x86-64）是 luci-app-online-upgrade 判定架构的依据，
-          // 缺失时插件只报「资产未声明架构」，不会自动升级；模组段用惰性
-          // 匹配，保证 flavor 不会把架构段吞进去（否则 SelfUse 等判定会失效）。
-          // 日期段 YY.MM.DD 同时是 luci-app-online-upgrade 从资产名解析出的
-          // 版本号。只有匹配该规范的完整固件才进列表；Config / manifest /
-          // kernel / rootfs 分片 / 轮换前的旧格式资产一律跳过。
-          // SHA256 校验资产（sha256sums / <固件名>.sha256）结尾不是固件扩展名，
-          // 天然不匹配 FW_NAME_RE，不会误进卡片列表；下面单独收集它们的下载
-          // 链接挂到对应固件卡片上，方便下载后 sha256sum -c 核对完整性。
-          const FW_NAME_RE = /^(H5000M|AP3000M|X86)-([A-Za-z0-9-]+?)-(?:aarch64|x86-64)-(\d{2}\.\d{2}\.\d{2})-([A-Za-z0-9-]+)\.(bin|img\.gz|img|iso|vmdk|gz)$/;
-          const DEVICE_NAMES = {
-            H5000M: 'Hiveton H5000M 5G CPE',
-            AP3000M: 'AirPi AP3000M 路由器',
-            X86: 'X86_64 软路由 / 工控机'
-          };
-          releases.forEach(rel => {
-            if (!rel.assets || rel.assets.length === 0) return;
-            // 每个固件一份 <固件名>.sha256，资产名唯一；标准 sha256sums 总表
-            // 作为兜底（同组多机型 job 可能只留下最后合并的一份）。
-            const checksumUrls = new Map();
-            let checksumTableUrl = '';
-            rel.assets.forEach(a => {
-              if (/\.sha256$/i.test(a.name)) {
-                checksumUrls.set(a.name.replace(/\.sha256$/i, ''), a.browser_download_url);
-              } else if (/^sha256sums(\.txt|\.sha256)?$/i.test(a.name)) {
-                checksumTableUrl = a.browser_download_url;
-              }
-            });
-            rel.assets.forEach(asset => {
-              const m = FW_NAME_RE.exec(asset.name);
-              if (!m) return;
-              const device = m[1], flavor = m[2], buildStamp = m[3], fwType = m[4];
-              const deviceName = DEVICE_NAMES[device] || device;
-
-              // 模组插件段精确判定，不再靠 name.includes 猜，避免
-              // NetWiz-MT5700 被误判成 MT5700 方案
-              let variant = 'BASE', variantLabel = '基础母配置', variantClass = 'fw-badge-base';
-              if (/^NetWiz/i.test(flavor)) {
-                variant = 'NETWIZ';
-                variantLabel = `NetWiz 向导 · ${flavor.replace(/^NetWiz-?/i, '') || '标准版'}`;
-                variantClass = 'fw-badge-netwiz';
-              } else if (/^SelfUse$/i.test(flavor)) {
-                variant = 'SELFUSE'; variantLabel = '自用配置 (SelfUse)'; variantClass = 'fw-badge-base';
-              } else if (/^MT5700M$/i.test(flavor)) {
-                variant = 'MT5700M'; variantLabel = 'MT5700M 方案A'; variantClass = 'fw-badge-mt';
-              } else if (/^MT5700$/i.test(flavor)) {
-                variant = 'MT5700'; variantLabel = 'MT5700 方案B'; variantClass = 'fw-badge-mt';
-              } else if (/^FM350$/i.test(flavor)) {
-                variant = 'FM350'; variantLabel = 'FM350-GL 变体'; variantClass = 'fw-badge-fm350';
-              }
-
-              let format = 'x86-img';
-              if (/sysupgrade/.test(fwType)) format = 'sysupgrade';
-              else if (/factory|initramfs|recovery/.test(fwType)) format = 'factory';
-
-              // 编译日期取自文件名（YY.MM.DD），比资产上传时间更贴近真实构建批次
-              const buildDate = `20${buildStamp.replace(/\./g, '-')}`;
-
-              parsedItems.push({
-                id: asset.id.toString(),
-                device,
-                deviceName,
-                flavor,
-                variant,
-                variantLabel,
-                variantClass,
-                format,
-                filename: asset.name,
-                size: (asset.size / (1024 * 1024)).toFixed(1) + ' MB',
-                date: buildDate,
-                tag: rel.tag_name,
-                desc: rel.body ? rel.body.substring(0, 110) + '...' : `${deviceName} 云端编译自动发版固件`,
-                tags: [device, flavor, fwType, buildStamp, variant],
-                downloadUrl: asset.browser_download_url,
-                checksumUrl: checksumUrls.get(asset.name) || checksumTableUrl || ''
-              });
-            });
-          });
-
-          if (parsedItems.length > 0) {
-            // 新固件在前：编译日期倒序，再按机型 / 文件名稳定排序
-            parsedItems.sort((a, b) => b.date.localeCompare(a.date) ||
-              a.device.localeCompare(b.device) || a.filename.localeCompare(b.filename));
-            currentFirmwares = parsedItems;
-            renderFirmwares();
-          }
-        } else {
-          statusEl.textContent = '实时链接已同步 (等待今日 Actions 新发布，当前呈现全系矩阵)';
-        }
-      } catch (err) {
-        console.warn('GitHub API fetch failed or rate-limited:', err);
-        statusEl.textContent = '已连接实时固件库 (当前日期已自动同步)';
-      } finally {
-        setTimeout(() => {
-          refreshIcon.style.animation = 'none';
-        }, 500);
-      }
-    }
-
-    // Refresh button
-    document.getElementById('refreshBtn').addEventListener('click', () => {
-      fetchReleases();
-      showToast('正在实时重新拉取最新固件...');
-    });
-
-    // ===== PROXY SWITCHER =====
-    document.getElementById('proxySwitcher').addEventListener('click', (e) => {
-      const btn = e.target.closest('.segment-btn');
-      if (!btn) return;
-      document.querySelectorAll('#proxySwitcher .segment-btn').forEach(el => el.classList.remove('active'));
-      btn.classList.add('active');
-      currentProxy = btn.getAttribute('data-proxy');
-      showToast(`已切换加速源：${btn.textContent}`);
-      renderFirmwares();
-    });
-
-    // ===== FILTER CHIPS EVENT LISTENERS =====
-    document.querySelectorAll('.chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const type = chip.getAttribute('data-filter-type');
-        const val = chip.getAttribute('data-value');
-        
-        document.querySelectorAll(`.chip[data-filter-type="${type}"]`).forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-
-        if (type === 'device') selectedDevice = val;
-        if (type === 'variant') selectedVariant = val;
-        if (type === 'format') selectedFormat = val;
-
-        renderFirmwares();
-      });
-    });
-
-    function filterByDevice(device) {
-      selectedDevice = device;
-      document.querySelectorAll(`.chip[data-filter-type="device"]`).forEach(c => {
-        c.classList.toggle('active', c.getAttribute('data-value') === device);
-      });
-      renderFirmwares();
-      document.getElementById('downloads').scrollIntoView({ behavior: 'smooth' });
-    }
-
-    function filterByVariant(variant) {
-      selectedVariant = variant;
-      document.querySelectorAll(`.chip[data-filter-type="variant"]`).forEach(c => {
-        c.classList.toggle('active', c.getAttribute('data-value') === variant);
-      });
-      renderFirmwares();
-      document.getElementById('downloads').scrollIntoView({ behavior: 'smooth' });
-    }
-
-    function resetFilters() {
-      selectedDevice = 'ALL';
-      selectedVariant = 'ALL';
-      selectedFormat = 'ALL';
-      searchQuery = '';
-      document.getElementById('searchInput').value = '';
-      document.querySelectorAll('.chip').forEach(c => {
-        c.classList.toggle('active', c.getAttribute('data-value') === 'ALL');
-      });
-      renderFirmwares();
-    }
-
-    // Search input
-    document.getElementById('searchInput').addEventListener('input', (e) => {
-      searchQuery = e.target.value.trim();
-      renderFirmwares();
-    });
-
-    // ===== TUTORIAL TABS =====
-    const TUTORIAL_DATA = {
-      'tab-sysupgrade': `
-        <div class="step-item">
-          <div class="step-number">1</div>
-          <div class="step-body">
-            <h4>进入系统升级页面</h4>
-            <p>使用网线或 Wi-Fi 连接路由器，在浏览器中打开管理地址 <code>http://192.168.10.1</code>。登录后依次点击导航栏中的 <strong>系统 (System)</strong> → <strong>备份/升级 (Backup / Flash Firmware)</strong>。</p>
-          </div>
-        </div>
-        <div class="step-item">
-          <div class="step-number">2</div>
-          <div class="step-body">
-            <h4>上传 Sysupgrade 固件</h4>
-            <p>在「刷写新的固件镜像 (Flash new firmware image)」区域，点击选择文件，选取带有 <code>-sysupgrade.bin</code> 后缀的固件文件，点击 <strong>上传 (Upload)</strong>。</p>
-          </div>
-        </div>
-        <div class="step-item">
-          <div class="step-number">3</div>
-          <div class="step-body">
-            <h4>校验与刷写</h4>
-            <p>系统会自动核对固件 MD5 与校验和。首次跨版本、更换变体方案时，<strong>强烈建议取消勾选「保留配置」</strong>，以防旧配置文件与新插件冲突，点击 <strong>继续 (Continue)</strong> 等待 2~3 分钟自动重启完成。</p>
-          </div>
-        </div>
-      `,
-      'tab-uboot': `
-        <div class="step-item">
-          <div class="step-number">1</div>
-          <div class="step-body">
-            <h4>进入 U-Boot Web 救砖控制台</h4>
-            <p>路由器断开电源。用卡针长按机身 <strong>Reset 键</strong>不放，插上电源开机，持续按住 5~8 秒直到机身指示灯发生有规律的双闪或变色，然后松开 Reset 键。</p>
-          </div>
-        </div>
-        <div class="step-item">
-          <div class="step-number">2</div>
-          <div class="step-body">
-            <h4>电脑设置静态 IP</h4>
-            <p>使用网线将电脑网口与路由器的 <strong>LAN 口</strong>相连。在 Windows 网络属性中将以太网 IP 手动改为静态：<br>
-            IP 地址：<code>192.168.1.2</code>，子网掩码：<code>255.255.255.0</code>，网关：<code>192.168.1.1</code>。</p>
-          </div>
-        </div>
-        <div class="step-item">
-          <div class="step-number">3</div>
-          <div class="step-body">
-            <h4>上传 Factory 镜像恢复</h4>
-            <p>浏览器访问 <code>http://192.168.1.1</code> 打开 U-Boot 救砖页面。选择 <code>*-factory.bin</code> 固件并点击 Update Firmware。刷写完成后将电脑网卡改回「自动获取 IP」，访问 <code>192.168.10.1</code> 即可！</p>
-          </div>
-        </div>
-      `,
-      'tab-x86': `
-        <div class="step-item">
-          <div class="step-number">1</div>
-          <div class="step-body">
-            <h4>准备物理机写盘工具</h4>
-            <p>下载带有 <code>-efi.img.gz</code> 或 <code>-combined.img.gz</code> 的镜像包并解压出 <code>.img</code> 镜像。在 Windows 上推荐使用 <strong>BalenaEtcher</strong> 或 <strong>Rufus</strong> 直接写入目标系统 U 盘或 SSD 固态硬盘。</p>
-          </div>
-        </div>
-        <div class="step-item">
-          <div class="step-number">2</div>
-          <div class="step-body">
-            <h4>虚拟机平台导入 (PVE / ESXi)</h4>
-            <p>Proxmox VE (PVE) 用户新建无磁盘虚拟机后，使用 SSH 终端执行命令：<br>
-            <code>qm importdisk &lt;VMID&gt; openwrt.img local-lvm</code><br>
-            导入完成后在硬件设置中双击未挂载的磁盘并启用 SCSI 引导顺序即可。</p>
-          </div>
-        </div>
-        <div class="step-item">
-          <div class="step-number">3</div>
-          <div class="step-body">
-            <h4>首次网络连接</h4>
-            <p>开机后将电脑网线插入软路由 ETH0 / LAN 口，电脑将自动分配到 <code>192.168.10.x</code> 网段，访问 <code>192.168.10.1</code> 登录 OpenWrt 控制面板。</p>
-          </div>
-        </div>
-      `,
-      'tab-ap3000m-fix': `
-        <div class="step-item">
-          <div class="step-number">1</div>
-          <div class="step-body">
-            <h4>AP3000M 出厂痛点说明</h4>
-            <p>AirPi AP3000M 设备的 eMMC 出厂时 factory 分区为空，缺少原厂无线校准参数，导致官方源码编译出来的固件 Wi-Fi 信号极弱（只有 0~10 dBm）甚至 5GHz 频段无法启动。</p>
-          </div>
-        </div>
-        <div class="step-item">
-          <div class="step-number">2</div>
-          <div class="step-body">
-            <h4>内置出厂校准 EEPROM 套件</h4>
-            <p>本仓库固件内置了专门经过射频调试的 EEPROM 校准套件（发射功率稳定在 <strong>28~29 dBm 满血发射</strong>）。系统首次开机时会自动检测 factory 分区，自动写入真实 MAC 地址并修补 5GHz 频段校准数据。</p>
-          </div>
-        </div>
-        <div class="step-item">
-          <div class="step-number">3</div>
-          <div class="step-body">
-            <h4>全程全自动，免人工干预</h4>
-            <p>您只需要正常刷入本仓库提供的固件，无需借助编程器备份，首次启动后 Wi-Fi 即刻满血工作！</p>
-          </div>
-        </div>
-      `
-    };
-
-    function renderTutorial(tabId, el) {
-      if (el && el.scrollIntoView) {
-        el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-      }
-      const container = document.getElementById('tutorialContainer');
-      container.innerHTML = TUTORIAL_DATA[tabId] || '';
-    }
-
-    document.querySelectorAll('.tut-tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.tut-tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        renderTutorial(btn.getAttribute('data-tab'));
-      });
-    });
-
-    // ===== TOAST & COPY HELPER =====
-    function showToast(msg) {
-      const container = document.getElementById('toastContainer');
-      const toast = document.createElement('div');
-      toast.className = 'toast';
-      toast.innerHTML = `
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--md-sys-color-primary)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-        <span>${msg}</span>
-      `;
-      container.appendChild(toast);
-      setTimeout(() => {
-        if (toast.parentNode) toast.parentNode.removeChild(toast);
-      }, 3000);
-    }
-
-    function copyText(text, label = '内容') {
-      if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(text).then(() => {
-          showToast(`已复制 ${label} 到剪贴板！`);
-        }).catch(() => fallbackCopy(text, label));
-      } else {
-        fallbackCopy(text, label);
-      }
-    }
-
-    function fallbackCopy(text, label) {
-      const textArea = document.createElement("textarea");
-      textArea.value = text;
-      textArea.style.position = "fixed";
-      textArea.style.left = "-999999px";
-      document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
-      try {
-        document.execCommand('copy');
-        showToast(`已复制 ${label} 到剪贴板！`);
-      } catch (err) {
-        prompt(`请手动复制 ${label}:`, text);
-      }
-      document.body.removeChild(textArea);
-    }
-
-    // Keyframe for spinner
-    const styleSheet = document.createElement("style");
-    styleSheet.innerText = `
-      @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-      }
-    `;
-    document.head.appendChild(styleSheet);
-
-    // ===== WALLPAPER TRANSLUCENCY CONTROLLER =====
-    document.getElementById('opacitySwitcher')?.addEventListener('click', (e) => {
-      const btn = e.target.closest('.segment-btn');
-      if (!btn) return;
-      document.querySelectorAll('#opacitySwitcher .segment-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const op = parseInt(btn.getAttribute('data-opacity'));
-      const val = op / 100;
-      const topAlpha = Math.min(val + 0.08, 0.95).toFixed(2);
-      const bottomAlpha = Math.max(val - 0.12, 0.35).toFixed(2);
-      document.documentElement.style.setProperty('--md-sys-color-card', `rgba(255, 255, 255, ${val})`);
-      document.documentElement.style.setProperty('--md-sys-color-surface', `rgba(255, 255, 255, ${topAlpha})`);
-      
-      // Update md-card gradient dynamically
-      document.querySelectorAll('.md-card').forEach(card => {
-        card.style.background = `linear-gradient(135deg, rgba(255, 255, 255, ${topAlpha}) 0%, rgba(255, 255, 255, ${bottomAlpha}) 100%)`;
-      });
-      showToast(`已切换毛玻璃效果：${btn.textContent}`);
-    });
-
-    // ===== IMMERSION WALLPAPER VIEW MODE =====
-    function toggleImmersiveMode(enable) {
-      if (enable) {
-        document.body.classList.add('immersive-mode');
-        document.getElementById('exitImmersiveTip').style.display = 'flex';
-      } else {
-        document.body.classList.remove('immersive-mode');
-        document.getElementById('exitImmersiveTip').style.display = 'none';
-      }
-    }
-
-    document.getElementById('viewWallpaperBtn')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleImmersiveMode(true);
-    });
-
-    window.addEventListener('click', (e) => {
-      if (document.body.classList.contains('immersive-mode') && !e.target.closest('#viewWallpaperBtn')) {
-        toggleImmersiveMode(false);
-      }
-    });
-
-    // ===== INIT =====
-    window.addEventListener('DOMContentLoaded', () => {
-      renderFirmwares();
-      renderTutorial('tab-sysupgrade');
-      fetchReleases();
-    });
-  
-    // --- Wallpaper Control Panel Logic ---
-    const toggleWallpaperMenu = document.getElementById('toggleWallpaperMenu');
-    const wallpaperControlPanel = document.getElementById('wallpaperControlPanel');
-    const closeWallpaperPanel = document.getElementById('closeWallpaperPanel');
-    const opacitySlider = document.getElementById('opacitySlider');
-    const opacityValLabel = document.getElementById('opacityValLabel');
-    const blurSlider = document.getElementById('blurSlider');
-    const blurValLabel = document.getElementById('blurValLabel');
-
-    if (toggleWallpaperMenu && wallpaperControlPanel) {
-      toggleWallpaperMenu.addEventListener('click', (e) => {
-        e.stopPropagation();
-        wallpaperControlPanel.classList.toggle('hidden');
-      });
-      if (closeWallpaperPanel) {
-        closeWallpaperPanel.addEventListener('click', () => {
-          wallpaperControlPanel.classList.add('hidden');
-        });
-      }
-      document.addEventListener('click', (e) => {
-        if (!wallpaperControlPanel.contains(e.target) && e.target !== toggleWallpaperMenu) {
-          wallpaperControlPanel.classList.add('hidden');
-        }
-      });
-    }
-
-    if (opacitySlider) {
-      opacitySlider.addEventListener('input', (e) => {
-        const val = e.target.value;
-        const dec = (val / 100).toFixed(2);
-        document.documentElement.style.setProperty('--md-sys-color-surface', `rgba(255, 255, 255, ${dec})`);
-        document.documentElement.style.setProperty('--md-sys-color-card', `rgba(255, 255, 255, ${dec})`);
-        opacityValLabel.textContent = `${val}%`;
-      });
-    }
-
-    if (blurSlider) {
-      blurSlider.addEventListener('input', (e) => {
-        const val = e.target.value;
-        const layer = document.querySelector('.bg-wallpaper-layer');
-        if (layer) layer.style.filter = `blur(${val}px)`;
-        blurValLabel.textContent = `${val} px`;
-      });
-    }
-
-    // --- Zen Mode Toggle ---
-    function toggleZenMode() {
-      document.body.classList.toggle('zen-mode');
-      if (wallpaperControlPanel) wallpaperControlPanel.classList.add('hidden');
-    }
-
-    const viewWallpaperBtn = document.getElementById('viewWallpaperBtn');
-    if (viewWallpaperBtn) {
-      viewWallpaperBtn.addEventListener('click', toggleZenMode);
-    }
-
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && document.body.classList.contains('zen-mode')) {
-        document.body.classList.remove('zen-mode');
-      }
-    });
-
-
-
-    // --- 动态壁纸随机/手动切换引擎 ---
-    function updateWallpaperUI() {
-      const isWp1 = window.currentWallpaperUrl && window.currentWallpaperUrl.includes('145952531');
-      const label = document.getElementById('currentWallpaperLabel');
-      if (label) {
-        label.textContent = isWp1 ? '二次元主视觉 (p1)' : '经典蔚蓝原画 (bg1)';
-      }
-      const btn0 = document.getElementById('wpBtn0');
-      const btn1 = document.getElementById('wpBtn1');
-      if (btn0 && btn1) {
-        if (isWp1) {
-          btn0.style.borderColor = '#0284c7';
-          btn0.style.background = '#e0f2fe';
-          btn0.style.color = '#0369a1';
-          btn1.style.borderColor = '#cbd5e1';
-          btn1.style.background = '#ffffff';
-          btn1.style.color = '#0f172a';
-        } else {
-          btn1.style.borderColor = '#0284c7';
-          btn1.style.background = '#e0f2fe';
-          btn1.style.color = '#0369a1';
-          btn0.style.borderColor = '#cbd5e1';
-          btn0.style.background = '#ffffff';
-          btn0.style.color = '#0f172a';
-        }
-      }
-    }
-
-    function switchWallpaper(index) {
-      if (typeof index === 'number' && WALLPAPERS[index]) {
-        window.currentWallpaperUrl = WALLPAPERS[index];
-      } else {
-        const nextIdx = (window.currentWallpaperUrl === WALLPAPERS[0]) ? 1 : 0;
-        window.currentWallpaperUrl = WALLPAPERS[nextIdx];
-      }
-      document.documentElement.style.setProperty('--wallpaper-url', "url('" + window.currentWallpaperUrl + "')");
-      document.body.style.backgroundImage = "url('" + window.currentWallpaperUrl + "')";
-      const layer = document.querySelector('.bg-wallpaper-layer');
-      if (layer) layer.style.backgroundImage = "url('" + window.currentWallpaperUrl + "')";
-      updateWallpaperUI();
-      if (typeof showToast === 'function') {
-        const name = window.currentWallpaperUrl.includes('145952531') ? '二次元主视觉' : '经典蔚蓝原画';
-        showToast('已切换至壁纸：' + name);
-      }
-    }
-
-    // 初始化一次壁纸 UI 高亮
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', updateWallpaperUI);
-    } else {
-      updateWallpaperUI();
-    }
-
-</script>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="assets/app.js"></script>
 </body>
 </html>
